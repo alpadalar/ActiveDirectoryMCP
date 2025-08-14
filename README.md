@@ -301,7 +301,7 @@ python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /ac
 - `health` - Server health check
 - `get_schema_info` - Tool schema information
 
-> **⚠️ Note**: ActiveDirectoryMCP provides 43 tools total. Some LLM models may experience performance issues with this many tools. See [Troubleshooting](#troubleshooting) for solutions.
+> **⚠️ Note**: ActiveDirectoryMCP provides 43 tools total. Some LLM models may experience issues with this many tools.
 
 ## 🔒 Security Configuration
 
@@ -492,22 +492,7 @@ ActiveDirectoryMCP/
 
 5. **⚠️ LLM Tool Limit Warning**
    
-   **ActiveDirectoryMCP provides 43+ tools, which may cause issues with some LLM models:**
-   
-   - **Claude/GPT Models**: May struggle with 40+ tools in context
-   - **Symptoms**: Tool discovery errors, incomplete responses, context overflow
-   - **Solutions**:
-     ```bash
-     # Option 1: Use selective tool exposure (if MCP client supports)
-     # Option 2: Deploy multiple specialized instances
-     # Option 3: Use development mode with fewer tools for testing
-     ```
-   
-   **🔧 Workarounds:**
-   - Start with test environment to verify LLM compatibility
-   - Monitor tool count in MCP client interface
-   - Consider splitting tools into domain-specific instances (users, computers, security)
-   - Report any model-specific issues for optimization
+   Some LLM models may experience issues with 40+ tools in context.
 
 ### View Logs
 ```bash
