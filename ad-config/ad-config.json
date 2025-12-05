@@ -1,31 +1,42 @@
 {
-    "active_directory": {
-        "server": "ldap://192.168.1.100:389",
-        "domain": "test.local",
-        "base_dn": "dc=test,dc=local",
-        "bind_dn": "cn=admin,dc=test,dc=local",
-        "password": "Admin123!"
-    },
-    "organizational_units": {
-        "users_ou": "ou=people,dc=test,dc=local",
-        "groups_ou": "ou=groups,dc=test,dc=local",
-        "computers_ou": "ou=computers,dc=test,dc=local",
-        "service_accounts_ou": "ou=people,dc=test,dc=local"
-    },
-    "security": {
-        "enable_tls": false,
-        "validate_certificate": false,
-        "require_secure_connection": false
-    },
-    "logging": {
-        "level": "DEBUG",
-        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "file": "samba_ad_mcp.log"
-    },
-    "performance": {
-        "connection_pool_size": 5,
-        "max_retries": 3,
-        "retry_delay": 1.0,
-        "page_size": 100
-    }
+  "active_directory": {
+    "server": "ldaps://172.16.1.10:636",
+    "domain": "ad.skillsit.com.br",
+    "base_dn": "DC=ad,DC=skillsit,DC=com,DC=br",
+    "bind_dn": "adriano.fante@ad.skillsit.com.br",
+    "password": "Sb1303,12",
+	"use_ssl": true,
+    "ssl_port": 636,
+    "server_pool": [
+       "ldaps://172.16.1.10:636"
+    ],
+    "timeout": 30,
+    "auto_bind": true
+  },
+  "organizational_units": {
+    "users_ou": "OU=_Empresas,DC=ad,DC=skillsit,DC=com,DC=br",
+    "groups_ou": "OU=_Empresas,DC=ad,DC=skillsit,DC=com,DC=br",
+    "computers_ou": "OU=_Empresas,DC=ad,DC=skillsit,DC=com,DC=br",
+    "service_accounts_ou": "OU=_Empresas,DC=ad,DC=skillsit,DC=com,DC=br"
+  },
+  "security": {
+    "enable_tls": true,
+	"validate_certificate": false,
+    "require_secure_connection": false
+	},
+  "performance": {
+    "connection_pool_size": 5,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "page_size": 100
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "active_directory_mcp.log"
+  },
+  "http": {
+    "host": "0.0.0.0",
+    "port": 8820,
+    "path": "/activedirectory-mcp"
+  }
 }

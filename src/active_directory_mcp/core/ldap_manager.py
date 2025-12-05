@@ -188,6 +188,19 @@ class LDAPManager:
         """
         connection = self.connect()
         
+        # Auto-reconnect if connection was lost (thread-safe)
+        try:
+            if not connection.bound:
+                logger.info("Connection lost, reconnecting...")
+                with self._lock:
+                    self._connection = None
+                    connection = self.connect()
+        except Exception as e:
+            logger.warning(f"Connection check failed: {e}, reconnecting...")
+            with self._lock:
+                self._connection = None
+                connection = self.connect()
+        
         try:
             logger.debug(f"Searching: base={search_base}, filter={search_filter}")
             

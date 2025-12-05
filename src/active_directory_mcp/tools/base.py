@@ -196,3 +196,23 @@ class BaseTool(ABC):
             Dictionary with schema information
         """
         pass
+
+    def _get_attr(self, attributes: Dict, key: str, default=None):
+        """
+        Safely get attribute value from LDAP response.
+        Handles both list and single value returns from ldap3.
+        
+        Args:
+            attributes: Dict of attributes from LDAP response
+            key: Attribute name
+            default: Default value if not found
+            
+        Returns:
+            Attribute value (first item if list, otherwise direct value)
+        """
+        value = attributes.get(key, default)
+        if value is None:
+            return default
+        if isinstance(value, list):
+            return value[0] if value else default
+        return value

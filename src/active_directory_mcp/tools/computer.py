@@ -62,15 +62,15 @@ class ComputerTools(BaseTool):
             for entry in results:
                 computer_info = {
                     'dn': entry['dn'],
-                    'sAMAccountName': entry['attributes'].get('sAMAccountName', [''])[0],
-                    'dNSHostName': entry['attributes'].get('dNSHostName', [''])[0],
-                    'operatingSystem': entry['attributes'].get('operatingSystem', [''])[0],
-                    'description': entry['attributes'].get('description', [''])[0],
-                    'enabled': self._is_computer_enabled(entry['attributes'].get('userAccountControl', [0])[0])
+                    'sAMAccountName': self._get_attr(entry['attributes'], 'sAMAccountName', ''),
+                    'dNSHostName': self._get_attr(entry['attributes'], 'dNSHostName', ''),
+                    'operatingSystem': self._get_attr(entry['attributes'], 'operatingSystem', ''),
+                    'description': self._get_attr(entry['attributes'], 'description', ''),
+                    'enabled': self._is_computer_enabled(self._get_attr(entry['attributes'], 'userAccountControl', 0))
                 }
                 
                 # Add last logon information
-                last_logon = entry['attributes'].get('lastLogon', [0])[0]
+                last_logon = self._get_attr(entry['attributes'], 'lastLogon', 0)
                 if last_logon and last_logon != 0:
                     computer_info['lastLogon'] = self._convert_filetime_to_datetime(last_logon)
                 
@@ -152,7 +152,7 @@ class ComputerTools(BaseTool):
             }
             
             # Add computed fields
-            uac = computer_entry['attributes'].get('userAccountControl', [0])[0]
+            uac = self._get_attr(computer_entry['attributes'], 'userAccountControl', 0)
             computer_info['computed'] = {
                 'enabled': self._is_computer_enabled(uac),
                 'computer_type': self._get_computer_type(uac),
@@ -492,17 +492,26 @@ class ComputerTools(BaseTool):
             
             stale_computers = []
             for entry in results:
-                last_logon = entry['attributes'].get('lastLogon', [0])[0]
+                last_logon = self._get_attr(entry['attributes'], 'lastLogon', 0)
                 
-                # Check if computer is stale
-                if last_logon == 0 or last_logon < cutoff_filetime:
+                # Check if computer is stale - handle datetime objects from ldap3
+                is_stale = False
+                if last_logon == 0 or last_logon is None:
+                    is_stale = True
+                elif isinstance(last_logon, datetime):
+                    cutoff_date = datetime.now(last_logon.tzinfo) - timedelta(days=days)
+                    is_stale = last_logon < cutoff_date
+                elif isinstance(last_logon, int) and last_logon < cutoff_filetime:
+                    is_stale = True
+                    
+                if is_stale:
                     computer_info = {
                         'dn': entry['dn'],
-                        'sAMAccountName': entry['attributes'].get('sAMAccountName', [''])[0],
-                        'dNSHostName': entry['attributes'].get('dNSHostName', [''])[0],
-                        'operatingSystem': entry['attributes'].get('operatingSystem', [''])[0],
-                        'description': entry['attributes'].get('description', [''])[0],
-                        'lastLogon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                        'sAMAccountName': self._get_attr(entry['attributes'], 'sAMAccountName', ''),
+                        'dNSHostName': self._get_attr(entry['attributes'], 'dNSHostName', ''),
+                        'operatingSystem': self._get_attr(entry['attributes'], 'operatingSystem', ''),
+                        'description': self._get_attr(entry['attributes'], 'description', ''),
+                        'lastLogon': self._convert_filetime_to_datetime(last_logon) if last_logon and (isinstance(last_logon, datetime) or last_logon > 0) else 'Never',
                         'daysSinceLastLogon': self._get_days_since_last_logon(entry['attributes'])
                     }
                     stale_computers.append(computer_info)
@@ -574,7 +583,7 @@ class ComputerTools(BaseTool):
     
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
         """Get number of days since last logon."""
-        last_logon = attributes.get('lastLogon', [0])[0]
+        last_logon = self._get_attr(attributes, 'lastLogon', 0)
         if last_logon == 0 or last_logon is None:
             return None
         
@@ -586,7 +595,7 @@ class ComputerTools(BaseTool):
     
     def _get_password_age_days(self, attributes: Dict[str, Any]) -> Optional[int]:
         """Get number of days since password was last set."""
-        pwd_last_set = attributes.get('pwdLastSet', [0])[0]
+        pwd_last_set = self._get_attr(attributes, 'pwdLastSet', 0)
         if pwd_last_set == 0:
             return None
         
@@ -645,7 +654,7 @@ class ComputerTools(BaseTool):
                 'online': True,  # Mock - would need actual ping/connectivity check
                 'last_logon_days': self._get_days_since_last_logon(data) if 'lastLogon' in data else 0,
                 'password_age_days': self._get_password_age_days(data) if 'pwdLastSet' in data else 0,
-                'operating_system': data.get('operatingSystem', ['Unknown'])[0] if isinstance(data.get('operatingSystem'), list) else data.get('operatingSystem', 'Unknown'),
+                'operating_system': self._get_attr(data, 'operatingSystem', 'Unknown') if isinstance(data.get('operatingSystem'), list) else data.get('operatingSystem', 'Unknown'),
                 'domain_trust_ok': True  # Mock - would need actual trust verification
             }
             

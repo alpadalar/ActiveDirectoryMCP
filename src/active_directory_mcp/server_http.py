@@ -145,8 +145,8 @@ class ActiveDirectoryMCPHTTPServer:
             return self.user_tools.disable_user(username)
 
         @self.mcp.tool(description="Reset user password")
-        def reset_user_password(username: str, new_password: Optional[str] = None, force_change: bool = True):
-            return self.user_tools.reset_password(username, new_password, force_change)
+        def reset_user_password(username: str, new_password: Optional[str] = None, force_change: bool = True, password_never_expires: bool = False):
+            return self.user_tools.reset_password(username, new_password, force_change, password_never_expires)
 
         @self.mcp.tool(description="Get groups that a user is member of")
         def get_user_groups(username: str):

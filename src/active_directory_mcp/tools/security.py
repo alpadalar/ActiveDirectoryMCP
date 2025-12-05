@@ -30,7 +30,7 @@ class SecurityTools(BaseTool):
                     'name', 'dc', 'objectSid', 'whenCreated', 'whenChanged',
                     'lockoutThreshold', 'lockoutDuration', 'maxPwdAge', 'minPwdAge',
                     'minPwdLength', 'pwdHistoryLength', 'forceLogoff',
-                    'functionalLevel', 'gPLink'
+                    'gPLink'
                 ],
                 search_scope=ldap3.BASE
             )
@@ -40,27 +40,27 @@ class SecurityTools(BaseTool):
             
             domain_entry = domain_results[0]
             # Handle bytes objects for JSON serialization
-            object_sid = domain_entry['attributes'].get('objectSid', [b''])[0]
+            object_sid = self._get_attr(domain_entry['attributes'], 'objectSid', b'')
             if isinstance(object_sid, bytes):
                 object_sid = base64.b64encode(object_sid).decode('utf-8')
             
             domain_info = {
                 'dn': domain_entry['dn'],
-                'name': domain_entry['attributes'].get('name', [''])[0],
-                'domain_component': domain_entry['attributes'].get('dc', [''])[0],
+                'name': self._get_attr(domain_entry['attributes'], 'name', ''),
+                'domain_component': self._get_attr(domain_entry['attributes'], 'dc', ''),
                 'object_sid': object_sid,
-                'when_created': domain_entry['attributes'].get('whenCreated', [None])[0],
-                'when_changed': domain_entry['attributes'].get('whenChanged', [None])[0]
+                'when_created': self._get_attr(domain_entry['attributes'], 'whenCreated'),
+                'when_changed': self._get_attr(domain_entry['attributes'], 'whenChanged')
             }
             
             # Password policy information
             password_policy = {
-                'lockout_threshold': domain_entry['attributes'].get('lockoutThreshold', [0])[0],
-                'lockout_duration': self._convert_time_interval(domain_entry['attributes'].get('lockoutDuration', [0])[0]),
-                'max_password_age': self._convert_time_interval(domain_entry['attributes'].get('maxPwdAge', [0])[0]),
-                'min_password_age': self._convert_time_interval(domain_entry['attributes'].get('minPwdAge', [0])[0]),
-                'min_password_length': domain_entry['attributes'].get('minPwdLength', [0])[0],
-                'password_history_length': domain_entry['attributes'].get('pwdHistoryLength', [0])[0]
+                'lockout_threshold': self._get_attr(domain_entry['attributes'], 'lockoutThreshold', 0),
+                'lockout_duration': self._convert_time_interval(self._get_attr(domain_entry['attributes'], 'lockoutDuration', 0)),
+                'max_password_age': self._convert_time_interval(self._get_attr(domain_entry['attributes'], 'maxPwdAge', 0)),
+                'min_password_age': self._convert_time_interval(self._get_attr(domain_entry['attributes'], 'minPwdAge', 0)),
+                'min_password_length': self._get_attr(domain_entry['attributes'], 'minPwdLength', 0),
+                'password_history_length': self._get_attr(domain_entry['attributes'], 'pwdHistoryLength', 0)
             }
             
             domain_info['password_policy'] = password_policy
@@ -100,18 +100,18 @@ class SecurityTools(BaseTool):
                     
                     if group_results:
                         group_entry = group_results[0]
-                        members = group_entry['attributes'].get('member', [])
+                        members = group_entry['attributes'].get('member') or []
                         
                         # Handle bytes objects for JSON serialization
-                        object_sid = group_entry['attributes'].get('objectSid', [b''])[0]
+                        object_sid = self._get_attr(group_entry['attributes'], 'objectSid', b'')
                         if isinstance(object_sid, bytes):
                             object_sid = base64.b64encode(object_sid).decode('utf-8')
                         
                         group_info = {
                             'dn': group_entry['dn'],
-                            'sam_account_name': group_entry['attributes'].get('sAMAccountName', [''])[0],
-                            'display_name': group_entry['attributes'].get('displayName', [''])[0],
-                            'description': group_entry['attributes'].get('description', [''])[0],
+                            'sam_account_name': self._get_attr(group_entry['attributes'], 'sAMAccountName', ''),
+                            'display_name': self._get_attr(group_entry['attributes'], 'displayName', ''),
+                            'description': self._get_attr(group_entry['attributes'], 'description', ''),
                             'member_count': len(members),
                             'members': members[:10],  # First 10 members
                             'object_sid': object_sid
@@ -164,7 +164,7 @@ class SecurityTools(BaseTool):
                 }, "get_user_permissions")
             
             user_entry = user_results[0]
-            member_of = user_entry['attributes'].get('memberOf', [])
+            member_of = user_entry['attributes'].get('memberOf') or []
             
             # Analyze group memberships
             group_analysis = []
@@ -181,13 +181,13 @@ class SecurityTools(BaseTool):
                     
                     if group_info:
                         group_data = group_info[0]['attributes']
-                        group_name = group_data.get('sAMAccountName', [''])[0]
+                        group_name = self._get_attr(group_data, 'sAMAccountName', '')
                         
                         group_entry = {
                             'dn': group_dn,
                             'sam_account_name': group_name,
-                            'display_name': group_data.get('displayName', [''])[0],
-                            'description': group_data.get('description', [''])[0]
+                            'display_name': self._get_attr(group_data, 'displayName', ''),
+                            'description': self._get_attr(group_data, 'description', '')
                         }
                         
                         # Check if it's a privileged group
@@ -204,7 +204,7 @@ class SecurityTools(BaseTool):
                     continue
             
             # Check account status
-            uac = user_entry['attributes'].get('userAccountControl', [0])[0]
+            uac = self._get_attr(user_entry['attributes'], 'userAccountControl', 0)
             account_status = {
                 'enabled': not bool(uac & 0x0002),  # ACCOUNTDISABLE
                 'locked': bool(uac & 0x0010),       # LOCKOUT
@@ -216,7 +216,7 @@ class SecurityTools(BaseTool):
             user_permissions = {
                 'username': username,
                 'user_dn': user_entry['dn'],
-                'display_name': user_entry['attributes'].get('displayName', [''])[0],
+                'display_name': self._get_attr(user_entry['attributes'], 'displayName', ''),
                 'account_status': account_status,
                 'total_groups': len(member_of),
                 'privileged_groups_count': len(privileged_groups),
@@ -265,19 +265,28 @@ class SecurityTools(BaseTool):
             
             inactive_users = []
             for entry in results:
-                last_logon = entry['attributes'].get('lastLogon', [0])[0]
+                last_logon = self._get_attr(entry['attributes'], 'lastLogon', 0)
                 
                 # Check if user is inactive
-                if last_logon == 0 or last_logon < cutoff_filetime:
-                    uac = entry['attributes'].get('userAccountControl', [0])[0]
-                    member_of = entry['attributes'].get('memberOf', [])
+                # Handle datetime from ldap3
+                is_inactive = False
+                if last_logon == 0 or last_logon is None:
+                    is_inactive = True
+                elif isinstance(last_logon, datetime):  # datetime object
+                    cutoff_date = datetime.now(last_logon.tzinfo) if last_logon.tzinfo else datetime.now() - timedelta(days=days)
+                    is_inactive = last_logon < cutoff_date
+                elif isinstance(last_logon, int) and last_logon < cutoff_filetime:
+                    is_inactive = True
+                if is_inactive:
+                    uac = self._get_attr(entry['attributes'], 'userAccountControl', 0)
+                    member_of = entry['attributes'].get('memberOf') or []
                     
                     user_info = {
                         'dn': entry['dn'],
-                        'sam_account_name': entry['attributes'].get('sAMAccountName', [''])[0],
-                        'display_name': entry['attributes'].get('displayName', [''])[0],
-                        'mail': entry['attributes'].get('mail', [''])[0],
-                        'last_logon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                        'sam_account_name': self._get_attr(entry['attributes'], 'sAMAccountName', ''),
+                        'display_name': self._get_attr(entry['attributes'], 'displayName', ''),
+                        'mail': self._get_attr(entry['attributes'], 'mail', ''),
+                        'last_logon': self._convert_filetime_to_datetime(last_logon) if (last_logon and not isinstance(last_logon, bool) and (isinstance(last_logon, datetime) or last_logon > 0)) else 'Never',
                         'days_inactive': self._get_days_since_last_logon({'lastLogon': [last_logon]}),
                         'enabled': not bool(uac & 0x0002),
                         'group_count': len(member_of),
@@ -337,9 +346,9 @@ class SecurityTools(BaseTool):
             current_time = self._convert_datetime_to_filetime(datetime.now())
             
             for entry in user_results:
-                uac = entry['attributes'].get('userAccountControl', [0])[0]
-                pwd_last_set = entry['attributes'].get('pwdLastSet', [0])[0]
-                account_expires = entry['attributes'].get('accountExpires', [0])[0]
+                uac = self._get_attr(entry['attributes'], 'userAccountControl', 0)
+                pwd_last_set = self._get_attr(entry['attributes'], 'pwdLastSet', 0)
+                account_expires = self._get_attr(entry['attributes'], 'accountExpires', 0)
                 
                 user_violations = []
                 
@@ -368,11 +377,11 @@ class SecurityTools(BaseTool):
                 if user_violations:
                     violation_info = {
                         'dn': entry['dn'],
-                        'sam_account_name': entry['attributes'].get('sAMAccountName', [''])[0],
-                        'display_name': entry['attributes'].get('displayName', [''])[0],
+                        'sam_account_name': self._get_attr(entry['attributes'], 'sAMAccountName', ''),
+                        'display_name': self._get_attr(entry['attributes'], 'displayName', ''),
                         'violations': user_violations,
                         'enabled': not bool(uac & 0x0002),
-                        'pwd_last_set': self._convert_filetime_to_datetime(pwd_last_set) if pwd_last_set > 0 else 'Never'
+                        'pwd_last_set': self._convert_filetime_to_datetime(pwd_last_set) if (pwd_last_set and not isinstance(pwd_last_set, bool) and (hasattr(pwd_last_set, "tzinfo") or pwd_last_set > 0)) else 'Never'
                     }
                     
                     violations.append(violation_info)
@@ -409,7 +418,7 @@ class SecurityTools(BaseTool):
                     )
                     
                     if group_results:
-                        members = group_results[0]['attributes'].get('member', [])
+                        members = group_results[0]['attributes'].get('member') or []
                         
                         for member_dn in members:
                             # Get user details
@@ -426,7 +435,7 @@ class SecurityTools(BaseTool):
                             
                             if user_results:
                                 user_entry = user_results[0]
-                                uac = user_entry['attributes'].get('userAccountControl', [0])[0]
+                                uac = self._get_attr(user_entry['attributes'], 'userAccountControl', 0)
                                 
                                 # Check for security issues
                                 security_issues = []
@@ -444,22 +453,22 @@ class SecurityTools(BaseTool):
                                     security_issues.append("Password not required")
                                 
                                 # Check last logon
-                                last_logon = user_entry['attributes'].get('lastLogon', [0])[0]
+                                last_logon = self._get_attr(user_entry['attributes'], 'lastLogon', 0)
                                 days_since_logon = self._get_days_since_last_logon({'lastLogon': [last_logon]})
                                 if days_since_logon and days_since_logon > 90:
                                     security_issues.append(f"No logon for {days_since_logon} days")
                                 
                                 admin_info = {
                                     'dn': user_entry['dn'],
-                                    'sam_account_name': user_entry['attributes'].get('sAMAccountName', [''])[0],
-                                    'display_name': user_entry['attributes'].get('displayName', [''])[0],
-                                    'mail': user_entry['attributes'].get('mail', [''])[0],
+                                    'sam_account_name': self._get_attr(user_entry['attributes'], 'sAMAccountName', ''),
+                                    'display_name': self._get_attr(user_entry['attributes'], 'displayName', ''),
+                                    'mail': self._get_attr(user_entry['attributes'], 'mail', ''),
                                     'privileged_group': group_name,
                                     'enabled': not bool(uac & 0x0002),
-                                    'last_logon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                                    'last_logon': self._convert_filetime_to_datetime(last_logon) if (last_logon and not isinstance(last_logon, bool) and (isinstance(last_logon, datetime) or last_logon > 0)) else 'Never',
                                     'days_since_logon': days_since_logon,
-                                    'logon_count': user_entry['attributes'].get('logonCount', [0])[0],
-                                    'bad_pwd_count': user_entry['attributes'].get('badPwdCount', [0])[0],
+                                    'logon_count': self._get_attr(user_entry['attributes'], 'logonCount', 0),
+                                    'bad_pwd_count': self._get_attr(user_entry['attributes'], 'badPwdCount', 0),
                                     'security_issues': security_issues,
                                     'risk_level': self._calculate_admin_risk_level(security_issues, days_since_logon)
                                 }
@@ -488,26 +497,36 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "audit_admin_accounts", self.ldap.ad_config.base_dn)
     
-    def _convert_time_interval(self, value: int) -> Dict[str, Any]:
+    def _convert_time_interval(self, value) -> Dict[str, Any]:
         """Convert AD time interval to human readable format."""
-        if value == 0:
+        # Handle None or timedelta values
+        if value is None:
             return {"raw": 0, "description": "Never"}
-        
-        # AD time intervals are in 100-nanosecond units (negative for intervals)
-        seconds = abs(value) / 10000000
+        if hasattr(value, 'total_seconds'):
+            # It's a timedelta
+            seconds = abs(value.total_seconds())
+            raw_value = int(seconds * 10000000)
+        elif isinstance(value, int):
+            raw_value = value
+            if value == 0:
+                return {"raw": 0, "description": "Never"}
+            seconds = abs(value) / 10000000
+        else:
+            return {"raw": 0, "description": "Unknown"}
         
         if seconds < 60:
-            return {"raw": value, "seconds": seconds, "description": f"{seconds:.0f} seconds"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{seconds:.0f} seconds"}
         elif seconds < 3600:
             minutes = seconds / 60
-            return {"raw": value, "seconds": seconds, "description": f"{minutes:.0f} minutes"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{minutes:.0f} minutes"}
         elif seconds < 86400:
             hours = seconds / 3600
-            return {"raw": value, "seconds": seconds, "description": f"{hours:.0f} hours"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{hours:.0f} hours"}
         else:
             days = seconds / 86400
-            return {"raw": value, "seconds": seconds, "description": f"{days:.0f} days"}
-    
+            return {"raw": raw_value, "seconds": seconds, "description": f"{days:.0f} days"}
+
+
     def _is_privileged_group(self, group_name: str) -> bool:
         """Check if a group is considered privileged."""
         privileged_groups = [
@@ -593,9 +612,15 @@ class SecurityTools(BaseTool):
         else:
             return "Monitor account activity and maintain current security posture"
     
-    def _convert_filetime_to_datetime(self, filetime: int) -> datetime:
-        """Convert Windows FILETIME to datetime."""
-        return datetime(1601, 1, 1) + timedelta(microseconds=filetime / 10)
+    def _convert_filetime_to_datetime(self, filetime) -> datetime:
+        """Convert Windows FILETIME to datetime. Handles both int and datetime."""
+        # If already a datetime, return as-is
+        if isinstance(filetime, datetime):
+            return filetime
+        # Convert Windows FILETIME (100-nanosecond intervals since 1601)
+        if isinstance(filetime, int):
+            return datetime(1601, 1, 1) + timedelta(microseconds=filetime / 10)
+        return None
     
     def _convert_datetime_to_filetime(self, dt: datetime) -> int:
         """Convert datetime to Windows FILETIME."""
@@ -605,7 +630,7 @@ class SecurityTools(BaseTool):
     
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
         """Get number of days since last logon."""
-        last_logon = attributes.get('lastLogon', [0])[0]
+        last_logon = self._get_attr(attributes, 'lastLogon', 0)
         if last_logon == 0:
             return None
         
@@ -752,7 +777,7 @@ class SecurityTools(BaseTool):
         risk_score = 0
         
         # Check for admin privileges
-        member_of = account_data.get('memberOf', [])
+        member_of = account_data.get('memberOf') or []
         admin_groups = ['Domain Admins', 'Enterprise Admins', 'Administrators']
         for group in member_of:
             if any(admin_group in group for admin_group in admin_groups):
@@ -782,7 +807,7 @@ class SecurityTools(BaseTool):
     
     def _calculate_password_age(self, account_data: Dict[str, Any]) -> Optional[int]:
         """Calculate password age in days."""
-        pwd_last_set = account_data.get('pwdLastSet', [0])[0]
+        pwd_last_set = self._get_attr(account_data, 'pwdLastSet', 0)
         if pwd_last_set == 0 or pwd_last_set is None:
             return -1  # Test expects -1 for never set or None
             
@@ -799,7 +824,6 @@ class SecurityTools(BaseTool):
     def generate_security_report(self) -> List[Dict[str, Any]]:
         """Generate comprehensive security report."""
         try:
-            from datetime import datetime
             report_timestamp = datetime.now().isoformat()
             
             # Collect data from various security methods

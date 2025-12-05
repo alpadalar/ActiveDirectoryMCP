@@ -43,7 +43,7 @@ class GroupTools(BaseTool):
             if attributes is None:
                 attributes = [
                     'sAMAccountName', 'displayName', 'description', 'mail',
-                    'groupType', 'groupScope', 'member', 'memberOf',
+                    'groupType', 'member', 'memberOf',
                     'whenCreated', 'whenChanged', 'managedBy'
                 ]
             
@@ -61,15 +61,15 @@ class GroupTools(BaseTool):
             for entry in results:
                 group_info = {
                     'dn': entry['dn'],
-                    'sAMAccountName': entry['attributes'].get('sAMAccountName', [''])[0],
-                    'displayName': entry['attributes'].get('displayName', [''])[0],
-                    'description': entry['attributes'].get('description', [''])[0],
-                    'groupType': entry['attributes'].get('groupType', [0])[0],
-                    'memberCount': len(entry['attributes'].get('member', []))
+                    'sAMAccountName': self._get_attr(entry['attributes'], 'sAMAccountName', ''),
+                    'displayName': self._get_attr(entry['attributes'], 'displayName', ''),
+                    'description': self._get_attr(entry['attributes'], 'description', ''),
+                    'groupType': self._get_attr(entry['attributes'], 'groupType', 0),
+                    'memberCount': len(entry['attributes'].get('member') or [])
                 }
                 
                 # Add group scope information
-                group_type = entry['attributes'].get('groupType', [0])[0]
+                group_type = self._get_attr(entry['attributes'], 'groupType', 0)
                 group_info['scope'] = self._get_group_scope(group_type)
                 group_info['type'] = self._get_group_type(group_type)
                 
@@ -77,7 +77,7 @@ class GroupTools(BaseTool):
                 for attr in attributes:
                     if attr not in ['sAMAccountName', 'displayName', 'description', 'groupType'] and attr in entry['attributes']:
                         value = entry['attributes'][attr]
-                        if isinstance(value, list) and len(value) == 1:
+                        if value is not None and isinstance(value, list) and len(value) == 1:
                             group_info[attr] = value[0]
                         else:
                             group_info[attr] = value
@@ -118,7 +118,7 @@ class GroupTools(BaseTool):
             if attributes is None:
                 attributes = [
                     'sAMAccountName', 'displayName', 'description', 'mail',
-                    'groupType', 'groupScope', 'member', 'memberOf',
+                    'groupType', 'member', 'memberOf',
                     'whenCreated', 'whenChanged', 'managedBy', 'info'
                 ]
             
@@ -146,12 +146,12 @@ class GroupTools(BaseTool):
             }
             
             # Add computed fields
-            group_type = group_entry['attributes'].get('groupType', [0])[0]
+            group_type = self._get_attr(group_entry['attributes'], 'groupType', 0)
             group_info['computed'] = {
                 'scope': self._get_group_scope(group_type),
                 'type': self._get_group_type(group_type),
-                'member_count': len(group_entry['attributes'].get('member', [])),
-                'parent_groups_count': len(group_entry['attributes'].get('memberOf', []))
+                'member_count': len(group_entry['attributes'].get('member') or []),
+                'parent_groups_count': len(group_entry['attributes'].get('memberOf') or [])
             }
             
             log_ldap_operation("get_group", group_name, True, f"Retrieved group: {group_entry['dn']}")
@@ -372,7 +372,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:
@@ -434,7 +434,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:
@@ -496,7 +496,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:
@@ -529,8 +529,8 @@ class GroupTools(BaseTool):
                             
                             member_entry = {
                                 'dn': member_dn,
-                                'sAMAccountName': member_data.get('sAMAccountName', [''])[0],
-                                'displayName': member_data.get('displayName', [''])[0],
+                                'sAMAccountName': self._get_attr(member_data, 'sAMAccountName', ''),
+                                'displayName': self._get_attr(member_data, 'displayName', ''),
                                 'type': 'group' if 'group' in object_classes else 'user',
                                 'level': level
                             }
@@ -615,7 +615,7 @@ class GroupTools(BaseTool):
             ],
             "group_attributes": [
                 "sAMAccountName", "displayName", "description", "mail",
-                "groupType", "groupScope", "member", "memberOf", "managedBy"
+                "groupType", "member", "memberOf", "managedBy"
             ],
             "group_scopes": ["Global", "DomainLocal", "Universal"],
             "group_types": ["Security", "Distribution"],
