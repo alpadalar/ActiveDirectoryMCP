@@ -1,0 +1,21 @@
+{
+  "active_directory": {
+    "server": "ldap://localhost:389",
+    "use_ssl": false,
+    "domain": "test.local",
+    "base_dn": "DC=test,DC=local",
+    "bind_dn": "cn=admin,dc=test,dc=local",
+    "password": "Admin123!"
+  },
+  "organizational_units": {
+    "users_ou": "OU=people,DC=test,DC=local",
+    "groups_ou": "OU=groups,DC=test,DC=local",
+    "computers_ou": "OU=computers,DC=test,DC=local",
+    "service_accounts_ou": "OU=people,DC=test,DC=local"
+  },
+  "security": {
+    "enable_tls": false,
+    "validate_certificate": false,
+    "require_secure_connection": false
+  }
+}

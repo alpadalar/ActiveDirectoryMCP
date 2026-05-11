@@ -1,31 +1,41 @@
 {
     "active_directory": {
-        "server": "ldap://192.168.1.100:389",
-        "domain": "test.local",
-        "base_dn": "dc=test,dc=local",
-        "bind_dn": "cn=admin,dc=test,dc=local",
-        "password": "Admin123!"
+        "server": "ldap://192.168.11.15:389",
+        "server_pool": [
+            "ldap://wlmdc01.woodlakecenter.com:389"
+        ],
+        "use_ssl": false,
+        "ssl_port": 636,
+        "domain": "woodlakecenter.com",
+        "base_dn": "DC=woodlakecenter,DC=com",
+        "bind_dn": "CN=John Frawley,OU=Woodlake Users,DC=woodlakecenter,DC=com",
+        "password": "",
+        "timeout": 30,
+        "auto_bind": true,
+        "receive_timeout": 10
     },
     "organizational_units": {
-        "users_ou": "ou=people,dc=test,dc=local",
-        "groups_ou": "ou=groups,dc=test,dc=local",
-        "computers_ou": "ou=computers,dc=test,dc=local",
-        "service_accounts_ou": "ou=people,dc=test,dc=local"
+        "users_ou": "OU=Woodlake Users,DC=woodlakecenter,DC=com",
+        "groups_ou": "OU=Groups,DC=woodlakecenter,DC=com",
+        "computers_ou": "OU=Computers,DC=woodlakecenter,DC=com",
+        "service_accounts_ou": "OU=Service Accounts,DC=woodlakecenter,DC=com"
     },
     "security": {
         "enable_tls": false,
         "validate_certificate": false,
+        "ca_cert_file": "",
+        "check_names": false,
         "require_secure_connection": false
     },
     "logging": {
-        "level": "DEBUG",
+        "level": "INFO",
         "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "file": "samba_ad_mcp.log"
+        "file": "active_directory_mcp.log"
     },
     "performance": {
-        "connection_pool_size": 5,
+        "connection_pool_size": 10,
         "max_retries": 3,
         "retry_delay": 1.0,
-        "page_size": 100
+        "page_size": 1000
     }
 }
