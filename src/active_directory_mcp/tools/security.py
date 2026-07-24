@@ -93,7 +93,10 @@ class SecurityTools(BaseTool):
                     # Search for the group
                     group_results = self.ldap.search(
                         search_base=self.ldap.ad_config.base_dn,
-                        search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                        search_filter=(
+                            f"(&(objectClass={self.ldap.ad_config.group_object_class})"
+                            f"(sAMAccountName={self._escape_ldap_filter(group_name)}))"
+                        ),
                         attributes=['sAMAccountName', 'displayName', 'description', 'member', 'objectSid']
                     )
                     
@@ -151,7 +154,10 @@ class SecurityTools(BaseTool):
             # Get user information
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=(
+                    f"(&(objectClass={self.ldap.ad_config.user_object_class})"
+                    f"(sAMAccountName={self._escape_ldap_filter(username)}))"
+                ),
                 attributes=['sAMAccountName', 'displayName', 'memberOf', 'userAccountControl']
             )
             
@@ -173,7 +179,7 @@ class SecurityTools(BaseTool):
                 try:
                     group_info = self.ldap.search(
                         search_base=group_dn,
-                        search_filter="(objectClass=group)",
+                        search_filter=f"(objectClass={self.ldap.ad_config.group_object_class})",
                         attributes=['sAMAccountName', 'displayName', 'description', 'objectSid'],
                         search_scope=ldap3.BASE
                     )
@@ -250,9 +256,12 @@ class SecurityTools(BaseTool):
             cutoff_filetime = self._convert_datetime_to_filetime(cutoff_date)
             
             # Build search filter
-            search_filter = "(objectClass=user)"
+            search_filter = f"(objectClass={self.ldap.ad_config.user_object_class})"
             if not include_disabled:
-                search_filter = "(&(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+                search_filter = (
+                    f"(&(objectClass={self.ldap.ad_config.user_object_class})"
+                    "(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+                )
             
             # Search for all users
             results = self.ldap.search(
@@ -337,7 +346,7 @@ class SecurityTools(BaseTool):
             # Search for users
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter="(objectClass=user)",
+                search_filter=f"(objectClass={self.ldap.ad_config.user_object_class})",
                 attributes=[
                     'sAMAccountName', 'displayName', 'pwdLastSet',
                     'userAccountControl', 'accountExpires'
@@ -429,7 +438,10 @@ class SecurityTools(BaseTool):
                 try:
                     group_results = self.ldap.search(
                         search_base=self.ldap.ad_config.base_dn,
-                        search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                        search_filter=(
+                            f"(&(objectClass={self.ldap.ad_config.group_object_class})"
+                            f"(sAMAccountName={self._escape_ldap_filter(group_name)}))"
+                        ),
                         attributes=['member']
                     )
                     
@@ -440,7 +452,7 @@ class SecurityTools(BaseTool):
                             # Get user details
                             user_results = self.ldap.search(
                                 search_base=member_dn,
-                                search_filter="(objectClass=user)",
+                                search_filter=f"(objectClass={self.ldap.ad_config.user_object_class})",
                                 attributes=[
                                     'sAMAccountName', 'displayName', 'mail',
                                     'userAccountControl', 'lastLogon', 'pwdLastSet',

@@ -33,7 +33,8 @@ class GroupTools(BaseTool):
                 search_base = self.ldap.ad_config.base_dn
             
             # Build search filter
-            base_filter = "(objectClass=group)"
+            group_object_class = self.ldap.ad_config.group_object_class
+            base_filter = f"(objectClass={group_object_class})"
             if filter_criteria:
                 search_filter = f"(&{base_filter}{filter_criteria})"
             else:
@@ -112,7 +113,8 @@ class GroupTools(BaseTool):
         try:
             # Build search filter
             escaped_group_name = self._escape_ldap_filter(group_name)
-            search_filter = f"(&(objectClass=group)(sAMAccountName={escaped_group_name}))"
+            group_object_class = self.ldap.ad_config.group_object_class
+            search_filter = f"(&(objectClass={group_object_class})(sAMAccountName={escaped_group_name}))"
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -211,8 +213,12 @@ class GroupTools(BaseTool):
             group_type_value = self._calculate_group_type(group_scope, group_type)
             
             # Prepare group attributes
+            object_classes = ['top', 'group']
+            if self.ldap.ad_config.group_object_class not in object_classes:
+                object_classes.append(self.ldap.ad_config.group_object_class)
+
             group_attributes = {
-                'objectClass': ['top', 'group'],
+                'objectClass': object_classes,
                 'sAMAccountName': group_name,
                 'cn': display_name,
                 'displayName': display_name,
@@ -265,7 +271,7 @@ class GroupTools(BaseTool):
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
             
@@ -322,7 +328,7 @@ class GroupTools(BaseTool):
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -371,7 +377,7 @@ class GroupTools(BaseTool):
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
                 attributes=['dn', 'member']
             )
             
@@ -433,7 +439,7 @@ class GroupTools(BaseTool):
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
                 attributes=['dn', 'member']
             )
             
@@ -495,7 +501,7 @@ class GroupTools(BaseTool):
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=group)(sAMAccountName={self._escape_ldap_filter(group_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
                 attributes=['dn', 'member']
             )
             
@@ -518,7 +524,10 @@ class GroupTools(BaseTool):
                         # Get member details
                         member_info = self.ldap.search(
                             search_base=member_dn,
-                            search_filter="(|(objectClass=user)(objectClass=group))",
+                            search_filter=(
+                                f"(|(objectClass={self.ldap.ad_config.user_object_class})"
+                                f"(objectClass={self.ldap.ad_config.group_object_class}))"
+                            ),
                             attributes=['objectClass', 'sAMAccountName', 'displayName', 'member'],
                             search_scope=ldap3.BASE
                         )

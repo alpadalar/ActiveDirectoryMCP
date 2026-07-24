@@ -60,6 +60,7 @@ class ComputerTools(BaseTool):
             # Process results
             computers = []
             for entry in results:
+                entry_attrs = entry['attributes']
                 computer_info = {
                     'dn': entry['dn'],
                     'sAMAccountName': self._get_attr_value(entry['attributes'], 'sAMAccountName', ''),
@@ -76,8 +77,8 @@ class ComputerTools(BaseTool):
                 
                 # Add additional attributes if present
                 for attr in attributes:
-                    if attr not in ['sAMAccountName', 'dNSHostName', 'operatingSystem', 'description'] and attr in entry['attributes']:
-                        value = entry['attributes'][attr]
+                    if attr not in ['sAMAccountName', 'dNSHostName', 'operatingSystem', 'description'] and attr in entry_attrs:
+                        value = entry_attrs[attr]
                         if isinstance(value, list) and len(value) == 1:
                             computer_info[attr] = value[0]
                         else:
@@ -146,9 +147,10 @@ class ComputerTools(BaseTool):
                 }, "get_computer")
             
             computer_entry = results[0]
+            computer_attrs = computer_entry['attributes']
             computer_info = {
                 'dn': computer_entry['dn'],
-                'attributes': computer_entry['attributes']
+                'attributes': computer_attrs
             }
 
             # Add computed fields
@@ -157,8 +159,8 @@ class ComputerTools(BaseTool):
                 'enabled': self._is_computer_enabled(uac),
                 'computer_type': self._get_computer_type(uac),
                 'trusted_for_delegation': self._is_trusted_for_delegation(uac),
-                'days_since_last_logon': self._get_days_since_last_logon(computer_entry['attributes']),
-                'password_age_days': self._get_password_age_days(computer_entry['attributes'])
+                'days_since_last_logon': self._get_days_since_last_logon(computer_attrs),
+                'password_age_days': self._get_password_age_days(computer_attrs)
             }
             
             log_ldap_operation("get_computer", computer_name, True, f"Retrieved computer: {computer_entry['dn']}")
@@ -503,7 +505,7 @@ class ComputerTools(BaseTool):
                         'operatingSystem': self._get_attr_value(entry['attributes'], 'operatingSystem', ''),
                         'description': self._get_attr_value(entry['attributes'], 'description', ''),
                         'lastLogon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
-                        'daysSinceLastLogon': self._get_days_since_last_logon(entry['attributes'])
+                        'daysSinceLastLogon': self._get_days_since_last_logon(entry_attrs)
                     }
                     stale_computers.append(computer_info)
             
@@ -564,13 +566,17 @@ class ComputerTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, operation, computer_name)
     
-    def _is_computer_enabled(self, uac_value: int) -> bool:
-        """Check if computer account is enabled based on userAccountControl."""
-        return not bool(uac_value & 0x0002)  # Check ACCOUNTDISABLE flag
+    def _is_computer_enabled(self, uac_value: int) -> Optional[bool]:
+        """Check if computer account is enabled (None if userAccountControl is unknown)."""
+        value = self._to_int(uac_value)
+        if value is None:
+            return None
+        return not bool(value & 0x0002)  # Check ACCOUNTDISABLE flag
     
     def _is_trusted_for_delegation(self, uac_value: int) -> bool:
         """Check if computer is trusted for delegation."""
-        return bool(uac_value & 0x80000)  # Check TRUSTED_FOR_DELEGATION flag
+        value = self._to_int(uac_value, 0)
+        return bool(value & 0x80000)  # Check TRUSTED_FOR_DELEGATION flag
     
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
         """Get number of days since last logon."""
@@ -728,13 +734,14 @@ class ComputerTools(BaseTool):
     
     def _get_computer_type(self, uac_value: int) -> str:
         """Determine computer type from userAccountControl value."""
-        if uac_value & 0x1000:  # WORKSTATION_TRUST_ACCOUNT (4096)
+        value = self._to_int(uac_value, 0)
+        if value & 0x1000:  # WORKSTATION_TRUST_ACCOUNT (4096)
             return 'workstation'
-        elif uac_value == 8192:  # Specific value for domain controller test
+        elif value == 8192:  # Specific value for domain controller test
             return 'domain_controller'
-        elif uac_value & 0x2000:  # SERVER_TRUST_ACCOUNT
+        elif value & 0x2000:  # SERVER_TRUST_ACCOUNT
             return 'server'
-        elif uac_value & 0x800:   # INTERDOMAIN_TRUST_ACCOUNT
+        elif value & 0x800:   # INTERDOMAIN_TRUST_ACCOUNT
             return 'domain_controller'
         else:
             return 'unknown'

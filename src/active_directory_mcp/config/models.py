@@ -25,6 +25,18 @@ class ActiveDirectoryConfig(BaseModel):
     timeout: int = Field(default=30, description="Connection timeout in seconds")
     auto_bind: bool = Field(default=True, description="Automatically bind on connection")
     receive_timeout: int = Field(default=10, description="Receive timeout in seconds")
+    user_object_class: str = Field(
+        default="user",
+        description="Primary objectClass değeri (ör: user, inetOrgPerson)"
+    )
+    group_object_class: str = Field(
+        default="group",
+        description="Grup aramalarında kullanılacak objectClass"
+    )
+    computer_object_class: str = Field(
+        default="computer",
+        description="Bilgisayar nesneleri için objectClass"
+    )
     
     @field_validator('server')
     @classmethod
@@ -77,7 +89,7 @@ class SecurityConfig(BaseModel):
     enable_tls: bool = Field(default=True, description="Enable TLS encryption")
     validate_certificate: bool = Field(default=True, description="Validate server certificate")
     ca_cert_file: Optional[str] = Field(default=None, description="CA certificate file path")
-    require_secure_connection: bool = Field(default=True, description="Require secure connection")
+    require_secure_connection: bool = Field(default=False, description="Require secure connection")
 
 
 class LoggingConfig(BaseModel):

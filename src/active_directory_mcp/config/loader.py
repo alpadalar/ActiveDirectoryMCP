@@ -3,8 +3,29 @@
 import json
 import os
 import logging
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
+ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::([^}]+))?\}")
+
+
+def _resolve_env_placeholders(value: Any) -> Any:
+    """Recursively replace ${VAR[:default]} placeholders with environment values."""
+    if isinstance(value, dict):
+        return {key: _resolve_env_placeholders(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_resolve_env_placeholders(item) for item in value]
+    if isinstance(value, str):
+        match = ENV_PATTERN.fullmatch(value.strip())
+        if match:
+            env_key, default = match.groups()
+            env_value = os.getenv(env_key)
+            if env_value is None:
+                if default is not None:
+                    return default
+                raise ValueError(f"Environment variable '{env_key}' is not set for configuration placeholder {value!r}")
+            return env_value
+    return value
 
 from .models import Config
 from .keyvault import get_secret, KeyVaultError
@@ -45,6 +66,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
     try:
         with open(config_file, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
+
+        config_data = _resolve_env_placeholders(config_data)
         
         # Validate and create config object
         config = Config(**config_data)
@@ -181,5 +204,11 @@ def validate_config(config: Config) -> None:
     if config.active_directory.use_ssl and config.security.enable_tls:
         if not config.active_directory.server.startswith('ldaps://'):
             logger.warning("SSL enabled but server URL doesn't use ldaps://")
+
+    if config.security.require_secure_connection:
+        if not config.active_directory.use_ssl:
+            raise ValueError("Secure connection required but 'use_ssl' is disabled")
+        if not config.active_directory.server.startswith('ldaps://'):
+            raise ValueError("Secure connection required but server URL is not ldaps://")
     
     logger.info("Configuration validation completed")

@@ -498,9 +498,9 @@ class OrganizationalUnitTools(BaseTool):
             # Build search filter
             filter_parts = []
             if 'user' in object_types:
-                filter_parts.append("(objectClass=user)")
+                filter_parts.append(f"(objectClass={self.ldap.ad_config.user_object_class})")
             if 'group' in object_types:
-                filter_parts.append("(objectClass=group)")
+                filter_parts.append(f"(objectClass={self.ldap.ad_config.group_object_class})")
             if 'computer' in object_types:
                 filter_parts.append("(objectClass=computer)")
             if 'organizationalUnit' in object_types:

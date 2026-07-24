@@ -37,8 +37,8 @@ class UserTools(BaseTool):
             else:
                 search_base = self.ldap.ad_config.base_dn
             
-            # Build search filter
-            base_filter = "(objectClass=user)"
+            user_object_class = self.ldap.ad_config.user_object_class
+            base_filter = f"(objectClass={user_object_class})"
             if filter_criteria:
                 search_filter = f"(&{base_filter}{filter_criteria})"
             else:
@@ -65,6 +65,7 @@ class UserTools(BaseTool):
             # Process results
             users = []
             for entry in results:
+                entry_attrs = entry['attributes']
                 user_info = {
                     'dn': entry['dn'],
                     'sAMAccountName': self._get_attr_value(entry['attributes'], 'sAMAccountName', ''),
@@ -76,7 +77,7 @@ class UserTools(BaseTool):
                 # Add additional attributes if present
                 for attr in attributes:
                     if attr not in ['sAMAccountName', 'displayName', 'mail'] and attr in entry['attributes']:
-                        value = entry['attributes'][attr]
+                        value = entry_attrs[attr]
                         if isinstance(value, list) and len(value) == 1:
                             user_info[attr] = value[0]
                         else:
@@ -112,7 +113,8 @@ class UserTools(BaseTool):
         try:
             # Build search filter
             escaped_username = self._escape_ldap_filter(username)
-            search_filter = f"(&(objectClass=user)(sAMAccountName={escaped_username}))"
+            user_object_class = self.ldap.ad_config.user_object_class
+            search_filter = f"(&(objectClass={user_object_class})(sAMAccountName={escaped_username}))"
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -152,8 +154,8 @@ class UserTools(BaseTool):
             user_info['computed'] = {
                 'enabled': self._is_user_enabled(uac),
                 'locked': self._is_user_locked(uac),
-                'password_expired': self._is_password_expired(user_entry['attributes']),
-                'account_expired': self._is_account_expired(user_entry['attributes'])
+                'password_expired': self._is_password_expired(user_attrs),
+                'account_expired': self._is_account_expired(user_attrs)
             }
             
             log_ldap_operation("get_user", username, True, f"Retrieved user: {user_entry['dn']}")
@@ -206,8 +208,12 @@ class UserTools(BaseTool):
                 }, "create_user")
             
             # Prepare user attributes
+            object_classes = ['top', 'person', 'organizationalPerson', 'user']
+            if self.ldap.ad_config.user_object_class not in object_classes:
+                object_classes.append(self.ldap.ad_config.user_object_class)
+
             user_attributes = {
-                'objectClass': ['top', 'person', 'organizationalPerson', 'user'],
+                'objectClass': object_classes,
                 'sAMAccountName': username,
                 'userPrincipalName': f"{username}@{self.ldap.ad_config.domain}",
                 'givenName': first_name,
@@ -283,7 +289,7 @@ class UserTools(BaseTool):
             # Find user DN
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -347,7 +353,7 @@ class UserTools(BaseTool):
             # Find user DN
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -422,7 +428,7 @@ class UserTools(BaseTool):
             # Find user DN
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -479,7 +485,7 @@ class UserTools(BaseTool):
             # Get user's memberOf attribute
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
                 attributes=['memberOf', 'dn']
             )
             
@@ -499,7 +505,7 @@ class UserTools(BaseTool):
                 try:
                     group_info = self.ldap.search(
                         search_base=group_dn,
-                        search_filter="(objectClass=group)",
+                        search_filter=f"(objectClass={self.ldap.ad_config.group_object_class})",
                         attributes=['sAMAccountName', 'displayName', 'description', 'groupType'],
                         search_scope=ldap3.BASE
                     )
@@ -535,7 +541,7 @@ class UserTools(BaseTool):
             # Find user DN
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=user)(sAMAccountName={self._escape_ldap_filter(username)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -640,6 +646,7 @@ class UserTools(BaseTool):
             return expire_date < datetime.now()
         except:
             return False
+
     
     def get_schema_info(self) -> Dict[str, Any]:
         """Get schema information for user operations."""

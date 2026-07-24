@@ -1,5 +1,6 @@
 """LDAP connection manager for Active Directory."""
 
+import base64
 import logging
 import ssl
 import time
@@ -183,7 +184,28 @@ class LDAPManager:
                 finally:
                     self._connection = None
     
-    def search(self, 
+    def _normalize_attributes(self, raw_attributes: Dict[str, Any]) -> Dict[str, List[Any]]:
+        """Normalize LDAP attribute values into list-based structure."""
+        normalized: Dict[str, List[Any]] = {}
+
+        for attr_name, value in raw_attributes.items():
+            if value is None:
+                normalized[attr_name] = []
+            elif isinstance(value, (list, tuple, set)):
+                normalized[attr_name] = [self._coerce_attribute_value(v) for v in value]
+            else:
+                normalized[attr_name] = [self._coerce_attribute_value(value)]
+
+        return normalized
+
+    @staticmethod
+    def _coerce_attribute_value(value: Any) -> Any:
+        """Ensure attribute values are safe for JSON serialization."""
+        if isinstance(value, bytes):
+            return base64.b64encode(value).decode('ascii')
+        return value
+
+    def search(self,
                search_base: str,
                search_filter: str,
                attributes: Union[List[str], str] = ALL_ATTRIBUTES,
@@ -234,18 +256,14 @@ class LDAPManager:
                 
                 # Add entries to results
                 for entry in connection.entries:
+                    raw_attributes = entry.entry_attributes_as_dict
+                    normalized_attributes = self._normalize_attributes(raw_attributes)
+
                     entry_dict = {
                         'dn': entry.entry_dn,
-                        'attributes': (_CIDict() if SKIP_SCHEMA else {})
+                        'attributes': (_CIDict(normalized_attributes) if SKIP_SCHEMA else normalized_attributes)
                     }
-                    
-                    for attr_name in entry.entry_attributes:
-                        attr_value = getattr(entry, attr_name)
-                        if hasattr(attr_value, 'value'):
-                            entry_dict['attributes'][attr_name] = attr_value.value
-                        else:
-                            entry_dict['attributes'][attr_name] = str(attr_value)
-                    
+
                     entries.append(entry_dict)
                     
                     # Check size limit

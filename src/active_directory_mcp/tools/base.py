@@ -102,7 +102,16 @@ class BaseTool(ABC):
             error_response["dn"] = dn
         
         return [Content(type="text", text=json.dumps(error_response, indent=2))]
-    
+
+    def _get_first_value(self, attributes: Dict[str, Any], key: str, default: Any = None) -> Any:
+        """Safely get first value from LDAP attribute list."""
+        value = attributes.get(key)
+        if isinstance(value, list):
+            return value[0] if value else default
+        if value is None:
+            return default
+        return value
+
     def _validate_dn(self, dn: str) -> bool:
         """
         Validate Distinguished Name format.

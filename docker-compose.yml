@@ -44,7 +44,7 @@ services:
     
     # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(1); result=s.connect_ex(('localhost',8813)); s.close(); exit(result)"]
+      test: ["CMD-SHELL", "curl -sf -X POST http://127.0.0.1:8813/activedirectory-mcp -H 'Content-Type: application/json' -d '{\"method\":\"health\",\"params\":{}}' | grep -E '\\"status\\"\\s*:\\s*\\"(ok|degraded)\\"' > /dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -181,3 +181,6 @@ ldap-config/
 *.temp
 .DS_Store
 Thumbs.db
+
+# Local test configs (contain credentials)
+test_config.json

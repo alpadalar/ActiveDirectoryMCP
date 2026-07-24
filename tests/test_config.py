@@ -14,7 +14,7 @@ def test_load_config_from_file():
     """Test loading configuration from JSON file."""
     config_data = {
         "active_directory": {
-            "server": "ldap://test.local:389",
+            "server": "ldaps://test.local:636",
             "domain": "test.local",
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
@@ -35,10 +35,87 @@ def test_load_config_from_file():
     try:
         config = load_config(config_path)
         assert isinstance(config, Config)
-        assert config.active_directory.server == "ldap://test.local:389"
+        assert config.active_directory.server == "ldaps://test.local:636"
         assert config.active_directory.domain == "test.local"
     finally:
         os.unlink(config_path)
+
+
+def test_env_placeholder_resolution(tmp_path, monkeypatch):
+    """Config değerlerinin ortam değişkenlerinden okunmasını test et."""
+    config_data = {
+        "active_directory": {
+            "server": "ldaps://secure.local:636",
+            "domain": "secure.local",
+            "base_dn": "DC=secure,DC=local",
+            "bind_dn": "CN=service,DC=secure,DC=local",
+            "password": "${AD_BIND_PASSWORD}"
+        },
+        "organizational_units": {
+            "users_ou": "OU=Users,DC=secure,DC=local",
+            "groups_ou": "OU=Groups,DC=secure,DC=local",
+            "computers_ou": "OU=Computers,DC=secure,DC=local",
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
+        }
+    }
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data), encoding="utf-8")
+
+    monkeypatch.setenv("AD_BIND_PASSWORD", "super-secret")
+
+    config = load_config(str(config_path))
+    assert config.active_directory.password == "super-secret"
+
+
+def test_env_placeholder_with_default(tmp_path):
+    """Varsayılan değer içeren placeholder'ın çözülmesini test et."""
+    config_data = {
+        "active_directory": {
+            "server": "ldaps://secure.local:636",
+            "domain": "secure.local",
+            "base_dn": "DC=secure,DC=local",
+            "bind_dn": "CN=service,DC=secure,DC=local",
+            "password": "${AD_BIND_PASSWORD:default-pass}"
+        },
+        "organizational_units": {
+            "users_ou": "OU=Users,DC=secure,DC=local",
+            "groups_ou": "OU=Groups,DC=secure,DC=local",
+            "computers_ou": "OU=Computers,DC=secure,DC=local",
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
+        }
+    }
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data), encoding="utf-8")
+
+    config = load_config(str(config_path))
+    assert config.active_directory.password == "default-pass"
+
+
+def test_env_placeholder_missing_env(tmp_path):
+    """Ortam değişkeni olmayan placeholder için hata verilmesini test et."""
+    config_data = {
+        "active_directory": {
+            "server": "ldaps://secure.local:636",
+            "domain": "secure.local",
+            "base_dn": "DC=secure,DC=local",
+            "bind_dn": "CN=service,DC=secure,DC=local",
+            "password": "${AD_BIND_PASSWORD}"
+        },
+        "organizational_units": {
+            "users_ou": "OU=Users,DC=secure,DC=local",
+            "groups_ou": "OU=Groups,DC=secure,DC=local",
+            "computers_ou": "OU=Computers,DC=secure,DC=local",
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
+        }
+    }
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Environment variable 'AD_BIND_PASSWORD' is not set"):
+        load_config(str(config_path))
 
 
 def test_load_config_from_env():
@@ -80,7 +157,7 @@ def test_config_validation():
     """Test configuration validation."""
     config_data = {
         "active_directory": {
-            "server": "ldap://test.local:389",
+            "server": "ldaps://test.local:636",
             "domain": "test.local", 
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
@@ -97,6 +174,33 @@ def test_config_validation():
     config = Config(**config_data)
     # Should not raise exception
     validate_config(config)
+
+
+def test_secure_connection_required_validation():
+    """require_secure_connection ayarı için doğrulama kurallarını test et."""
+    config_data = {
+        "active_directory": {
+            "server": "ldap://test.local:389",
+            "domain": "test.local",
+            "base_dn": "DC=test,DC=local",
+            "bind_dn": "CN=admin,DC=test,DC=local",
+            "password": "password123",
+            "use_ssl": False
+        },
+        "organizational_units": {
+            "users_ou": "OU=Users,DC=test,DC=local",
+            "groups_ou": "OU=Groups,DC=test,DC=local",
+            "computers_ou": "OU=Computers,DC=test,DC=local",
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
+        },
+        "security": {
+            "require_secure_connection": True
+        }
+    }
+
+    cfg = Config(**config_data)
+    with pytest.raises(ValueError, match="Secure connection required but 'use_ssl' is disabled"):
+        validate_config(cfg)
 
 
 def test_invalid_server_url():
