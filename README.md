@@ -99,8 +99,12 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
            "server": "ldap://dc.example.com:389",
            "domain": "example.com",
            "base_dn": "DC=example,DC=com",
-           "bind_dn": "CN=service-account,OU=Service Accounts,DC=example,DC=com",
-           "password": "your-service-account-password"
+           "bind_dn": "CN=service-account,OU=Service Accounts,DC=example,DC=com"
+       },
+       "key_vault": {
+           "vault_url": "https://your-keyvault-name.vault.azure.net/",
+           "username_secret_name": "ad-bind-username",
+           "password_secret_name": "ad-bind-password"
        },
        "organizational_units": {
            "users_ou": "OU=Users,DC=example,DC=com",
@@ -110,6 +114,11 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
        }
    }
    ```
+
+   > **🔐 Never store the service account password in plaintext.** The
+   > `password` field is optional and only intended as a last-resort local
+   > fallback. See [Credential Storage with Azure Key Vault](#-credential-storage-with-azure-key-vault)
+   > below for the recommended setup.
 
 ### Verifying Installation
 
@@ -178,8 +187,11 @@ python test_ad_environment.py
 For testing and development with stdio transport:
 
 ```bash
-# Start stdio server
+# Linux/macOS
 ./start_server.sh
+
+# Windows
+start_server.bat
 
 # Or with custom config
 AD_MCP_CONFIG="ad-config/ad-config.json" python -m active_directory_mcp.server
@@ -190,12 +202,41 @@ AD_MCP_CONFIG="ad-config/ad-config.json" python -m active_directory_mcp.server
 For local HTTP transport development:
 
 ```bash
-# Start HTTP server
+# Linux/macOS
 ./start_http_server.sh
+
+# Windows
+start_http_server.bat
 
 # Or with custom settings
 python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /activedirectory-mcp
 ```
+
+### ⚙️ Configuring via a `.env` file
+
+`start_server.sh` / `start_server.bat` and `start_http_server.sh` /
+`start_http_server.bat` all automatically load a `.env` file from the project
+root, if one exists, before starting the server. This is the easiest way to
+set the Azure Key Vault / service principal variables described below
+without exporting them manually every session.
+
+```bash
+# 1. Copy the template
+cp .env.example .env        # Linux/macOS
+copy .env.example .env      # Windows
+
+# 2. Edit .env and fill in your real values (vault URL, secret names,
+#    AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET, ...)
+
+# 3. Just run the launcher - it picks up .env automatically
+./start_server.sh           # Linux/macOS
+start_server.bat            # Windows
+```
+
+`.env` is listed in `.gitignore` and must never be committed - it's meant to
+hold real secrets locally (or be provided some other way in production, e.g.
+via `docker-compose.yml`'s `environment:` section or your platform's secret
+manager).
 
 ## 🔧 Cursor/VS Code Integration
 
@@ -306,6 +347,78 @@ python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /ac
 > **⚠️ Note**: ActiveDirectoryMCP provides 42 tools total. Some LLM models may experience issues with this many tools.
 
 ## 🔒 Security Configuration
+
+### 🔑 Credential Storage with Azure Key Vault
+
+ActiveDirectoryMCP never requires the bind username or password to be stored
+in plaintext. Instead, configure Azure Key Vault and both are retrieved at
+startup:
+
+1. **Create secrets in Key Vault** holding the service account username (bind DN)
+   and password:
+   ```bash
+   az keyvault secret set \
+     --vault-name your-keyvault-name \
+     --name ad-bind-username \
+     --value "CN=service-account,OU=Service Accounts,DC=example,DC=com"
+
+   az keyvault secret set \
+     --vault-name your-keyvault-name \
+     --name ad-bind-password \
+     --value "YourSecureServiceAccountPassword"
+   ```
+
+2. **Reference the vault in your configuration file:**
+   ```json
+   {
+       "key_vault": {
+           "vault_url": "https://your-keyvault-name.vault.azure.net/",
+           "username_secret_name": "ad-bind-username",
+           "password_secret_name": "ad-bind-password"
+       }
+   }
+   ```
+   Alternatively, configure it purely via environment variables, instead of
+   editing the config file - copy [`.env.example`](.env.example) to `.env`
+   (it's automatically loaded by `start_server.sh`/`start_server.bat` and
+   `start_http_server.sh`/`start_http_server.bat`):
+   ```bash
+   # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
+   AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
+   AZURE_KEYVAULT_SECRET_USERNAME=ad-bind-username
+   AZURE_KEYVAULT_SECRET_PASSWORD=ad-bind-password
+   # Authentication uses DefaultAzureCredential (managed identity, az login, or
+   # a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET).
+   AZURE_TENANT_ID=your-azure-ad-tenant-id
+   AZURE_CLIENT_ID=your-app-registration-client-id
+   AZURE_CLIENT_SECRET=your-app-registration-client-secret
+   ```
+   `username_secret_name` / `AZURE_KEYVAULT_SECRET_USERNAME` is optional - if
+   omitted, the `bind_dn` from the configuration file is used as-is.
+
+3. **Authenticate to Azure.** ActiveDirectoryMCP uses
+   [`DefaultAzureCredential`](https://learn.microsoft.com/azure/developer/python/sdk/authentication/credential-chains),
+   which automatically tries, in order:
+   - **Managed identity** (recommended when running in Azure - App Service,
+     Container Apps, AKS, VMs). Grant the identity a Key Vault "Get Secret"
+     RBAC role or access policy - no credentials to manage at all.
+   - **Environment variables** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+     `AZURE_CLIENT_SECRET` (service principal), for CI/CD or non-Azure hosts.
+   - **Azure CLI** (`az login`), convenient for local development.
+
+4. **Grant access** to the identity/service principal used above:
+   ```bash
+   az keyvault set-policy \
+     --name your-keyvault-name \
+     --object-id <identity-object-id> \
+     --secret-permissions get
+   ```
+
+If Key Vault is not configured, the `AD_BIND_DN` / `AD_PASSWORD` environment
+variables are used as a fallback, and only then the values already present in
+the configuration file (a deprecation warning is logged if the password is
+plaintext there). Startup fails with a clear error if no password can be
+resolved from any source.
 
 ### Service Account Setup
 
@@ -490,9 +603,13 @@ ActiveDirectoryMCP/
 │   ├── Dockerfile                 # Container definition
 │   └── requirements.in            # Dependencies
 │
-└── 📄 Scripts
-    ├── start_server.sh            # Stdio server launcher
-    └── start_http_server.sh       # HTTP server launcher
+├── 📄 Scripts
+│   ├── start_server.sh             # Stdio server launcher (Linux/macOS)
+│   ├── start_server.bat            # Stdio server launcher (Windows)
+│   ├── start_http_server.sh        # HTTP server launcher (Linux/macOS)
+│   └── start_http_server.bat       # HTTP server launcher (Windows)
+│
+└── 📄 .env.example                 # Template for local .env (Key Vault / Azure creds)
 ```
 
 ## 🔍 Troubleshooting
