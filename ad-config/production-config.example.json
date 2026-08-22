@@ -12,6 +12,7 @@
     },
     "key_vault": {
         "vault_url": "https://your-keyvault-name.vault.azure.net/",
+        "username_secret_name": "ad-bind-username",
         "password_secret_name": "ad-bind-password"
     },
     "organizational_units": {

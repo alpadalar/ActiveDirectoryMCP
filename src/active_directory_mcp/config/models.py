@@ -50,6 +50,13 @@ class KeyVaultConfig(BaseModel):
     vault_url: str = Field(
         ..., description="Azure Key Vault URL, e.g. https://your-vault.vault.azure.net/"
     )
+    username_secret_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of the Key Vault secret holding the AD bind DN / username. "
+            "Optional - if unset, 'active_directory.bind_dn' from the config file is used."
+        ),
+    )
     password_secret_name: str = Field(
         default="ad-bind-password",
         description="Name of the Key Vault secret holding the AD service account password",

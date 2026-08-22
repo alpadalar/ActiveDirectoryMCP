@@ -14,11 +14,14 @@ services:
       - HTTP_PORT=8813
       - HTTP_PATH=/activedirectory-mcp
       
-      # Recommended: retrieve the bind password from Azure Key Vault.
-      # Configure "key_vault" in ad-config.json, and authenticate via a
-      # managed identity (preferred) or the variables below.
-      # - AZURE_CLIENT_ID=your-app-registration-client-id
+      # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
+      # - AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
+      # - AZURE_KEYVAULT_SECRET_USERNAME=ad-bind-username
+      # - AZURE_KEYVAULT_SECRET_PASSWORD=ad-bind-password
+      # Authentication uses DefaultAzureCredential (managed identity, az login, or
+      # a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET).
       # - AZURE_TENANT_ID=your-azure-ad-tenant-id
+      # - AZURE_CLIENT_ID=your-app-registration-client-id
       # - AZURE_CLIENT_SECRET=your-app-registration-client-secret
       
       # Optional: Override config via environment variables

@@ -103,6 +103,7 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
        },
        "key_vault": {
            "vault_url": "https://your-keyvault-name.vault.azure.net/",
+           "username_secret_name": "ad-bind-username",
            "password_secret_name": "ad-bind-password"
        },
        "organizational_units": {
@@ -317,12 +318,18 @@ python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /ac
 
 ### 🔑 Credential Storage with Azure Key Vault
 
-ActiveDirectoryMCP never requires the service account password to be stored
-in plaintext. Instead, configure Azure Key Vault and the password is
-retrieved at startup:
+ActiveDirectoryMCP never requires the bind username or password to be stored
+in plaintext. Instead, configure Azure Key Vault and both are retrieved at
+startup:
 
-1. **Create a secret in Key Vault** holding the service account password:
+1. **Create secrets in Key Vault** holding the service account username (bind DN)
+   and password:
    ```bash
+   az keyvault secret set \
+     --vault-name your-keyvault-name \
+     --name ad-bind-username \
+     --value "CN=service-account,OU=Service Accounts,DC=example,DC=com"
+
    az keyvault secret set \
      --vault-name your-keyvault-name \
      --name ad-bind-password \
@@ -334,12 +341,26 @@ retrieved at startup:
    {
        "key_vault": {
            "vault_url": "https://your-keyvault-name.vault.azure.net/",
+           "username_secret_name": "ad-bind-username",
            "password_secret_name": "ad-bind-password"
        }
    }
    ```
-   Alternatively set `AZURE_KEYVAULT_URL` and `AZURE_KEYVAULT_PASSWORD_SECRET_NAME`
-   as environment variables instead of editing the config file.
+   Alternatively, configure it purely via environment variables (e.g. in an
+   `.env` file used by your deployment), instead of editing the config file:
+   ```bash
+   # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
+   AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
+   AZURE_KEYVAULT_SECRET_USERNAME=ad-bind-username
+   AZURE_KEYVAULT_SECRET_PASSWORD=ad-bind-password
+   # Authentication uses DefaultAzureCredential (managed identity, az login, or
+   # a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET).
+   AZURE_TENANT_ID=your-azure-ad-tenant-id
+   AZURE_CLIENT_ID=your-app-registration-client-id
+   AZURE_CLIENT_SECRET=your-app-registration-client-secret
+   ```
+   `username_secret_name` / `AZURE_KEYVAULT_SECRET_USERNAME` is optional - if
+   omitted, the `bind_dn` from the configuration file is used as-is.
 
 3. **Authenticate to Azure.** ActiveDirectoryMCP uses
    [`DefaultAzureCredential`](https://learn.microsoft.com/azure/developer/python/sdk/authentication/credential-chains),
@@ -359,10 +380,11 @@ retrieved at startup:
      --secret-permissions get
    ```
 
-If Key Vault is not configured, the `AD_PASSWORD` environment variable is
-used as a fallback, and only then the plaintext `password` field in the
-configuration file (a deprecation warning is logged in that case). Startup
-fails with a clear error if no password can be resolved from any source.
+If Key Vault is not configured, the `AD_BIND_DN` / `AD_PASSWORD` environment
+variables are used as a fallback, and only then the values already present in
+the configuration file (a deprecation warning is logged if the password is
+plaintext there). Startup fails with a clear error if no password can be
+resolved from any source.
 
 ### Service Account Setup
 

@@ -49,8 +49,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
         # Validate and create config object
         config = Config(**config_data)
 
-        # Resolve the bind password securely (Azure Key Vault, env var, or file)
-        _resolve_bind_password(config)
+        # Resolve bind username/password securely (Azure Key Vault, env vars, or file)
+        _resolve_credentials(config)
 
         logger.info("Configuration loaded successfully")
         
@@ -70,16 +70,22 @@ def load_config(config_path: Optional[str] = None) -> Config:
         raise
 
 
-def _resolve_bind_password(config: Config) -> None:
+def _resolve_credentials(config: Config) -> None:
     """
-    Resolve the AD service account password without relying on plaintext storage.
+    Resolve the AD bind username/password without relying on plaintext storage.
 
-    Resolution order:
-        1. Azure Key Vault (config.key_vault, or AZURE_KEYVAULT_URL /
-           AZURE_KEYVAULT_PASSWORD_SECRET_NAME environment variables) - recommended.
-        2. AD_PASSWORD environment variable.
-        3. Plaintext 'password' already present in the configuration file
-           (discouraged - a warning is logged).
+    Resolution order (username and password are resolved independently):
+        1. Azure Key Vault - recommended. Configured via 'key_vault' in the
+           configuration file, or via environment variables:
+               AZURE_KEYVAULT_URL
+               AZURE_KEYVAULT_SECRET_USERNAME  (name of the secret holding the bind DN)
+               AZURE_KEYVAULT_SECRET_PASSWORD  (name of the secret holding the password)
+           Authentication uses DefaultAzureCredential (managed identity, `az login`,
+           or a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID /
+           AZURE_CLIENT_SECRET).
+        2. AD_BIND_DN / AD_PASSWORD environment variables.
+        3. Values already present in the configuration file ('bind_dn' is
+           required; a plaintext 'password' is discouraged and logs a warning).
 
     Raises:
         ValueError: If no password could be resolved from any source.
@@ -87,22 +93,40 @@ def _resolve_bind_password(config: Config) -> None:
     ad = config.active_directory
 
     vault_url = os.getenv("AZURE_KEYVAULT_URL")
-    secret_name = os.getenv("AZURE_KEYVAULT_PASSWORD_SECRET_NAME")
+    username_secret_name = os.getenv("AZURE_KEYVAULT_SECRET_USERNAME")
+    password_secret_name = os.getenv("AZURE_KEYVAULT_SECRET_PASSWORD")
     if config.key_vault:
         vault_url = vault_url or config.key_vault.vault_url
-        secret_name = secret_name or config.key_vault.password_secret_name
+        username_secret_name = username_secret_name or config.key_vault.username_secret_name
+        password_secret_name = password_secret_name or config.key_vault.password_secret_name
 
     if vault_url:
-        secret_name = secret_name or "ad-bind-password"
+        password_secret_name = password_secret_name or "ad-bind-password"
+
+        if username_secret_name:
+            logger.info(
+                f"Retrieving AD bind username from Azure Key Vault '{vault_url}' "
+                f"(secret: {username_secret_name})"
+            )
+            try:
+                ad.bind_dn = get_secret(vault_url, username_secret_name)
+            except KeyVaultError as exc:
+                raise ValueError(str(exc)) from exc
+
         logger.info(
             f"Retrieving AD bind password from Azure Key Vault '{vault_url}' "
-            f"(secret: {secret_name})"
+            f"(secret: {password_secret_name})"
         )
         try:
-            ad.password = get_secret(vault_url, secret_name)
+            ad.password = get_secret(vault_url, password_secret_name)
         except KeyVaultError as exc:
             raise ValueError(str(exc)) from exc
         return
+
+    env_bind_dn = os.getenv("AD_BIND_DN")
+    if env_bind_dn:
+        logger.info("Using AD bind DN from AD_BIND_DN environment variable")
+        ad.bind_dn = env_bind_dn
 
     env_password = os.getenv("AD_PASSWORD")
     if env_password:
