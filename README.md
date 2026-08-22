@@ -187,8 +187,11 @@ python test_ad_environment.py
 For testing and development with stdio transport:
 
 ```bash
-# Start stdio server
+# Linux/macOS
 ./start_server.sh
+
+# Windows
+start_server.bat
 
 # Or with custom config
 AD_MCP_CONFIG="ad-config/ad-config.json" python -m active_directory_mcp.server
@@ -199,12 +202,41 @@ AD_MCP_CONFIG="ad-config/ad-config.json" python -m active_directory_mcp.server
 For local HTTP transport development:
 
 ```bash
-# Start HTTP server
+# Linux/macOS
 ./start_http_server.sh
+
+# Windows
+start_http_server.bat
 
 # Or with custom settings
 python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /activedirectory-mcp
 ```
+
+### ⚙️ Configuring via a `.env` file
+
+`start_server.sh` / `start_server.bat` and `start_http_server.sh` /
+`start_http_server.bat` all automatically load a `.env` file from the project
+root, if one exists, before starting the server. This is the easiest way to
+set the Azure Key Vault / service principal variables described below
+without exporting them manually every session.
+
+```bash
+# 1. Copy the template
+cp .env.example .env        # Linux/macOS
+copy .env.example .env      # Windows
+
+# 2. Edit .env and fill in your real values (vault URL, secret names,
+#    AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET, ...)
+
+# 3. Just run the launcher - it picks up .env automatically
+./start_server.sh           # Linux/macOS
+start_server.bat            # Windows
+```
+
+`.env` is listed in `.gitignore` and must never be committed - it's meant to
+hold real secrets locally (or be provided some other way in production, e.g.
+via `docker-compose.yml`'s `environment:` section or your platform's secret
+manager).
 
 ## 🔧 Cursor/VS Code Integration
 
@@ -346,8 +378,10 @@ startup:
        }
    }
    ```
-   Alternatively, configure it purely via environment variables (e.g. in an
-   `.env` file used by your deployment), instead of editing the config file:
+   Alternatively, configure it purely via environment variables, instead of
+   editing the config file - copy [`.env.example`](.env.example) to `.env`
+   (it's automatically loaded by `start_server.sh`/`start_server.bat` and
+   `start_http_server.sh`/`start_http_server.bat`):
    ```bash
    # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
    AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
@@ -569,9 +603,13 @@ ActiveDirectoryMCP/
 │   ├── Dockerfile                 # Container definition
 │   └── requirements.in            # Dependencies
 │
-└── 📄 Scripts
-    ├── start_server.sh            # Stdio server launcher
-    └── start_http_server.sh       # HTTP server launcher
+├── 📄 Scripts
+│   ├── start_server.sh             # Stdio server launcher (Linux/macOS)
+│   ├── start_server.bat            # Stdio server launcher (Windows)
+│   ├── start_http_server.sh        # HTTP server launcher (Linux/macOS)
+│   └── start_http_server.bat       # HTTP server launcher (Windows)
+│
+└── 📄 .env.example                 # Template for local .env (Key Vault / Azure creds)
 ```
 
 ## 🔍 Troubleshooting
