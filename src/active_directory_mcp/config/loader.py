@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import Config
+from .keyvault import get_secret, KeyVaultError
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,10 @@ def load_config(config_path: Optional[str] = None) -> Config:
         
         # Validate and create config object
         config = Config(**config_data)
+
+        # Resolve the bind password securely (Azure Key Vault, env var, or file)
+        _resolve_bind_password(config)
+
         logger.info("Configuration loaded successfully")
         
         # Log configuration summary (without sensitive data)
@@ -63,6 +68,61 @@ def load_config(config_path: Optional[str] = None) -> Config:
     except Exception as e:
         logger.error(f"Error loading configuration: {e}")
         raise
+
+
+def _resolve_bind_password(config: Config) -> None:
+    """
+    Resolve the AD service account password without relying on plaintext storage.
+
+    Resolution order:
+        1. Azure Key Vault (config.key_vault, or AZURE_KEYVAULT_URL /
+           AZURE_KEYVAULT_PASSWORD_SECRET_NAME environment variables) - recommended.
+        2. AD_PASSWORD environment variable.
+        3. Plaintext 'password' already present in the configuration file
+           (discouraged - a warning is logged).
+
+    Raises:
+        ValueError: If no password could be resolved from any source.
+    """
+    ad = config.active_directory
+
+    vault_url = os.getenv("AZURE_KEYVAULT_URL")
+    secret_name = os.getenv("AZURE_KEYVAULT_PASSWORD_SECRET_NAME")
+    if config.key_vault:
+        vault_url = vault_url or config.key_vault.vault_url
+        secret_name = secret_name or config.key_vault.password_secret_name
+
+    if vault_url:
+        secret_name = secret_name or "ad-bind-password"
+        logger.info(
+            f"Retrieving AD bind password from Azure Key Vault '{vault_url}' "
+            f"(secret: {secret_name})"
+        )
+        try:
+            ad.password = get_secret(vault_url, secret_name)
+        except KeyVaultError as exc:
+            raise ValueError(str(exc)) from exc
+        return
+
+    env_password = os.getenv("AD_PASSWORD")
+    if env_password:
+        logger.info("Using AD bind password from AD_PASSWORD environment variable")
+        ad.password = env_password
+        return
+
+    if ad.password:
+        logger.warning(
+            "AD bind password is stored in plaintext in the configuration file. "
+            "For production deployments, configure Azure Key Vault via the "
+            "'key_vault.vault_url' setting (or AZURE_KEYVAULT_URL env var) instead."
+        )
+        return
+
+    raise ValueError(
+        "No AD bind password available. Configure Azure Key Vault via "
+        "'key_vault.vault_url' in the configuration file (recommended), set the "
+        "AD_PASSWORD environment variable, or set 'active_directory.password'."
+    )
 
 
 def validate_config(config: Config) -> None:
