@@ -29,8 +29,7 @@ class SecurityTools(BaseTool):
                 attributes=[
                     'name', 'dc', 'objectSid', 'whenCreated', 'whenChanged',
                     'lockoutThreshold', 'lockoutDuration', 'maxPwdAge', 'minPwdAge',
-                    'minPwdLength', 'pwdHistoryLength', 'forceLogoff',
-                    'functionalLevel', 'gPLink'
+                    'minPwdLength', 'pwdHistoryLength', 'forceLogoff'
                 ],
                 search_scope=ldap3.BASE
             )
@@ -506,25 +505,33 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "audit_admin_accounts", self.ldap.ad_config.base_dn)
     
-    def _convert_time_interval(self, value: int) -> Dict[str, Any]:
+    def _convert_time_interval(self, value) -> Dict[str, Any]:
         """Convert AD time interval to human readable format."""
-        if value == 0:
-            return {"raw": 0, "description": "Never"}
-        
-        # AD time intervals are in 100-nanosecond units (negative for intervals)
-        seconds = abs(value) / 10000000
-        
-        if seconds < 60:
-            return {"raw": value, "seconds": seconds, "description": f"{seconds:.0f} seconds"}
+        if isinstance(value, timedelta):
+            # ldap3 already converted this AD Interval attribute to a timedelta;
+            # store a JSON-serializable seconds count instead of the object itself
+            seconds = abs(value.total_seconds())
+            raw_value = seconds
+        else:
+            raw_value = value
+            if value == 0:
+                return {"raw": 0, "description": "Never"}
+            # AD time intervals are in 100-nanosecond units (negative for intervals)
+            seconds = abs(value) / 10000000
+
+        if seconds == 0:
+            return {"raw": raw_value, "description": "Never"}
+        elif seconds < 60:
+            return {"raw": raw_value, "seconds": seconds, "description": f"{seconds:.0f} seconds"}
         elif seconds < 3600:
             minutes = seconds / 60
-            return {"raw": value, "seconds": seconds, "description": f"{minutes:.0f} minutes"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{minutes:.0f} minutes"}
         elif seconds < 86400:
             hours = seconds / 3600
-            return {"raw": value, "seconds": seconds, "description": f"{hours:.0f} hours"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{hours:.0f} hours"}
         else:
             days = seconds / 86400
-            return {"raw": value, "seconds": seconds, "description": f"{days:.0f} days"}
+            return {"raw": raw_value, "seconds": seconds, "description": f"{days:.0f} days"}
     
     def _is_privileged_group(self, group_name: str) -> bool:
         """Check if a group is considered privileged."""
