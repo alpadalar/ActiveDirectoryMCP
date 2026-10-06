@@ -11,7 +11,7 @@
         "base_dn": "DC=example,DC=com",
         "bind_dn": "CN=service-account,OU=Service Accounts,DC=example,DC=com",
         "password": "your-service-account-password",
-        "timeout": 30,
+        "connect_timeout": 30,
         "auto_bind": true,
         "receive_timeout": 10
     },
