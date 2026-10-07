@@ -163,8 +163,10 @@ cython_debug/
 .vscode/
 
 # Active Directory MCP specific
-ad-config/config.json
-ad-config/ad-config.json
+ad-config/*
+!ad-config/ad-config.json
+!ad-config/config.example.json
+!ad-config/production-config.example.json
 *.log
 *.pem
 *.crt
