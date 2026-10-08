@@ -609,13 +609,20 @@ class UserTools(BaseTool):
         
         return ''.join(password)
     
+    @staticmethod
+    def _to_int(value, default=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     def _is_user_enabled(self, uac_value: int) -> bool:
         """Check if user account is enabled based on userAccountControl."""
-        return not bool(uac_value & 0x0002)  # Check ACCOUNTDISABLE flag
+        return not bool(self._to_int(uac_value) & 0x0002)  # Check ACCOUNTDISABLE flag
     
     def _is_user_locked(self, uac_value: int) -> bool:
         """Check if user account is locked based on userAccountControl."""
-        return bool(uac_value & 0x0010)  # Check LOCKOUT flag
+        return bool(self._to_int(uac_value) & 0x0010)  # Check LOCKOUT flag
     
     def _is_password_expired(self, attributes: Dict[str, Any]) -> bool:
         """Check if user password is expired."""
