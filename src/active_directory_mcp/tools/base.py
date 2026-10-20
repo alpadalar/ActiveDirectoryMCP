@@ -448,8 +448,9 @@ class BaseTool(ABC):
                 "success": False,
                 "error_code": "unicodePwd_requires_tls",
                 "error": (
-                    "Refusing to send a password over a non-TLS LDAP connection. "
-                    "Use an ldaps:// server URL (or StartTLS) and retry."
+                    "Refusing to send a password over a non-TLS LDAP connection or one without "
+                    "certificate validation. Use an ldaps:// server URL with "
+                    "security.validate_certificate enabled and retry."
                 ),
                 "operation": operation,
             },

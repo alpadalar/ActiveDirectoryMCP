@@ -189,12 +189,16 @@ class LDAPManager:
             raise LDAPException(error_msg)
     
     def is_secure_channel(self) -> bool:
-        """True only if the live connection uses LDAPS or has completed StartTLS.
+        """True only if the live connection is LDAPS (or completed StartTLS) AND the server
+        certificate is validated (``security.validate_certificate``): a password must not
+        travel over a TLS channel whose peer is unauthenticated.
 
         Connection errors propagate: callers must treat a failure here as a failed
         pre-flight and never assume the channel is secure.
         """
         connection = self.connect()
+        if not self.security_config.validate_certificate:
+            return False
         if getattr(connection.server, "ssl", False):
             return True
         return bool(getattr(connection, "tls_started", False))

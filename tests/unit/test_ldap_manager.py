@@ -337,6 +337,11 @@ class TestSecureChannel:
         self._conn(ldap3_seam, ssl=False)
         assert manager.is_secure_channel() is False
 
+    def test_ldaps_without_certificate_validation_is_not_secure(self, make_manager, ldap3_seam):
+        manager = make_manager(SecurityConfig(enable_tls=True, validate_certificate=False))
+        self._conn(ldap3_seam, ssl=True)
+        assert manager.is_secure_channel() is False
+
     def test_starttls_is_secure(self, manager, ldap3_seam):
         self._conn(ldap3_seam, ssl=False, tls_started=True)
         assert manager.is_secure_channel() is True
