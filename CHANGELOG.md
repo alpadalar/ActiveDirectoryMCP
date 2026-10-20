@@ -42,6 +42,10 @@ and enforced by the golden snapshots in `tests/golden/`.
 - Days since last logon and password age are computed correctly for the values real AD
   returns (timezone-aware datetimes, FILETIME integers, numeric strings) instead of
   silently becoming empty or -1.
+- Config `${VAR}` / `${VAR:default}` placeholders are now expanded anywhere inside a
+  string value (for example `ldaps://${AD_HOST}:636`), not only when the whole value is
+  a placeholder, and a default may contain `:`. An unset variable without a default
+  still fails at startup.
 - Computer searches (`list_computers`, `get_computer`, status/groups/modify/delete lookups
   and OU object listings) now honour `computer_object_class`; it was defined but ignored.
 - `create_user` now creates users in the configured `organizational_units.users_ou`

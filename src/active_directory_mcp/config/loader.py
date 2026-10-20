@@ -1,36 +1,48 @@
 """Configuration loader for Active Directory MCP."""
 
 import json
-import os
 import logging
+import os
 import re
 from pathlib import Path
-from typing import Optional, Any
-ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::([^}]+))?\}")
+from typing import Any, Optional
+
+from .keyvault import KeyVaultError, get_secret
+from .models import Config
+
+logger = logging.getLogger(__name__)
+
+
+ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::([^}]*))?\}")
 
 
 def _resolve_env_placeholders(value: Any) -> Any:
-    """Recursively replace ${VAR[:default]} placeholders with environment values."""
+    """Recursively expand ${VAR} / ${VAR:default} placeholders in config strings.
+
+    Placeholders are expanded anywhere inside a string (``ldap://${HOST}:389``). The
+    default may itself contain ``:`` (``${URL:ldaps://dc:636}``). An unset variable
+    without a default raises ValueError. Text that is not a well-formed placeholder
+    (for example a literal password starting with ``${``) is left untouched.
+    """
     if isinstance(value, dict):
         return {key: _resolve_env_placeholders(inner) for key, inner in value.items()}
     if isinstance(value, list):
         return [_resolve_env_placeholders(item) for item in value]
     if isinstance(value, str):
-        match = ENV_PATTERN.fullmatch(value.strip())
-        if match:
+        def _replace(match: "re.Match[str]") -> str:
             env_key, default = match.groups()
             env_value = os.getenv(env_key)
-            if env_value is None:
-                if default is not None:
-                    return default
-                raise ValueError(f"Environment variable '{env_key}' is not set for configuration placeholder {value!r}")
-            return env_value
+            if env_value is not None:
+                return env_value
+            if default is not None:
+                return default
+            raise ValueError(
+                f"Environment variable '{env_key}' is not set "
+                f"for configuration placeholder {value!r}"
+            )
+
+        return ENV_PATTERN.sub(_replace, value)
     return value
-
-from .models import Config
-from .keyvault import get_secret, KeyVaultError
-
-logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: Optional[str] = None) -> Config:

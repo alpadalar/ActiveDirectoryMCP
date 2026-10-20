@@ -297,3 +297,42 @@ def test_default_values():
     assert config.performance.connection_pool_size == 10
     assert config.active_directory.use_ssl == True
     assert config.active_directory.ssl_port == 636
+
+
+def test_env_placeholder_partial_expansion(monkeypatch):
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    monkeypatch.setenv("AD_TEST_HOST", "dc1.example.com")
+    monkeypatch.delenv("AD_TEST_UNSET", raising=False)
+    assert _resolve_env_placeholders("ldaps://${AD_TEST_HOST}:636") == "ldaps://dc1.example.com:636"
+    assert _resolve_env_placeholders("${AD_TEST_HOST}-${AD_TEST_HOST}") == (
+        "dc1.example.com-dc1.example.com"
+    )
+    assert _resolve_env_placeholders(["a-${AD_TEST_HOST}", {"k": "${AD_TEST_HOST}"}]) == [
+        "a-dc1.example.com",
+        {"k": "dc1.example.com"},
+    ]
+
+
+def test_env_placeholder_default_may_contain_colon(monkeypatch):
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    monkeypatch.delenv("AD_TEST_UNSET", raising=False)
+    assert _resolve_env_placeholders("${AD_TEST_UNSET:ldaps://dc:636}") == "ldaps://dc:636"
+    assert _resolve_env_placeholders("x-${AD_TEST_UNSET:d}-y") == "x-d-y"
+
+
+def test_env_placeholder_partial_missing_raises(monkeypatch):
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    monkeypatch.delenv("AD_TEST_UNSET", raising=False)
+    with pytest.raises(ValueError, match="AD_TEST_UNSET"):
+        _resolve_env_placeholders("prefix-${AD_TEST_UNSET}")
+
+
+def test_env_placeholder_malformed_text_untouched():
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    assert _resolve_env_placeholders("${not closed") == "${not closed"
+    assert _resolve_env_placeholders("pa$$word${") == "pa$$word${"
+    assert _resolve_env_placeholders(5) == 5
