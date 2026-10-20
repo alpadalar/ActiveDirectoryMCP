@@ -99,7 +99,7 @@ class SecurityConfig(BaseModel):
     enable_tls: bool = Field(default=True, description="Enable TLS encryption")
     validate_certificate: bool = Field(default=True, description="Validate server certificate")
     ca_cert_file: Optional[str] = Field(default=None, description="CA certificate file path")
-    require_secure_connection: bool = Field(default=False, description="Require secure connection")
+    require_secure_connection: bool = Field(default=True, description="Require secure connection")
 
 
 class LoggingConfig(BaseModel):

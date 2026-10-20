@@ -203,6 +203,24 @@ def test_secure_connection_required_validation():
         validate_config(cfg)
 
 
+def test_require_secure_connection_defaults_to_true():
+    """Omitting the security section must fail closed for plaintext ldap://."""
+    from active_directory_mcp.config.models import SecurityConfig
+
+    assert SecurityConfig().require_secure_connection is True
+    cfg = Config(
+        active_directory={
+            "server": "ldap://test.local:389",
+            "domain": "test.local",
+            "base_dn": "DC=test,DC=local",
+            "bind_dn": "CN=admin,DC=test,DC=local",
+            "password": "password123",
+        }
+    )
+    with pytest.raises(ValueError, match="Secure connection required"):
+        validate_config(cfg)
+
+
 def test_invalid_server_url():
     """Test validation of invalid server URL."""
     with pytest.raises(ValueError, match="Server must start with ldap:// or ldaps://"):

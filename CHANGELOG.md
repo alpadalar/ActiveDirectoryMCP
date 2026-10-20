@@ -30,6 +30,11 @@ and enforced by the golden snapshots in `tests/golden/`.
   default to the built-in containers under `base_dn` (`CN=Computers,<base_dn>` for
   computers, `CN=Users,<base_dn>` for users, groups and service accounts).
 
+- `security.require_secure_connection` defaults to `true` again and is now enforced by
+  `validate_config`: a plaintext `ldap://` server (or `use_ssl: false`) is rejected at
+  startup unless you set `"require_secure_connection": false` explicitly (as the lab
+  configs do). Phase 2 owns the remaining plaintext-LDAP gate.
+
 ### Fixed
 
 - Expired accounts are now detected when ldap3 returns a datetime for `accountExpires`

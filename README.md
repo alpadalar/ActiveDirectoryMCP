@@ -91,7 +91,7 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
    ```json
    {
        "active_directory": {
-           "server": "ldap://dc.example.com:389",
+           "server": "ldaps://dc.example.com:636",
            "domain": "example.com",
            "base_dn": "DC=example,DC=com",
            "bind_dn": "CN=service-account,OU=Service Accounts,DC=example,DC=com"
