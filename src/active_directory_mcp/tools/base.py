@@ -10,6 +10,8 @@ from ldap3.core.exceptions import LDAPException
 
 from ..core.ldap_manager import LDAPManager
 from ..core.logging import get_logger, log_ldap_operation
+from .. import validation
+from ..validation import ValidationError
 
 # Active Directory FILETIME: 100-nanosecond ticks since 1601-01-01 UTC.
 FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
@@ -187,45 +189,42 @@ class BaseTool(ABC):
             return default
         return value
 
+    def _base_dn(self) -> str:
+        """Configured base DN used to confine caller-supplied DNs."""
+        return self.ldap.ad_config.base_dn
+
     def _validate_dn(self, dn: str) -> bool:
         """
-        Validate Distinguished Name format.
-        
-        Args:
-            dn: Distinguished name to validate
-            
+        Check that a DN is well formed and inside the configured base_dn.
+
         Returns:
-            True if valid, False otherwise
+            True if valid and confined to base_dn, False otherwise
         """
-        if not dn or not isinstance(dn, str):
+        try:
+            validation.validate_dn(dn, self._base_dn())
+        except ValidationError:
             return False
-        
-        # Basic DN validation - should contain at least one component
-        dn_parts = dn.split(',')
-        for part in dn_parts:
-            part = part.strip()
-            if '=' not in part:
-                return False
-            
-            key, value = part.split('=', 1)
-            if not key.strip() or not value.strip():
-                return False
-        
         return True
-    
+
+    def _confined_dn(self, dn: str) -> str:
+        """Return the validated DN (confined to base_dn) or raise ValidationError."""
+        return validation.validate_dn(dn, self._base_dn())
+
     def _build_dn(self, name: str, ou: str) -> str:
         """
-        Build Distinguished Name from name and organizational unit.
-        
-        Args:
-            name: Object name (CN)
-            ou: Organizational unit DN
-            
-        Returns:
-            Complete DN
+        Build a DN ``CN=<escaped name>,<ou>`` with the parent confined to base_dn.
+
+        Raises:
+            ValidationError: if name or ou is invalid or ou is outside base_dn
         """
-        return f"CN={name},{ou}"
-    
+        return validation.build_dn("CN", name, ou, self._base_dn())
+
+    def _validation_error_response(
+        self, exc: Exception, operation: str, dn: str = ""
+    ) -> List[Content]:
+        """Format a validation failure with the same JSON shape as _handle_ldap_error."""
+        return self._handle_ldap_error(exc, operation, dn)
+
     def _success_response(self, message: str, data: Optional[Dict[str, Any]] = None) -> List[Content]:
         """
         Create success response.
@@ -248,30 +247,8 @@ class BaseTool(ABC):
         return [Content(type="text", text=json.dumps(response, indent=2, ensure_ascii=False))]
     
     def _escape_ldap_filter(self, value: str) -> str:
-        """
-        Escape special characters in LDAP filter values.
-
-        Args:
-            value: Value to escape
-
-        Returns:
-            Escaped value
-        """
-        # Escape special LDAP filter characters
-        # Backslash must be escaped first, otherwise the backslashes introduced by the
-        # other escapes get escaped again (e.g. '*' -> '\5c2a').
-        escape_chars = {
-            '\\': r'\5c',
-            '*': r'\2a',
-            '(': r'\28',
-            ')': r'\29',
-            '\x00': r'\00'
-        }
-
-        for char, escaped in escape_chars.items():
-            value = value.replace(char, escaped)
-
-        return value
+        """Escape a value for use in an LDAP filter (delegates to validation module)."""
+        return validation.escape_filter_value(value)
 
     @staticmethod
     def _to_int(value, default=None):

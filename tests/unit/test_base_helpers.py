@@ -122,3 +122,61 @@ def test_is_past(tool):
 @pytest.mark.parametrize("value", [None, 0, "0", NEVER, datetime(9999, 12, 31), datetime(1601, 1, 1), "x"])
 def test_is_past_unset_false(tool, value):
     assert tool._is_past(value, now=NOW) is False
+
+
+# --- delegation to the central validation module (CONF-02) -------------------
+
+import json
+from pathlib import Path
+
+from active_directory_mcp import validation
+
+
+def test_escape_ldap_filter_delegates(tool):
+    raw = "a*(b)\\c\x00"
+    assert tool._escape_ldap_filter(raw) == validation.escape_filter_value(raw)
+    assert tool._escape_ldap_filter("a\\b*") == "a\\5cb\\2a"
+    # ldap3 leaves non-ASCII intact (the old chain did too); noted for parity.
+    assert tool._escape_ldap_filter("é") == "é"
+
+
+def test_validate_dn_confined_to_base(tool):
+    assert tool._validate_dn("CN=a,OU=b,DC=test,DC=local") is True
+    assert tool._validate_dn("DC=test,DC=local") is True
+    assert tool._validate_dn("CN=a,DC=evil,DC=com") is False
+    assert tool._validate_dn("DC=local") is False
+    assert tool._validate_dn("") is False
+    assert tool._validate_dn(None) is False
+
+
+def test_confined_dn(tool):
+    assert tool._confined_dn("CN=a,DC=test,DC=local") == "CN=a,DC=test,DC=local"
+    with pytest.raises(validation.ValidationError):
+        tool._confined_dn("CN=a,DC=evil,DC=com")
+
+
+def test_build_dn_escapes_rdn(tool):
+    dn = tool._build_dn("x,OU=Admins", "OU=Staff,DC=test,DC=local")
+    assert dn == "CN=x\\,OU\\=Admins,OU=Staff,DC=test,DC=local"
+
+
+def test_build_dn_rejects_outside_parent(tool):
+    with pytest.raises(validation.ValidationError):
+        tool._build_dn("x", "OU=Staff,DC=evil,DC=com")
+
+
+def test_validation_error_response_shape(tool):
+    exc = validation.ValidationError("DN is outside the configured base DN")
+    out = tool._validation_error_response(exc, "get_user", "CN=a,DC=evil")
+    data = json.loads(out[0].text)
+    assert data["success"] is False
+    assert data["error"] == "DN is outside the configured base DN"
+    assert data["operation"] == "get_user"
+    assert data["type"] == "ValidationError"
+    assert data["dn"] == "CN=a,DC=evil"
+
+
+def test_base_has_no_handrolled_escape_chain():
+    src = Path(validation.__file__).parent.joinpath("tools", "base.py").read_text()
+    assert "\\2a" not in src
+    assert "escape_chars" not in src
