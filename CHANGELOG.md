@@ -42,6 +42,8 @@ and enforced by the golden snapshots in `tests/golden/`.
 - Days since last logon and password age are computed correctly for the values real AD
   returns (timezone-aware datetimes, FILETIME integers, numeric strings) instead of
   silently becoming empty or -1.
+- `create_user` now creates users in the configured `organizational_units.users_ou`
+  (previously hard-coded to `CN=Users,<base_dn>`) when no `ou` is passed.
 - `get_password_policy_violations` no longer fails with a TypeError when `maxPwdAge`
   arrives as a numeric string, and the "never expires" values (`0`, `-2**63`) no longer
   flag every `DONT_EXPIRE_PASSWORD` account as a violation.

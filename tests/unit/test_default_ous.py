@@ -18,6 +18,7 @@ from active_directory_mcp.config.models import (
 from active_directory_mcp.core.ldap_manager import LDAPManager
 from active_directory_mcp.tools.computer import ComputerTools
 from active_directory_mcp.tools.group import GroupTools
+from active_directory_mcp.tools.user import UserTools
 from tests.support.helpers import parse_response
 
 AD = {
@@ -70,6 +71,25 @@ def test_configured_ous_win_over_derived_defaults():
     )
     GroupTools(manager).create_group("Ops")
     assert manager.add.call_args.args[0] == "CN=Ops,OU=G,DC=test,DC=local"
+
+
+def test_create_user_uses_configured_users_ou():
+    ous = OrganizationalUnitsConfig(
+        users_ou="OU=Staff,DC=test,DC=local",
+        groups_ou="OU=G,DC=test,DC=local",
+        computers_ou="OU=C,DC=test,DC=local",
+        service_accounts_ou="OU=S,DC=test,DC=local",
+    )
+    manager = _real_manager(ous)
+    data = parse_response(UserTools(manager).create_user("jdoe", "Pw-1234!x", "John", "Doe"))
+    assert data["success"] is True
+    assert data["dn"] == "CN=John Doe,OU=Staff,DC=test,DC=local"
+
+
+def test_create_user_default_ou_with_real_config():
+    manager = _real_manager()
+    data = parse_response(UserTools(manager).create_user("jdoe", "Pw-1234!x", "John", "Doe"))
+    assert data["dn"] == "CN=John Doe,CN=Users,DC=test,DC=local"
 
 
 def test_config_without_organizational_units_gets_base_dn_defaults():
