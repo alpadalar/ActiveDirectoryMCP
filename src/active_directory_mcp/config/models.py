@@ -177,7 +177,23 @@ class SecurityConfig(BaseModel):
             "krbtgt, Administrator, adminCount=1); false is an explicit opt-out"
         ),
     )
+    audit_log_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "JSON-lines audit file for write/destructive tool calls; None disables file audit"
+        ),
+    )
     http_auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
+
+    @field_validator("audit_log_path")
+    @classmethod
+    def _audit_path_non_blank(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            raise ValueError("security.audit_log_path must not be blank")
+        return v
 
     @model_validator(mode="after")
     def _destructive_requires_writes(self) -> "SecurityConfig":

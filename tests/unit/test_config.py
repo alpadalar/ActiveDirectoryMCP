@@ -714,3 +714,14 @@ def test_example_configs_still_load():
         data = json.loads(path.read_text(encoding="utf-8"))
         if "active_directory" in data:
             Config.model_validate(data)
+
+
+def test_audit_log_path_default_and_validation() -> None:
+    assert SecurityConfig().audit_log_path is None
+    assert SecurityConfig(audit_log_path="  /var/log/ad-audit.jsonl ").audit_log_path == (
+        "/var/log/ad-audit.jsonl"
+    )
+    with pytest.raises(ValueError):
+        SecurityConfig(audit_log_path="   ")
+    with pytest.raises(ValueError):
+        SecurityConfig(unknown_field=1)  # extra="forbid" still holds
