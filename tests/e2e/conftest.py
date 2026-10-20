@@ -13,7 +13,7 @@ import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Iterator, Optional
+from typing import Any, Callable, Coroutine, Iterator
 from unittest.mock import patch
 
 import pytest
@@ -102,7 +102,9 @@ def serve_bare_app(app: Any) -> Iterator[ServedApp]:
 
 
 @contextmanager
-def serve_ad_http(tmp_path: Path, directory: MockDirectory, **server_kwargs: Any) -> Iterator[ServedApp]:
+def serve_ad_http(
+    tmp_path: Path, directory: MockDirectory, **server_kwargs: Any
+) -> Iterator[ServedApp]:
     """Build ActiveDirectoryMCPHTTPServer over the mock directory and serve it live."""
     from active_directory_mcp.server_http import ActiveDirectoryMCPHTTPServer
 
