@@ -1,5 +1,6 @@
 """Unit tests for UserTools (mocked LDAPManager, no directory server)."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -141,12 +142,6 @@ class TestModifyUser:
         _found(mock_ldap_manager)
         data = parse_response(user_tools.modify_user("jdoe", '{"title": "Dev"}'))
         assert data["success"] is True
-
-    def test_password_handled_separately(self, user_tools, mock_ldap_manager):
-        _found(mock_ldap_manager)
-        parse_response(user_tools.modify_user("jdoe", {"password": "Pw-1234!x"}))
-        changes = mock_ldap_manager.modify.call_args.args[1]
-        assert list(changes) == ["unicodePwd"]
 
     def test_not_found(self, user_tools, mock_ldap_manager):
         data = parse_response(user_tools.modify_user("ghost", {"title": "x"}))
@@ -448,3 +443,168 @@ class TestRuntimePasswordRedaction:
         data = parse_response(user_tools.reset_password("jdoe"))
         assert data["new_password"] != redaction.REDACTED
         assert redaction.redact(data["new_password"]) == redaction.REDACTED
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 enforcement (SEC-03 / SEC-05 / SEC-06)
+# ---------------------------------------------------------------------------
+
+
+def _no_ldap_traffic(m):
+    assert m.search.call_count == 0
+    assert m.add.call_count == 0
+    assert m.modify.call_count == 0
+
+
+class TestModifyUserAllowList:
+    @pytest.mark.parametrize(
+        "attr", ["userAccountControl", "memberOf", "objectClass", "unicodePwd"]
+    )
+    def test_rejected_without_ldap_calls(self, user_tools, mock_ldap_manager, attr):
+        data = parse_response(user_tools.modify_user("jdoe", {attr: "x"}))
+        assert data["success"] is False
+        assert data["error_code"] == "attribute_not_allowed"
+        assert attr in data["rejected_attributes"]
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_password_key_points_to_reset(self, user_tools, mock_ldap_manager):
+        data = parse_response(user_tools.modify_user("jdoe", {"password": "Pw-1234!x"}))
+        assert data["success"] is False
+        assert data["error_code"] == "attribute_not_allowed"
+        assert "reset_user_password" in data["error"]
+        assert "Pw-1234!x" not in str(data)
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_mixed_allowed_and_denied_rejects_all(self, user_tools, mock_ldap_manager):
+        data = parse_response(
+            user_tools.modify_user("jdoe", {"title": "Dev", "userAccountControl": 512})
+        )
+        assert data["success"] is False
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_allowed_reaches_modify_replace(self, user_tools, mock_ldap_manager):
+        _found(mock_ldap_manager)
+        data = parse_response(user_tools.modify_user("jdoe", {"department": "IT"}))
+        assert data["success"] is True
+        assert mock_ldap_manager.modify.call_args.args[1] == {
+            "department": [(MODIFY_REPLACE, ["IT"])]
+        }
+
+
+class TestCreateUserEnforcement:
+    def test_additional_attributes_rejected_before_add(self, user_tools, mock_ldap_manager):
+        data = parse_response(
+            user_tools.create_user(
+                "jdoe", "Pw-1234!x", "John", "Doe",
+                additional_attributes={"memberOf": ["CN=Admins"], "title": "x"},
+            )
+        )
+        assert data["success"] is False
+        assert data["error_code"] == "attribute_not_allowed"
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_allowed_additional_attributes_pass(self, user_tools, mock_ldap_manager):
+        data = parse_response(
+            user_tools.create_user(
+                "jdoe", "Pw-1234!x", "John", "Doe", additional_attributes={"title": "Dev"}
+            )
+        )
+        assert data["success"] is True
+        assert mock_ldap_manager.add.call_args.args[1]["title"] == "Dev"
+
+    def test_non_tls_refused_first(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.return_value = False
+        data = parse_response(user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe"))
+        assert data["error_code"] == "unicodePwd_requires_tls"
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_channel_check_error_fails_closed(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.side_effect = LDAPException("boom")
+        data = parse_response(user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe"))
+        assert data["error_code"] == "unicodePwd_requires_tls"
+        _no_ldap_traffic(mock_ldap_manager)
+
+
+class TestResetPasswordEnforcement:
+    def test_non_tls_refused_before_search(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.return_value = False
+        gen = user_tools._generate_password
+        user_tools._generate_password = lambda *a, **k: pytest.fail("generated password")
+        try:
+            data = parse_response(user_tools.reset_password("jdoe"))
+        finally:
+            user_tools._generate_password = gen
+        assert data["error_code"] == "unicodePwd_requires_tls"
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_channel_check_error_refuses(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.side_effect = RuntimeError("x")
+        data = parse_response(user_tools.reset_password("jdoe", "Pw-1234!x"))
+        assert data["error_code"] == "unicodePwd_requires_tls"
+        _no_ldap_traffic(mock_ldap_manager)
+
+    def test_set_user_password_defensive_raise(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.return_value = False
+        with pytest.raises(RuntimeError) as exc:
+            user_tools._set_user_password(USER_DN, "Pw-1234!x")
+        assert "Pw-1234!x" not in str(exc.value)
+        mock_ldap_manager.modify.assert_not_called()
+
+    def test_password_returned_but_never_logged(self, user_tools, mock_ldap_manager, caplog):
+        caplog.set_level(logging.DEBUG)
+        _found(mock_ldap_manager)
+        data = parse_response(user_tools.reset_password("jdoe"))
+        generated = data["new_password"]  # returned by design
+        data2 = parse_response(user_tools.reset_password("jdoe", "Supplied-Pw-9!zq"))
+        assert data2["new_password"] == "Supplied-Pw-9!zq"
+        for rec in caplog.records:
+            msg = rec.getMessage()
+            assert generated not in msg
+            assert "Supplied-Pw-9!zq" not in msg
+
+    def test_password_absent_from_error_and_logs_on_failure(
+        self, user_tools, mock_ldap_manager, caplog
+    ):
+        caplog.set_level(logging.DEBUG)
+        _found(mock_ldap_manager)
+        mock_ldap_manager.modify.side_effect = LDAPException("policy Supplied-Pw-9!zq")
+        data = parse_response(user_tools.reset_password("jdoe", "Supplied-Pw-9!zq"))
+        assert data["success"] is False
+        assert "Supplied-Pw-9!zq" not in str(data)
+        assert all("Supplied-Pw-9!zq" not in r.getMessage() for r in caplog.records)
+
+
+class TestListUsersCap:
+    def _entries(self, n):
+        return [
+            ldap_entry(f"CN=U{i},DC=test,DC=local", sAMAccountName=f"u{i}") for i in range(n)
+        ]
+
+    def test_cap_truncates(self, user_tools, mock_ldap_manager):
+        limit = mock_ldap_manager.security_config.max_list_results
+        mock_ldap_manager.search.return_value = self._entries(limit + 1)
+        data = parse_response(user_tools.list_users())
+        assert data["count"] == limit
+        assert data["truncated"] is True
+        assert data["result_limit"] == limit
+        assert mock_ldap_manager.search.call_args.kwargs["size_limit"] == limit + 1
+
+    def test_below_cap_not_truncated(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.search.return_value = self._entries(3)
+        data = parse_response(user_tools.list_users())
+        assert data["truncated"] is False and data["count"] == 3
+
+    def test_zero_means_unlimited(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.security_config.max_list_results = 0
+        mock_ldap_manager.search.return_value = self._entries(1500)
+        data = parse_response(user_tools.list_users())
+        assert data["count"] == 1500
+        assert data["truncated"] is False
+        assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+    def test_accuracy_note_only_with_lastlogon(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.search.return_value = self._entries(1)
+        with_ll = parse_response(user_tools.list_users())  # default attrs include lastLogon
+        assert "lastLogonTimestamp" in with_ll["accuracy_note"]
+        without = parse_response(user_tools.list_users(attributes=["mail"]))
+        assert "accuracy_note" not in without

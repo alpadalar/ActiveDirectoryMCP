@@ -60,7 +60,7 @@ class UserTools(BaseTool):
             self.logger.info(f"Listing users from {search_base}")
             
             # Perform search
-            results = self.ldap.search(
+            results, truncated, result_limit = self._capped_search(
                 search_base=search_base,
                 search_filter=search_filter,
                 attributes=attributes
@@ -95,8 +95,15 @@ class UserTools(BaseTool):
                 "users": users,
                 "count": len(users),
                 "search_base": search_base,
-                "filter": search_filter
+                "filter": search_filter,
+                **self._cap_metadata(truncated, result_limit),
             }
+            if any(str(a).lower() == 'lastlogon' for a in attributes):
+                response_data["accuracy_note"] = (
+                    "lastLogon is not replicated between domain controllers; this value is "
+                    "from the DC the server is connected to. lastLogonTimestamp is replicated "
+                    "but can lag by up to 14 days."
+                )
             
             return self._format_response(response_data, "list_users")
             
@@ -189,10 +196,24 @@ class UserTools(BaseTool):
             
         Returns:
             List of MCP content objects with creation result
+
+        The password is sent via unicodePwd, which requires LDAPS/StartTLS; on a
+        non-TLS connection the call is refused before anything is created.
+        additional_attributes are limited to the user modify allow-list.
         """
         # Never let the supplied password reach a log line or an error response
         register_secret(password, persistent=False)
         try:
+            refusal = self._require_secure_channel("create_user")
+            if refusal is not None:
+                return refusal
+            if additional_attributes:
+                rejection = self._check_modify_attributes(
+                    "user", additional_attributes, "create_user", username
+                )
+                if rejection is not None:
+                    return rejection
+
             # Determine OU (default from configuration, explicit value confined to base_dn)
             if ou is None:
                 ou = self.ldap.organizational_units.users_ou
@@ -286,6 +307,10 @@ class UserTools(BaseTool):
         """
         Modify user attributes.
 
+        Only allow-listed attributes (see attribute_policy) can be changed.
+        Privilege-bearing attributes (userAccountControl, memberOf, objectClass,
+        unicodePwd, ...) are rejected; passwords go through reset_user_password.
+
         Args:
             username: Username to modify
             attributes: Dictionary of attributes to modify
@@ -297,6 +322,27 @@ class UserTools(BaseTool):
             # Handle case where attributes might be passed as a JSON string
             if isinstance(attributes, str):
                 attributes = json.loads(attributes)
+
+            if isinstance(attributes, dict) and any(
+                isinstance(k, str) and k.lower() == 'password' for k in attributes
+            ):
+                return self._format_response({
+                    "success": False,
+                    "error_code": "attribute_not_allowed",
+                    "error": (
+                        "Setting a password through modify_user is not supported; "
+                        "use reset_user_password (requires an LDAPS/StartTLS connection)."
+                    ),
+                    "operation": "modify_user",
+                    "object_type": "user",
+                    "rejected_attributes": ["password"],
+                    "target": username,
+                }, "modify_user")
+            rejection = self._check_modify_attributes(
+                "user", attributes, "modify_user", username
+            )
+            if rejection is not None:
+                return rejection
 
             # Find user DN
             user_results = self.ldap.search(
@@ -317,10 +363,7 @@ class UserTools(BaseTool):
             # Prepare modifications
             modifications = {}
             for attr, value in attributes.items():
-                if attr.lower() == 'password':
-                    # Handle password separately
-                    continue
-                elif isinstance(value, list):
+                if isinstance(value, list):
                     modifications[attr] = [(MODIFY_REPLACE, value)]
                 else:
                     modifications[attr] = [(MODIFY_REPLACE, [value])]
@@ -332,10 +375,6 @@ class UserTools(BaseTool):
                 success = self.ldap.modify(user_dn, modifications)
                 if not success:
                     raise Exception("Failed to modify user attributes")
-            
-            # Handle password change separately
-            if 'password' in attributes:
-                self._set_user_password(user_dn, attributes['password'])
             
             log_ldap_operation("modify_user", user_dn, True, f"Modified user: {username}")
             
@@ -431,6 +470,7 @@ class UserTools(BaseTool):
         Args:
             username: Username to reset password for
             new_password: New password (if None, generates random password).
+                Requires an LDAPS/StartTLS connection; refused otherwise.
                 The new password is returned in the response by design (so a generated
                 password can be handed over); it is redacted from logs and error text.
             force_change: Force user to change password at next logon
@@ -441,6 +481,10 @@ class UserTools(BaseTool):
         # Never let a supplied password reach a log line or an error response
         register_secret(new_password, persistent=False)
         try:
+            refusal = self._require_secure_channel("reset_password")
+            if refusal is not None:
+                return refusal
+
             # Find user DN
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
@@ -598,7 +642,11 @@ class UserTools(BaseTool):
             return self._handle_ldap_error(e, operation, username)
     
     def _set_user_password(self, user_dn: str, password: str) -> None:
-        """Set user password using LDAP modify operation."""
+        """Set user password using LDAP modify operation (TLS only)."""
+        if not self.ldap.is_secure_channel():
+            raise RuntimeError(
+                "Refusing to send unicodePwd over a non-TLS LDAP connection"
+            )
         # Encode password for Active Directory
         password_encoded = f'"{password}"'.encode('utf-16-le')
         
