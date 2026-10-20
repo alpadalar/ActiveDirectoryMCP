@@ -1,3 +1,7 @@
+# Test structure for the local OpenLDAP lab.
+# The fixture users deliberately have no password attribute: nothing binds as them, and the lab admin
+# password is generated per run (see scripts/run_tests_with_ldap.sh), never stored here.
+
 # Create organizational units for test structure
 dn: ou=people,dc=test,dc=local
 objectClass: organizationalUnit
@@ -26,7 +30,6 @@ uid: jdoe
 uidNumber: 1001
 gidNumber: 1001
 homeDirectory: /home/jdoe
-userPassword: {SSHA}Password123!
 mail: jdoe@test.local
 description: Test User John Doe
 
@@ -41,7 +44,6 @@ uid: jsmith
 uidNumber: 1002
 gidNumber: 1001
 homeDirectory: /home/jsmith
-userPassword: {SSHA}Password123!
 mail: jsmith@test.local
 description: Test User Jane Smith
 
@@ -56,7 +58,6 @@ uid: mwilson
 uidNumber: 1003
 gidNumber: 1001
 homeDirectory: /home/mwilson
-userPassword: {SSHA}Password123!
 mail: mwilson@test.local
 description: Test User Mike Wilson
 
@@ -71,7 +72,6 @@ uid: testadmin
 uidNumber: 1004
 gidNumber: 1001
 homeDirectory: /home/testadmin
-userPassword: {SSHA}Password123!
 mail: testadmin@test.local
 description: Test Administrator
 

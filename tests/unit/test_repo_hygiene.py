@@ -591,3 +591,15 @@ def test_production_example_is_secure_by_default():
     )
     assert data["active_directory"]["server"].startswith("ldaps://")
     assert data["security"]["require_secure_connection"] is True
+
+
+def test_lab_ldif_holds_no_password_material():
+    """WR-10: LDIF fixtures carry no password attribute; the lab admin password is per-run."""
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    files = sorted((REPO_ROOT / "ldap-init").glob("*.ldif"))
+    assert files
+    for path in files:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            assert not line.lower().startswith("userpassword"), path.name
+            assert list(mod.scan_line(rules, f"ldap-init/{path.name}", line)) == []
