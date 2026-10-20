@@ -13,7 +13,7 @@ from ..redaction import register_secret
 from .keyvault import KeyVaultError, get_secret
 from .models import Config
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("active-directory-mcp.config")
 
 
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")
@@ -69,7 +69,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
         config_path = os.getenv("AD_MCP_CONFIG")
         if not config_path:
             raise ValueError(
-                "No configuration file specified. Either provide config_path or set AD_MCP_CONFIG environment variable."
+                "No configuration file specified. Either provide config_path or set "
+                "AD_MCP_CONFIG environment variable."
             )
     
     config_file = Path(config_path)

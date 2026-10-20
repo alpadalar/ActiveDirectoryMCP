@@ -8,6 +8,7 @@ from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 from .base import BaseTool
 from ..core.logging import log_ldap_operation
 from .. import validation
+from ..redaction import redact
 from ..validation import ValidationError
 
 
@@ -574,7 +575,7 @@ class GroupTools(BaseTool):
                         # Add error entry for members that can't be processed
                         members.append({
                             'dn': member_dn,
-                            'error': f"Could not retrieve member details: {str(e)}",
+                            'error': f"Could not retrieve member details: {redact(str(e))}",
                             'level': level
                         })
             

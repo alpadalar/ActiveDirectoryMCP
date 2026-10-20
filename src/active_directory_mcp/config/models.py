@@ -13,7 +13,9 @@ class ActiveDirectoryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
     
     server: str = Field(..., description="Primary LDAP server URL")
-    server_pool: Optional[List[str]] = Field(default=None, description="Additional LDAP servers for redundancy")
+    server_pool: Optional[List[str]] = Field(
+        default=None, description="Additional LDAP servers for redundancy"
+    )
     use_ssl: bool = Field(default=True, description="Use SSL/TLS connection")
     ssl_port: int = Field(default=636, description="SSL port for LDAP")
     domain: str = Field(..., description="Active Directory domain")

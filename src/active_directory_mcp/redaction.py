@@ -9,7 +9,7 @@ import base64
 import logging
 import threading
 import urllib.parse
-from typing import Any, Dict, Set
+from typing import Any, Set
 
 REDACTED = "***REDACTED***"
 

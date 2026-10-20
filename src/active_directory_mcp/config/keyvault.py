@@ -14,7 +14,7 @@ credential sources.
 import logging
 from functools import lru_cache
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("active-directory-mcp.keyvault")
 
 
 class KeyVaultError(RuntimeError):

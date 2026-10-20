@@ -3,11 +3,11 @@
 from .loader import load_config
 from .models import (
     ActiveDirectoryConfig,
-    OrganizationalUnitsConfig,
-    SecurityConfig,
-    LoggingConfig,
-    PerformanceConfig,
     Config,
+    LoggingConfig,
+    OrganizationalUnitsConfig,
+    PerformanceConfig,
+    SecurityConfig,
 )
 
 __all__ = [

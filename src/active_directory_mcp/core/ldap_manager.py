@@ -11,6 +11,7 @@ import ldap3
 from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
 from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPSocketOpenError
 
+from ..redaction import redact
 from ..config.models import (
     ActiveDirectoryConfig,
     OrganizationalUnitsConfig,
@@ -37,7 +38,7 @@ class _CIDict(dict):
         return super().get(self._find(key), default)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("active-directory-mcp.ldap_manager")
 
 
 class LDAPManager:
@@ -182,7 +183,7 @@ class LDAPManager:
             # All attempts failed
             error_msg = f"Failed to connect to any LDAP server after {self.performance_config.max_retries} attempts"
             if last_error:
-                error_msg += f". Last error: {last_error}"
+                error_msg += f". Last error: {redact(str(last_error))}"
             
             logger.error(error_msg)
             raise LDAPException(error_msg)

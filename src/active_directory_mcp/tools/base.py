@@ -11,6 +11,7 @@ from ldap3.core.exceptions import LDAPException
 from ..core.ldap_manager import LDAPManager
 from ..core.logging import get_logger, log_ldap_operation
 from .. import validation
+from ..redaction import redact
 from ..validation import ValidationError
 
 # Active Directory FILETIME: 100-nanosecond ticks since 1601-01-01 UTC.
@@ -140,7 +141,7 @@ class BaseTool(ABC):
         except Exception as e:
             self.logger.error(f"Error formatting response for {operation}: {e}")
             error_response = {
-                "error": f"Failed to format response: {str(e)}",
+                "error": f"Failed to format response: {redact(str(e))}",
                 "operation": operation
             }
             return [Content(type="text", text=json.dumps(error_response, indent=2))]
@@ -157,7 +158,7 @@ class BaseTool(ABC):
         Returns:
             List of MCP content objects with error information
         """
-        error_msg = str(e)
+        error_msg = redact(str(e))
         
         if isinstance(e, LDAPException):
             self.logger.error(f"LDAP error during {operation}: {error_msg}")
