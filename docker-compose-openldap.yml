@@ -1,17 +1,24 @@
-# Docker Compose for Samba Active Directory Domain Controller
-# Provides a real Active Directory environment for testing
+# Local OpenLDAP lab for the integration tests (osixia/openldap, RFC2307bis,
+# inetOrgPerson / groupOfNames schema).
+#
+# This is NOT Active Directory and NOT Samba AD. It does not enforce
+# userAccountControl semantics, unicodePwd TLS rules, lastLogon replication or
+# AD ACLs, so green tests here do not prove AD behaviour.
+#
+# Usage: LAB_LDAP_PASSWORD=<any throwaway value> docker compose -f docker-compose-openldap.yml up -d openldap
+# (scripts/run_tests_with_ldap.sh does this with a per-run random password.)
 
 services:
-  openldap-ad:
+  openldap:
     image: osixia/openldap:latest
-    container_name: openldap-ad-dc
+    container_name: openldap-lab
     hostname: dc
     domainname: test.local
     environment:
       LDAP_ORGANISATION: "Test Organization"
       LDAP_DOMAIN: "test.local"
-      LDAP_ADMIN_PASSWORD: "Admin123!"
-      LDAP_CONFIG_PASSWORD: "Admin123!"
+      LDAP_ADMIN_PASSWORD: "${LAB_LDAP_PASSWORD:?set LAB_LDAP_PASSWORD (any throwaway value) before starting the lab}"
+      LDAP_CONFIG_PASSWORD: "${LAB_LDAP_PASSWORD:?set LAB_LDAP_PASSWORD (any throwaway value) before starting the lab}"
       LDAP_READONLY_USER: "false"
       LDAP_RFC2307BIS_SCHEMA: "true"
       LDAP_BACKEND: "mdb"
@@ -37,15 +44,15 @@ services:
     build: .
     container_name: activedirectory-mcp-test
     depends_on:
-      - openldap-ad
+      - openldap
     environment:
       - AD_MCP_CONFIG=/app/ad-config/ad-config.json
       - HTTP_HOST=0.0.0.0
       - HTTP_PORT=8813
       - HTTP_PATH=/activedirectory-mcp
-      # Test-only credential for the local openldap-ad container above.
+      # Throwaway lab credential for the local openldap container above.
       # Never do this for production - use Azure Key Vault instead (see docker-compose.yml).
-      - AD_PASSWORD=Admin123!
+      - AD_PASSWORD=${LAB_LDAP_PASSWORD:?set LAB_LDAP_PASSWORD (any throwaway value) before starting the lab}
     ports:
       - "8813:8813"
     volumes:
@@ -59,12 +66,12 @@ services:
     image: osixia/phpldapadmin:0.9.0
     container_name: openldap-admin
     environment:
-      PHPLDAPADMIN_LDAP_HOSTS: openldap-ad
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
       PHPLDAPADMIN_HTTPS: "false"
     ports:
       - "8080:80"
     depends_on:
-      - openldap-ad
+      - openldap
     networks:
       - ad-network
 
