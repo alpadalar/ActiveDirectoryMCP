@@ -10,6 +10,7 @@ from starlette.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from active_directory_mcp import __version__
+from active_directory_mcp.auth import HTTPAuthConfigError, TokenVerifier
 from active_directory_mcp.http_app import HEALTH_PATH, build_http_app
 from active_directory_mcp.middleware import RequestContextMiddleware, default_middleware
 
@@ -51,7 +52,7 @@ class _Marker:
 
 
 def test_health_unauthenticated_exact_body_and_headers() -> None:
-    app = build_http_app(_mcp(), path=MCP_PATH)
+    app = build_http_app(_mcp(), path=MCP_PATH, allow_unauthenticated=True)
     with TestClient(app) as client:
         resp = client.get(HEALTH_PATH)
     assert resp.status_code == 200
@@ -63,12 +64,12 @@ def test_health_unauthenticated_exact_body_and_headers() -> None:
 
 
 def test_health_rejects_post() -> None:
-    with TestClient(build_http_app(_mcp(), path=MCP_PATH)) as client:
+    with TestClient(build_http_app(_mcp(), path=MCP_PATH, allow_unauthenticated=True)) as client:
         assert client.post(HEALTH_PATH).status_code == 405
 
 
 def test_mcp_route_reaches_handler_with_middleware_headers() -> None:
-    with TestClient(build_http_app(_mcp(), path=MCP_PATH)) as client:
+    with TestClient(build_http_app(_mcp(), path=MCP_PATH, allow_unauthenticated=True)) as client:
         resp = client.post(MCP_PATH, json=INIT, headers=MCP_HEADERS)
     assert resp.status_code == 200
     assert resp.headers["x-content-type-options"] == "nosniff"
@@ -76,14 +77,14 @@ def test_mcp_route_reaches_handler_with_middleware_headers() -> None:
 
 
 def test_valid_request_id_is_echoed() -> None:
-    with TestClient(build_http_app(_mcp(), path=MCP_PATH)) as client:
+    with TestClient(build_http_app(_mcp(), path=MCP_PATH, allow_unauthenticated=True)) as client:
         resp = client.get(HEALTH_PATH, headers={"X-Request-ID": "abc-123_4.5"})
     assert resp.headers["x-request-id"] == "abc-123_4.5"
 
 
 @pytest.mark.parametrize("bad", ["a" * 65, "has space", "semi;colon", "tab\tchar", ""])
 def test_invalid_request_id_is_replaced(bad: str) -> None:
-    with TestClient(build_http_app(_mcp(), path=MCP_PATH)) as client:
+    with TestClient(build_http_app(_mcp(), path=MCP_PATH, allow_unauthenticated=True)) as client:
         resp = client.get(HEALTH_PATH, headers={"X-Request-ID": bad})
     rid = resp.headers["x-request-id"]
     assert rid != bad
@@ -91,7 +92,9 @@ def test_invalid_request_id_is_replaced(bad: str) -> None:
 
 
 def test_extra_middleware_is_applied() -> None:
-    app = build_http_app(_mcp(), path=MCP_PATH, extra_middleware=[Middleware(_Marker)])
+    app = build_http_app(
+        _mcp(), path=MCP_PATH, allow_unauthenticated=True, extra_middleware=[Middleware(_Marker)]
+    )
     with TestClient(app) as client:
         resp = client.get(HEALTH_PATH)
     assert resp.headers["x-marker"] == "1"
@@ -99,8 +102,8 @@ def test_extra_middleware_is_applied() -> None:
 
 def test_build_twice_gives_independent_apps_one_health_route_each() -> None:
     mcp = _mcp()
-    first = build_http_app(mcp, path=MCP_PATH)
-    second = build_http_app(mcp, path=MCP_PATH)
+    first = build_http_app(mcp, path=MCP_PATH, allow_unauthenticated=True)
+    second = build_http_app(mcp, path=MCP_PATH, allow_unauthenticated=True)
     assert first is not second
     for app in (first, second):
         assert [r.path for r in app.routes if getattr(r, "path", None) == HEALTH_PATH] == [
@@ -150,3 +153,17 @@ def test_non_http_scope_passes_through() -> None:
 
     _run(RequestContextMiddleware(inner), {"type": "lifespan"})
     assert seen == ["lifespan"]
+
+
+def test_factory_without_auth_fails_closed() -> None:
+    with pytest.raises(HTTPAuthConfigError):
+        build_http_app(_mcp(), path=MCP_PATH)
+
+
+def test_health_reachable_without_creds_on_authenticated_app() -> None:
+    import hashlib
+
+    verifier = TokenVerifier([hashlib.sha256(b"k" * 30).hexdigest()])
+    with TestClient(build_http_app(_mcp(), path=MCP_PATH, auth=verifier)) as client:
+        assert client.get(HEALTH_PATH).status_code == 200
+        assert client.post(MCP_PATH, json=INIT, headers=MCP_HEADERS).status_code == 401
