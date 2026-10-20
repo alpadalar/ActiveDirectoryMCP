@@ -52,7 +52,7 @@ class GroupTools(BaseTool):
             self.logger.info(f"Listing groups from {search_base}")
             
             # Perform search
-            results = self.ldap.search(
+            results, truncated, result_limit = self._capped_search(
                 search_base=search_base,
                 search_filter=search_filter,
                 attributes=attributes
@@ -92,7 +92,8 @@ class GroupTools(BaseTool):
                 "groups": groups,
                 "count": len(groups),
                 "search_base": search_base,
-                "filter": search_filter
+                "filter": search_filter,
+                **self._cap_metadata(truncated, result_limit),
             }
             
             return self._format_response(response_data, "list_groups")
@@ -184,8 +185,17 @@ class GroupTools(BaseTool):
             
         Returns:
             List of MCP content objects with creation result
+
+        additional_attributes are limited to the group modify allow-list.
         """
         try:
+            if additional_attributes:
+                rejection = self._check_modify_attributes(
+                    "group", additional_attributes, "create_group", group_name
+                )
+                if rejection is not None:
+                    return rejection
+
             # Determine OU
             if ou is None:
                 ou = self.ldap.organizational_units.groups_ou
@@ -264,6 +274,9 @@ class GroupTools(BaseTool):
     def modify_group(self, group_name: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Modify group attributes.
+
+        Only allow-listed attributes can be changed; membership changes go
+        through add_group_member / remove_group_member.
         
         Args:
             group_name: Group name to modify
@@ -273,6 +286,12 @@ class GroupTools(BaseTool):
             List of MCP content objects with modification result
         """
         try:
+            rejection = self._check_modify_attributes(
+                "group", attributes, "modify_group", group_name
+            )
+            if rejection is not None:
+                return rejection
+
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,

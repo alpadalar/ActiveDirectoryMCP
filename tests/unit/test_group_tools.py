@@ -306,3 +306,66 @@ class TestGroupInputHardening:
         assert [m["dn"] for m in data["members"]] == [MEMBER]
         bases = [c.kwargs["search_base"] for c in mock_ldap_manager.search.call_args_list]
         assert outside not in bases
+
+
+class TestGroupEnforcement:
+    @pytest.mark.parametrize(
+        "attr", ["member", "groupType", "objectClass", "sAMAccountName", "adminCount"]
+    )
+    def test_modify_rejected_without_ldap_calls(self, group_tools, mock_ldap_manager, attr):
+        data = parse_response(group_tools.modify_group("Sales", {attr: "x"}))
+        assert data["success"] is False
+        assert data["error_code"] == "attribute_not_allowed"
+        assert attr in data["rejected_attributes"]
+        assert mock_ldap_manager.search.call_count == 0
+        assert mock_ldap_manager.modify.call_count == 0
+
+    def test_modify_allowed_passes_through(self, group_tools, mock_ldap_manager):
+        _group(mock_ldap_manager)
+        data = parse_response(group_tools.modify_group("Sales", {"description": "d"}))
+        assert data["success"] is True
+        assert mock_ldap_manager.modify.call_args.args[1] == {
+            "description": [(MODIFY_REPLACE, ["d"])]
+        }
+
+    def test_create_additional_attributes_rejected(self, group_tools, mock_ldap_manager):
+        data = parse_response(
+            group_tools.create_group(
+                "Sales", additional_attributes={"member": [MEMBER], "info": "ok"}
+            )
+        )
+        assert data["success"] is False
+        assert data["error_code"] == "attribute_not_allowed"
+        assert mock_ldap_manager.search.call_count == 0
+        assert mock_ldap_manager.add.call_count == 0
+
+    def test_create_allowed_additional_attributes(self, group_tools, mock_ldap_manager):
+        data = parse_response(
+            group_tools.create_group("Sales", additional_attributes={"info": "ok"})
+        )
+        assert data["success"] is True
+        attrs = mock_ldap_manager.add.call_args.args[1]
+        assert attrs["info"] == "ok" and "groupType" in attrs
+
+    def _groups(self, n):
+        return [ldap_entry(f"CN=G{i},DC=test,DC=local", sAMAccountName=f"g{i}") for i in range(n)]
+
+    def test_list_cap_truncates(self, group_tools, mock_ldap_manager):
+        limit = mock_ldap_manager.security_config.max_list_results
+        mock_ldap_manager.search.return_value = self._groups(limit + 1)
+        data = parse_response(group_tools.list_groups())
+        assert data["count"] == limit
+        assert data["truncated"] is True and data["result_limit"] == limit
+
+    def test_list_exactly_limit_not_truncated(self, group_tools, mock_ldap_manager):
+        limit = mock_ldap_manager.security_config.max_list_results
+        mock_ldap_manager.search.return_value = self._groups(limit)
+        data = parse_response(group_tools.list_groups())
+        assert data["count"] == limit and data["truncated"] is False
+
+    def test_list_zero_means_unlimited(self, group_tools, mock_ldap_manager):
+        mock_ldap_manager.security_config.max_list_results = 0
+        mock_ldap_manager.search.return_value = self._groups(1500)
+        data = parse_response(group_tools.list_groups())
+        assert data["count"] == 1500 and data["truncated"] is False
+        assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
