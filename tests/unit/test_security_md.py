@@ -106,3 +106,21 @@ def test_credential_value_not_present():
     text = SECURITY_MD.read_text(encoding="utf-8")
     assert "BEGIN GENERATED" in text
     assert not re.search(r"(?i)password\s*[:=]\s*\"[^\"\s]{4,}\"", text)
+
+
+def test_audited_column_is_conditional_on_audit_log_path():
+    """WR-04: auditing is opt-in (security.audit_log_path defaults to unset)."""
+    assert SecurityConfig().audit_log_path is None
+    region = _generator().render_risk_table()
+    assert "| yes |" not in region
+    for line in region.splitlines()[2:]:
+        if "| read |" in line:
+            assert line.endswith("| no |")
+        else:
+            assert line.endswith("| only if `security.audit_log_path` is set |")
+
+
+def test_security_md_says_audit_is_off_by_default():
+    text = SECURITY_MD.read_text(encoding="utf-8")
+    row = next(line for line in text.splitlines() if line.startswith("| No record of what"))
+    assert "off by default" in row and "`security.audit_log_path`" in row

@@ -97,7 +97,7 @@ Each row names the enforcing code and a test that exercises it.
 | Passwords over a clear channel | `unicodePwd` writes are refused unless the connection is LDAPS or StartTLS (`unicodePwd_requires_tls`); `security.require_secure_connection` (default true) refuses plaintext at startup | `tools/base.py`, `config/models.py` | `tests/unit/test_user_tools.py`, `tests/unit/test_computer_tools.py`, `tests/unit/test_config.py` |
 | Bulk data exfiltration | List and search tools stop at `security.max_list_results` and report `truncated` | `tools/base.py` | `tests/unit/test_base_helpers.py` |
 | Secrets in logs | Configured and generated passwords are registered with a redacting log filter installed at record creation | `redaction.py`, `core/logging.py` | `tests/unit/test_redaction.py`, `tests/unit/test_credential_leak.py` |
-| No record of what was changed | Every write and destructive call (including blocked calls) is appended to a JSON-lines audit file (`security.audit_log_path`, mode 0600, no symlink following, arguments redacted); `security.audit_fail_closed` refuses calls when the file is unwritable | `audit.py`, `policy.py` | `tests/unit/test_audit.py`, `tests/unit/test_policy.py` |
+| No record of what was changed | Opt-in, off by default: when `security.audit_log_path` is set, every write and destructive call (including blocked calls) is appended to a JSON-lines audit file (mode 0600, no symlink following, arguments redacted); `security.audit_fail_closed` refuses calls when the file is unwritable. With the path unset (the default) no call is audited | `audit.py`, `policy.py` | `tests/unit/test_audit.py`, `tests/unit/test_policy.py` |
 | Drift of the tables in this document | The tool-risk table is generated from the code and compared in a test | `scripts/gen_security_table.py` | `tests/unit/test_security_md.py` |
 
 ## Tool risk table
@@ -133,27 +133,27 @@ Generated from `RISK_CLASSIFICATION` in `src/active_directory_mcp/policy.py` by
 | `list_organizational_units` | read | always enabled | no |
 | `list_users` | read | always enabled | no |
 | `test_connection` | read | always enabled | no |
-| `add_group_member` | write | `security.allow_writes` | yes |
-| `create_computer` | write | `security.allow_writes` | yes |
-| `create_group` | write | `security.allow_writes` | yes |
-| `create_organizational_unit` | write | `security.allow_writes` | yes |
-| `create_user` | write | `security.allow_writes` | yes |
-| `disable_computer` | write | `security.allow_writes` | yes |
-| `disable_user` | write | `security.allow_writes` | yes |
-| `enable_computer` | write | `security.allow_writes` | yes |
-| `enable_user` | write | `security.allow_writes` | yes |
-| `modify_computer` | write | `security.allow_writes` | yes |
-| `modify_group` | write | `security.allow_writes` | yes |
-| `modify_organizational_unit` | write | `security.allow_writes` | yes |
-| `modify_user` | write | `security.allow_writes` | yes |
-| `move_organizational_unit` | write | `security.allow_writes` | yes |
-| `remove_group_member` | write | `security.allow_writes` | yes |
-| `reset_computer_password` | write | `security.allow_writes` | yes |
-| `reset_user_password` | write | `security.allow_writes` | yes |
-| `delete_computer` | destructive | `security.allow_writes` and `security.allow_destructive` | yes |
-| `delete_group` | destructive | `security.allow_writes` and `security.allow_destructive` | yes |
-| `delete_organizational_unit` | destructive | `security.allow_writes` and `security.allow_destructive` | yes |
-| `delete_user` | destructive | `security.allow_writes` and `security.allow_destructive` | yes |
+| `add_group_member` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `create_computer` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `create_group` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `create_organizational_unit` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `create_user` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `disable_computer` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `disable_user` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `enable_computer` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `enable_user` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `modify_computer` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `modify_group` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `modify_organizational_unit` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `modify_user` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `move_organizational_unit` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `remove_group_member` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `reset_computer_password` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `reset_user_password` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `delete_computer` | destructive | `security.allow_writes` and `security.allow_destructive` | only if `security.audit_log_path` is set |
+| `delete_group` | destructive | `security.allow_writes` and `security.allow_destructive` | only if `security.audit_log_path` is set |
+| `delete_organizational_unit` | destructive | `security.allow_writes` and `security.allow_destructive` | only if `security.audit_log_path` is set |
+| `delete_user` | destructive | `security.allow_writes` and `security.allow_destructive` | only if `security.audit_log_path` is set |
 <!-- END GENERATED: tool-risk-table -->
 
 ## Least-privilege delegation

@@ -27,6 +27,9 @@ _ENABLED_BY = {
 }
 
 
+_AUDITED_WHEN_CONFIGURED = "only if `security.audit_log_path` is set"
+
+
 def render_risk_table(classification: Optional[Mapping[str, Risk]] = None) -> str:
     """Markdown table, one row per tool, sorted by risk class then name."""
     source = RISK_CLASSIFICATION if classification is None else classification
@@ -37,8 +40,9 @@ def render_risk_table(classification: Optional[Mapping[str, Risk]] = None) -> st
     ]
     for name, risk in rows:
         risk = Risk(risk)
-        # The audit hook in policy.guard records every non-read call.
-        audited = "no" if risk is Risk.READ else "yes"
+        # policy.guard records every non-read call, but only when security.audit_log_path
+        # is set; the default is unset, so by default no call is audited.
+        audited = "no" if risk is Risk.READ else _AUDITED_WHEN_CONFIGURED
         lines.append(f"| `{name}` | {risk.value} | {_ENABLED_BY[risk]} | {audited} |")
     return "\n".join(lines)
 
