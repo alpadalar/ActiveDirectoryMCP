@@ -118,6 +118,7 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
 
     recorded: List[Any] = []
     built: List[Any] = []
+    servers: List[Any] = []
     real_build = mod.build_http_app
 
     def spy(*args: Any, **kwargs: Any) -> Any:
@@ -126,8 +127,10 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
         return app
 
     class FakeServer:
-        def __init__(self, config: Any) -> None:
+        def __init__(self, config: Any, on_shutdown: Any = None) -> None:
             recorded.append(config)
+            servers.append(self)
+            self.on_shutdown = on_shutdown
             self.should_exit = False
 
         async def serve(self, sockets: Optional[List[Any]] = None) -> None:
@@ -136,7 +139,7 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
     with _offline_env(HTTP_MOD):
         server = _http_server()
         with patch.object(mod, "build_http_app", spy), patch.object(
-            mod.uvicorn, "Server", FakeServer
+            mod, "_ShutdownHookServer", FakeServer
         ):
             asyncio.run(server.serve())
             server.stop()
@@ -144,6 +147,7 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
     assert recorded[0].app is built[0]
     assert recorded[0].host == server.host and recorded[0].port == server.port
     assert recorded[0].lifespan == "on"
+    assert servers[0].on_shutdown == server.ldap_manager.disconnect
 
 
 def test_run_awaits_serve_once_and_disconnects() -> None:
