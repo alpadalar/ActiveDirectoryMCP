@@ -346,6 +346,29 @@ Example:
 
 Returns comprehensive domain security posture."""
 
+GET_NESTED_GROUP_MEMBERS_DESC = """Get all direct and nested members of a group.
+
+Resolves the group by sAMAccountName and evaluates transitive membership on the
+domain controller in a single query (LDAP_MATCHING_RULE_IN_CHAIN), so deep or
+cyclic nesting is handled without client-side recursion. Results are confined
+to the configured base DN and capped by max_list_results (see "truncated").
+
+Example:
+- get_nested_group_members(group_name="Domain Admins")
+
+Returns members with dn, sAMAccountName, displayName and type."""
+
+GET_ROOTDSE_INFO_DESC = """Get rootDSE information from the domain controller.
+
+Returns naming contexts, DC host name, functional levels, supported LDAP
+versions and SASL mechanisms, current time and sync/global-catalog state.
+Takes no input; a fixed attribute allow-list is read.
+
+Example:
+- get_rootdse_info()
+
+Useful to confirm which DC answered and its functional level."""
+
 GET_PRIVILEGED_GROUPS_DESC = """Get information about privileged groups.
 
 Identifies and analyzes high-privilege groups including Domain Admins,
@@ -461,6 +484,8 @@ TOOL_DESCRIPTIONS: Dict[str, str] = {
     "move_organizational_unit": MOVE_ORGANIZATIONAL_UNIT_DESC,
     "get_organizational_unit_contents": GET_ORGANIZATIONAL_UNIT_CONTENTS_DESC,
     "get_domain_info": GET_DOMAIN_INFO_DESC,
+    "get_nested_group_members": GET_NESTED_GROUP_MEMBERS_DESC,
+    "get_rootdse_info": GET_ROOTDSE_INFO_DESC,
     "get_privileged_groups": GET_PRIVILEGED_GROUPS_DESC,
     "get_user_permissions": GET_USER_PERMISSIONS_DESC,
     "get_inactive_users": GET_INACTIVE_USERS_DESC,
@@ -829,6 +854,17 @@ TOOL_INPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "required": ["ou_dn"],
     },
     "get_domain_info": {"type": "object", "properties": {}},
+    "get_rootdse_info": {"type": "object", "properties": {}},
+    "get_nested_group_members": {
+        "type": "object",
+        "properties": {
+            "group_name": {
+                "type": "string",
+                "description": "Group name (sAMAccountName) whose nested members to list",
+            },
+        },
+        "required": ["group_name"],
+    },
     "get_privileged_groups": {"type": "object", "properties": {}},
     "get_user_permissions": {
         "type": "object",

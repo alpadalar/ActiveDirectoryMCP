@@ -24,6 +24,7 @@ from .audit import AuditLogger
 from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
 from .redaction import redact
 from .tools.definitions import TOOL_DESCRIPTIONS, TOOL_INPUT_SCHEMAS
+from .tools.directory import DirectoryTools
 
 logger = logging.getLogger("active-directory-mcp.registry")
 
@@ -154,6 +155,7 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
     computers = ctx.computer_tools
     ous = ctx.ou_tools
     security = ctx.security_tools
+    directory = DirectoryTools(ctx.ldap_manager)
 
     # User Management Tools
     def list_users(
@@ -346,6 +348,13 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
     def get_schema_info() -> Any:
         return _get_schema_info(ctx)
 
+    # Directory Tools (added after the original 42; keep at the end for stable ordering)
+    def get_nested_group_members(group_name: str) -> Any:
+        return directory.get_nested_group_members(group_name)
+
+    def get_rootdse_info() -> Any:
+        return directory.get_rootdse_info()
+
     ordered = (
         list_users,
         get_user,
@@ -389,12 +398,14 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
         test_connection,
         health,
         get_schema_info,
+        get_nested_group_members,
+        get_rootdse_info,
     )
     return {fn.__name__: fn for fn in ordered}
 
 
 def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
-    """Return the 42 tool specs in a stable order (KeyError if a definition is missing).
+    """Return the 44 tool specs in a stable order (KeyError if a definition is missing).
 
     Every handler is wrapped by the policy gate; a tool without a risk
     classification is a build-time error (fail closed).

@@ -46,7 +46,7 @@ def test_stdio_registry_over_in_memory_session(tmp_path: Path) -> None:
 
     async def scenario(session: Any) -> None:
         listed = (await session.list_tools()).tools
-        assert len(listed) == 42
+        assert len(listed) == 44
         actual: Dict[str, Any] = {t.name: canonical_input_schema(t.inputSchema) for t in listed}
         assert actual == golden
 

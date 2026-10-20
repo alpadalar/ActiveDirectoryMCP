@@ -6,6 +6,7 @@ from .group import GroupTools
 from .computer import ComputerTools
 from .organizational_unit import OrganizationalUnitTools
 from .security import SecurityTools
+from .directory import DirectoryTools
 
 __all__ = [
     "BaseTool",
@@ -14,4 +15,5 @@ __all__ = [
     "ComputerTools",
     "OrganizationalUnitTools",
     "SecurityTools",
+    "DirectoryTools",
 ]

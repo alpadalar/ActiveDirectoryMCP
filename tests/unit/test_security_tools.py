@@ -681,3 +681,22 @@ def test_password_policy_violations_capped(security_tools, mock_ldap_manager):
 def test_audit_admin_accounts_has_lastlogon_note(security_tools, mock_ldap_manager):
     data = parse_response(security_tools.audit_admin_accounts())
     assert "lastLogon" in data["accuracy_note"]
+
+
+class TestInactiveUsersNotDuplicated:
+    """FEAT-03 decision: get_inactive_users / get_domain_info already exist; no clones."""
+
+    def test_existing_tool_is_read_registered_and_not_cloned(self):
+        from active_directory_mcp.policy import RISK_CLASSIFICATION, Risk
+        from active_directory_mcp.tools.definitions import TOOL_DESCRIPTIONS
+
+        assert RISK_CLASSIFICATION["get_inactive_users"] is Risk.READ
+        assert RISK_CLASSIFICATION["get_domain_info"] is Risk.READ
+        assert "get_inactive_users" in TOOL_DESCRIPTIONS
+        assert "find_inactive_users" not in TOOL_DESCRIPTIONS
+        assert "find_inactive_users" not in RISK_CLASSIFICATION
+
+    def test_requests_last_logon_attribute(self, security_tools, mock_ldap_manager):
+        security_tools.get_inactive_users(days=30)
+        attributes = mock_ldap_manager.search.call_args.kwargs["attributes"]
+        assert "lastLogon" in attributes

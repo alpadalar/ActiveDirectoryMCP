@@ -7,7 +7,7 @@ the ones listed in ``ADDITIVE_TOOLS``.
 
 Regenerate the fingerprint file (only ever from the unmodified original goldens):
 
-    .venv/bin/python -c "from tests.unit.test_golden_additive import write_fingerprints; write_fingerprints()"
+    .venv/bin/python -c "from tests.unit.test_golden_additive import *; write_fingerprints()"
 """
 
 import hashlib
@@ -24,7 +24,7 @@ FINGERPRINTS = GOLDEN_DIR / "original_tools.sha256.json"
 TRANSPORTS = ("http", "stdio")
 
 # Tools added after the original 42 (plan 04.1-02; plan 04.1-03 adds the third).
-ADDITIVE_TOOLS: set = set()
+ADDITIVE_TOOLS = {"get_nested_group_members", "get_rootdse_info"}
 
 
 def _load_golden(transport: str) -> Dict[str, Any]:

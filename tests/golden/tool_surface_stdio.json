@@ -1,5 +1,5 @@
 {
-  "tool_count": 42,
+  "tool_count": 44,
   "tools": {
     "add_group_member": {
       "params": {
@@ -265,6 +265,16 @@
       },
       "required": []
     },
+    "get_nested_group_members": {
+      "params": {
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
     "get_organizational_unit": {
       "params": {
         "attributes": {
@@ -296,6 +306,10 @@
       "required": []
     },
     "get_privileged_groups": {
+      "params": {},
+      "required": []
+    },
+    "get_rootdse_info": {
       "params": {},
       "required": []
     },

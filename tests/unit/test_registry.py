@@ -57,7 +57,7 @@ def ctx() -> ToolContext:
 
 def test_specs_cover_golden_set_in_stable_order(ctx: ToolContext) -> None:
     specs = build_tool_specs(ctx)
-    assert len(specs) == 42
+    assert len(specs) == 44
     assert {spec.name for spec in specs} == TOOL_NAMES
     assert [s.name for s in specs] == [s.name for s in build_tool_specs(ctx)]
     for spec in specs:
@@ -79,7 +79,7 @@ async def test_register_tools_on_fastmcp(ctx: ToolContext) -> None:
     mcp = FastMCP("test")
     assert register_tools(ctx, FastMCPToolSink(mcp)) is None
     tools = await mcp.list_tools()
-    assert len(tools) == 42
+    assert len(tools) == 44
     assert {t.name for t in tools} == TOOL_NAMES
     for tool in tools:
         assert tool.output_schema is None
@@ -97,20 +97,20 @@ async def test_registering_twice_on_one_fastmcp_is_recorded(ctx: ToolContext) ->
         outcome = "raises"
     else:
         outcome = "replaces"
-    assert len(await mcp.list_tools()) == 42
+    assert len(await mcp.list_tools()) == 44
     assert outcome in {"raises", "replaces"}
 
 
 def test_register_tools_calls_sink_once_per_spec(ctx: ToolContext) -> None:
     sink = MagicMock()
     assert register_tools(ctx, sink) is None
-    assert sink.add.call_count == 42
+    assert sink.add.call_count == 44
 
 
 def test_stdio_sink_matches_stdio_golden(ctx: ToolContext) -> None:
     sink = StdioToolSink()
     register_tools(ctx, sink)
-    assert len(sink.tools) == 42
+    assert len(sink.tools) == 44
     assert set(sink.handlers) == TOOL_NAMES
     for tool in sink.tools:
         assert canonical_input_schema(tool.inputSchema) == STDIO_GOLDEN["tools"][tool.name]
@@ -245,10 +245,31 @@ DELEGATION = [
 ]
 
 SYSTEM_TOOLS = {"test_connection", "health", "get_schema_info"}
+# Built by the registry itself (DirectoryTools(ctx.ldap_manager)), not a ToolContext member.
+DIRECTORY_TOOLS = {"get_nested_group_members", "get_rootdse_info"}
 
 
 def test_delegation_table_covers_every_non_system_tool() -> None:
-    assert {row[0] for row in DELEGATION} == TOOL_NAMES - SYSTEM_TOOLS
+    assert {row[0] for row in DELEGATION} == TOOL_NAMES - SYSTEM_TOOLS - DIRECTORY_TOOLS
+
+
+def test_new_tools_are_exactly_the_directory_tools() -> None:
+    # The next plan's addition must be an explicit change here.
+    assert TOOL_NAMES - {row[0] for row in DELEGATION} - SYSTEM_TOOLS == DIRECTORY_TOOLS
+
+
+def test_directory_handlers_delegate_to_directory_tools(ctx: ToolContext) -> None:
+    from unittest.mock import patch
+
+    with patch("active_directory_mcp.registry.DirectoryTools") as cls:
+        specs = {s.name: s for s in build_tool_specs(ctx)}
+    cls.assert_called_once_with(ctx.ldap_manager)
+    instance = cls.return_value
+    assert specs["get_nested_group_members"].handler(group_name="g") is (
+        instance.get_nested_group_members.return_value
+    )
+    instance.get_nested_group_members.assert_called_once_with("g")
+    assert specs["get_rootdse_info"].handler() is instance.get_rootdse_info.return_value
 
 
 @pytest.mark.parametrize(("name", "kwargs", "attr", "method", "expected"), DELEGATION)

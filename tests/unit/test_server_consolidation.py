@@ -102,13 +102,13 @@ def _http_server() -> Any:
     return ActiveDirectoryMCPHTTPServer()
 
 
-def test_http_server_registers_42_tools_and_health_route() -> None:
+def test_http_server_registers_44_tools_and_health_route() -> None:
     from active_directory_mcp.http_app import HEALTH_PATH
 
     with _offline_env(HTTP_MOD):
         server = _http_server()
         names = {t.name for t in asyncio.run(server.mcp.list_tools())}
-        assert len(names) == 42 and "health" in names
+        assert len(names) == 44 and "health" in names
         app = server.build_app()
         assert HEALTH_PATH in [getattr(r, "path", None) for r in app.routes]
 
@@ -173,7 +173,7 @@ def test_run_exits_nonzero_and_disconnects_when_serve_fails() -> None:
         assert server.logger.error.called
 
 
-def test_stdio_registers_once_with_42_tools_and_error_shape() -> None:
+def test_stdio_registers_once_with_44_tools_and_error_shape() -> None:
     import mcp.types as types
 
     import active_directory_mcp.server as mod
@@ -182,7 +182,7 @@ def test_stdio_registers_once_with_42_tools_and_error_shape() -> None:
         with patch.object(mod, "register_tools", wraps=mod.register_tools) as spy:
             server = mod.ActiveDirectoryMCPServer()
         spy.assert_called_once()
-        assert len(server._tools) == 42
+        assert len(server._tools) == 44
 
         handler = server.mcp.request_handlers[types.CallToolRequest]
         req = types.CallToolRequest(
