@@ -32,7 +32,8 @@ ROOTDSE_ATTRIBUTES = (
     "isGlobalCatalogReady",
 )
 
-_FORBIDDEN_NAME_CHARS = frozenset('()*\\\x00')
+# Filter metacharacters are escaped by eq_filter (RFC 4515); only NUL and controls are refused.
+_FORBIDDEN_NAME_CHARS = frozenset("\x00")
 _MAX_NAME_LENGTH = 256
 
 
@@ -81,6 +82,17 @@ class DirectoryTools(BaseTool):
                     {
                         "success": False,
                         "error": f"Group '{name}' not found",
+                        "group_name": name,
+                    },
+                    "get_nested_group_members",
+                )
+
+            if len(groups) > 1:
+                self.logger.warning("get_nested_group_members: group name matched several entries")
+                return self._format_response(
+                    {
+                        "success": False,
+                        "error": f"Group name '{name}' is ambiguous: it matches several entries",
                         "group_name": name,
                     },
                     "get_nested_group_members",

@@ -7,6 +7,7 @@ import ldap3
 import pytest
 from ldap3.core.exceptions import LDAPException
 
+from active_directory_mcp import validation
 from active_directory_mcp.tools.directory import ROOTDSE_ATTRIBUTES, DirectoryTools
 from tests.support.helpers import ldap_entry, parse_response
 
@@ -57,12 +58,30 @@ class TestNestedGroupMembers:
         chain = mock_ldap_manager.search.call_args_list[1].kwargs["search_filter"]
         assert chain == f"(memberOf:{CHAIN}:=CN=a\\28b\\29c\\2ad\\5ce,CN=Users,DC=test,DC=local)"
 
-    @pytest.mark.parametrize("bad", ["a)(objectClass=*", "x*", "a\\b", "", "  ", None, 5])
+    @pytest.mark.parametrize("bad", ["a\x00b", "a\nb", "", "  ", None, 5, "x" * 300])
     def test_bad_group_name_rejected_before_ldap(self, directory_tools, mock_ldap_manager, bad):
         data = parse_response(directory_tools.get_nested_group_members(bad))
         assert data["success"] is False
         assert data["type"] == "ValidationError"
         mock_ldap_manager.search.assert_not_called()
+
+    @pytest.mark.parametrize("name", ["Sales (EMEA)", "a)(objectClass=*", "x*", "a\\b"])
+    def test_legitimate_and_hostile_names_are_escaped_not_rejected(
+        self, directory_tools, mock_ldap_manager, name
+    ):
+        mock_ldap_manager.search.return_value = []
+        directory_tools.get_nested_group_members(name)
+        flt = mock_ldap_manager.search.call_args.kwargs["search_filter"]
+        assert flt.endswith(validation.eq_filter("sAMAccountName", name) + ")")
+        assert "(objectClass=*" not in flt
+
+    def test_ambiguous_group_is_an_error(self, directory_tools, mock_ldap_manager):
+        mock_ldap_manager.search.return_value = [
+            ldap_entry(GROUP_DN), ldap_entry("CN=Admins,OU=x,DC=test,DC=local")
+        ]
+        data = parse_response(directory_tools.get_nested_group_members("Admins"))
+        assert data["success"] is False and "ambiguous" in data["error"].lower()
+        assert mock_ldap_manager.search.call_count == 1
 
     def test_not_found_no_second_search(self, directory_tools, mock_ldap_manager):
         mock_ldap_manager.search.return_value = []
