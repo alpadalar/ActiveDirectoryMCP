@@ -241,7 +241,8 @@ class LDAPManager:
                search_filter: str,
                attributes: Union[List[str], str] = ALL_ATTRIBUTES,
                search_scope: str = SUBTREE,
-               size_limit: int = 0) -> List[Dict[str, Any]]:
+               size_limit: int = 0,
+               time_limit: int = 0) -> List[Dict[str, Any]]:
         """
         Perform LDAP search operation.
         
@@ -251,6 +252,7 @@ class LDAPManager:
             attributes: Attributes to retrieve
             search_scope: Search scope (SUBTREE, ONELEVEL, BASE)
             size_limit: Maximum number of results (0 = no limit)
+            time_limit: Server-side time limit in seconds per request (0 = server default)
             
         Returns:
             List of LDAP entries as dictionaries
@@ -266,6 +268,8 @@ class LDAPManager:
             # Perform paged search for large result sets
             paged_size = min(self.performance_config.page_size, size_limit) if size_limit > 0 else self.performance_config.page_size
             
+            extra_kwargs: Dict[str, Any] = {"time_limit": time_limit} if time_limit > 0 else {}
+
             entries = []
             cookie = None
             
@@ -277,7 +281,8 @@ class LDAPManager:
                         search_scope=search_scope,
                         attributes=attributes,
                         paged_size=paged_size,
-                        paged_cookie=cookie
+                        paged_cookie=cookie,
+                        **extra_kwargs
                     )
                 except LDAPNoSuchObjectResult:
                     if search_scope == BASE:

@@ -164,6 +164,16 @@ class TestSearch:
         assert conn.search.call_count == 1
         assert conn.search.call_args.kwargs["paged_size"] == 1
 
+    def test_time_limit_is_forwarded_only_when_set(self, manager, ldap3_seam):
+        _, conn_cls = ldap3_seam
+        conn = conn_cls.return_value
+        conn.search.return_value = True
+        _page(conn, [_entry("CN=1")], None)
+        manager.search("DC=test,DC=local", "(cn=*)")
+        assert "time_limit" not in conn.search.call_args.kwargs
+        manager.search("DC=test,DC=local", "(cn=*)", time_limit=7)
+        assert conn.search.call_args.kwargs["time_limit"] == 7
+
     def test_failed_search_raises(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
         conn = conn_cls.return_value

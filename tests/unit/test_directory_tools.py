@@ -8,7 +8,12 @@ import pytest
 from ldap3.core.exceptions import LDAPException
 
 from active_directory_mcp import validation
-from active_directory_mcp.tools.directory import ROOTDSE_ATTRIBUTES, DirectoryTools
+from active_directory_mcp.tools.directory import (
+    HARD_MAX_RESULTS,
+    ROOTDSE_ATTRIBUTES,
+    SEARCH_TIME_LIMIT_SECONDS,
+    DirectoryTools,
+)
 from tests.support.helpers import ldap_entry, parse_response
 
 BASE = "DC=test,DC=local"
@@ -108,6 +113,22 @@ class TestNestedGroupMembers:
         assert data["count"] == 2
         assert data["truncated"] is True and data["result_limit"] == 2
         assert mock_ldap_manager.search.call_args_list[1].kwargs["size_limit"] == 3
+
+    @pytest.mark.parametrize("configured", [0, 10**9])
+    def test_hard_ceiling_and_time_limit_even_when_unlimited(
+        self, directory_tools, mock_ldap_manager, configured
+    ):
+        mock_ldap_manager.security_config.max_list_results = configured
+        mock_ldap_manager.search.side_effect = [
+            [ldap_entry(GROUP_DN)],
+            [_member(f"u{i}", ["user"]) for i in range(HARD_MAX_RESULTS + 1)],
+        ]
+        data = parse_response(directory_tools.get_nested_group_members("Admins"))
+        second = mock_ldap_manager.search.call_args_list[1].kwargs
+        assert second["size_limit"] == HARD_MAX_RESULTS + 1
+        assert second["time_limit"] == SEARCH_TIME_LIMIT_SECONDS > 0
+        assert data["count"] == HARD_MAX_RESULTS
+        assert data["truncated"] is True and data["result_limit"] == HARD_MAX_RESULTS
 
     def test_ldap_error(self, directory_tools, mock_ldap_manager):
         mock_ldap_manager.search.side_effect = LDAPException("down")

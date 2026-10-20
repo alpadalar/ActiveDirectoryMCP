@@ -36,6 +36,11 @@ ROOTDSE_ATTRIBUTES = (
 _FORBIDDEN_NAME_CHARS = frozenset("\x00")
 _MAX_NAME_LENGTH = 256
 
+# The IN_CHAIN query is evaluated by the DC over the whole base DN. Bound the work even
+# when security.max_list_results is 0 (unlimited) or larger than this ceiling.
+HARD_MAX_RESULTS = 10000
+SEARCH_TIME_LIMIT_SECONDS = 30
+
 
 def _validate_group_name(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
@@ -102,11 +107,17 @@ class DirectoryTools(BaseTool):
             escaped_group_dn = validation.escape_filter_value(group_dn)
             # OID == MATCHING_RULE_IN_CHAIN, literal so the filter guard sees only escaped parts.
             chain_filter = f"(memberOf:1.2.840.113556.1.4.1941:={escaped_group_dn})"
-            entries, truncated, limit = self._capped_search(
+            configured = int(self.ldap.security_config.max_list_results)
+            limit = min(configured, HARD_MAX_RESULTS) if configured > 0 else HARD_MAX_RESULTS
+            found = self.ldap.search(
                 search_base=base_dn,
                 search_filter=chain_filter,
                 attributes=["sAMAccountName", "displayName", "objectClass"],
+                size_limit=limit + 1,
+                time_limit=SEARCH_TIME_LIMIT_SECONDS,
             )
+            truncated = len(found) > limit
+            entries = found[:limit]
 
             members = []
             for entry in entries:
