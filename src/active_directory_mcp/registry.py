@@ -21,6 +21,7 @@ from mcp import types
 from mcp.types import TextContent as Content
 
 from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
+from .redaction import redact
 from .tools.definitions import TOOL_DESCRIPTIONS, TOOL_INPUT_SCHEMAS
 
 logger = logging.getLogger("active-directory-mcp.registry")
@@ -94,7 +95,7 @@ def _test_connection(ctx: ToolContext) -> List[Content]:
         result = ctx.ldap_manager.test_connection()
     except Exception as exc:
         logger.error("test_connection failed: %s", exc)
-        result = {"success": False, "error": str(exc)}
+        result = {"success": False, "error": redact(str(exc))}
     return format_json_response(result, "test_connection")
 
 
@@ -112,7 +113,7 @@ def _health(ctx: ToolContext) -> List[Content]:
     except Exception as exc:
         logger.error("health probe failed: %s", exc)
         info["ldap_connection"] = "error"
-        info["ldap_error"] = str(exc)
+        info["ldap_error"] = redact(str(exc))
         info["status"] = "degraded"
     extras = dict(ctx.health_extras())
     if info["status"] == "degraded":

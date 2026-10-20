@@ -412,3 +412,18 @@ def test_format_json_response_serialisation_fallback() -> None:
     data = json.loads(out[0].text)
     assert data["operation"] == "op"
     assert "Failed to format response" in data["error"]
+
+
+def test_health_and_test_connection_errors_are_redacted() -> None:
+    from active_directory_mcp import redaction
+
+    redaction.clear_secrets()
+    redaction.register_secret("Sup3r-Bind-Secret")
+    try:
+        manager = Mock()
+        manager.test_connection.side_effect = RuntimeError("bind failed Sup3r-Bind-Secret")
+        health = _json(_handler(make_ctx(ldap_manager=manager), "health")())
+        probe = _json(_handler(make_ctx(ldap_manager=manager), "test_connection")())
+        assert "Sup3r-Bind-Secret" not in json.dumps(health) + json.dumps(probe)
+    finally:
+        redaction.clear_secrets()

@@ -474,7 +474,7 @@ class LDAPManager:
                 server_info['search_test'] = True
             except Exception as e:
                 server_info['search_test'] = False
-                server_info['search_error'] = str(e)
+                server_info['search_error'] = redact(str(e))
             
             logger.info("Connection test successful")
             return server_info
@@ -483,7 +483,7 @@ class LDAPManager:
             logger.error(f"Connection test failed: {e}")
             return {
                 'connected': False,
-                'error': str(e)
+                'error': redact(str(e))
             }
     
     def __enter__(self):
