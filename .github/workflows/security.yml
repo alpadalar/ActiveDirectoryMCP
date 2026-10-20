@@ -99,8 +99,10 @@ jobs:
 
       # Image pinned by OCI index digest (a tag is mutable). Re-verify with:
       #   docker buildx imagetools inspect zricethezav/gitleaks:v8.30.1
+      # Known historical findings are listed by fingerprint in .gitleaksignore. Any NEW finding fails.
+      # Regenerate only after a deliberate history purge (see SECURITY.md / HUMAN-TESTS.md).
       - name: gitleaks full-history scan
         run: |
           docker run --rm -v "$(pwd):/repo" \
             zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
-            git /repo -c /repo/.gitleaks.toml --no-color -v
+            git /repo -c /repo/.gitleaks.toml --no-color --redact -i /repo/.gitleaksignore -v
