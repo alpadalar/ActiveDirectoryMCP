@@ -41,6 +41,7 @@ def _real_manager(ous=None):
     manager.search = MagicMock(return_value=[])
     manager.add = MagicMock(return_value=True)
     manager.modify = MagicMock(return_value=True)
+    manager.is_secure_channel = MagicMock(return_value=True)  # password writes need TLS
     return manager
 
 
