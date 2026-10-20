@@ -817,13 +817,17 @@ class OrganizationalUnitTools(BaseTool):
                     "get_ou_statistics",
                 )
 
+            # Keys follow the get_ou_contents payload: total_count and type_counts by type.
+            type_counts = contents.get("type_counts", {})
             stats = {
                 "ou_dn": ou_dn,
-                "total_objects": contents.get("total_objects", 0),
-                "users": contents.get("users_count", 0),
-                "groups": contents.get("groups_count", 0),
-                "computers": contents.get("computers_count", 0),
-                "sub_ous": contents.get("sub_ous_count", 0),
+                "total_objects": contents.get("total_count", 0),
+                "users": type_counts.get("user", 0),
+                "groups": type_counts.get("group", 0),
+                "computers": type_counts.get("computer", 0),
+                "sub_ous": type_counts.get("organizationalUnit", 0),
+                "truncated": contents.get("truncated", False),
+                "result_limit": contents.get("result_limit"),
             }
 
             return self._format_response(stats, "get_ou_statistics")

@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `get_ou_statistics` reports real counts (`total_objects`, `users`, `groups`, `computers`,
+  `sub_ous`) taken from the `get_ou_contents` payload instead of always returning zeros, and
+  passes through `truncated` / `result_limit`.
 - `LDAPManager.move` keeps every component of a multi-valued RDN (`CN=a+SN=b`).
 - `LDAPManager.search` rejects boolean, out-of-range and unknown `search_scope` values with
   `ValueError` before any connection is made.

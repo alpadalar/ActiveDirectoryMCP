@@ -515,10 +515,31 @@ def test_move_ou_new_dn_escapes_special_characters(ou_tools, mock_ldap_manager):
 
 
 def test_get_ou_statistics_formats_stats_not_flag(ou_tools, mock_ldap_manager):
-    mock_ldap_manager.search.side_effect = _tree({})
+    mock_ldap_manager.search.return_value = []
     data = parse_response(ou_tools.get_ou_statistics(OU))
     assert data["ou_dn"] == OU
-    assert "total_objects" in data
+    assert data["total_objects"] == 0
+
+
+def test_get_ou_statistics_counts_populated_tree(ou_tools, mock_ldap_manager):
+    def entry(dn, classes):
+        return {"dn": dn, "attributes": {"objectClass": classes, "name": dn.split(",")[0][3:]}}
+
+    children = [
+        entry("CN=u1," + OU, ["top", "person", "user"]),
+        entry("CN=u2," + OU, ["top", "person", "user"]),
+        entry("CN=g1," + OU, ["top", "group"]),
+        entry("CN=pc1," + OU, ["top", "user", "computer"]),
+        entry("OU=sub," + OU, ["top", "organizationalUnit"]),
+    ]
+    mock_ldap_manager.search.return_value = children
+    data = parse_response(ou_tools.get_ou_statistics(OU))
+    assert data["total_objects"] == 5
+    assert data["users"] == 2
+    assert data["groups"] == 1
+    assert data["computers"] == 1
+    assert data["sub_ous"] == 1
+    assert data["truncated"] is False
 
 
 # ------------------------------------------- allow-lists and caps (SEC-03/06)
