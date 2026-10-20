@@ -408,3 +408,43 @@ class TestUserInputHardening:
         assert data["success"] is False
         assert "password setting failed" in data["error"]
         assert "Secret-Pw-9!" not in caplog.text
+
+
+class TestRuntimePasswordRedaction:
+    """Passwords handled at runtime are registered, so errors cannot echo them (WR-05)."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        from active_directory_mcp import redaction
+
+        redaction.clear_secrets()
+        yield
+        redaction.clear_secrets()
+
+    def test_create_user_password_failure_does_not_echo_password(
+        self, user_tools, mock_ldap_manager
+    ):
+        pw = "Zq9!rUntimeSecret"
+        mock_ldap_manager.modify.side_effect = LDAPException(f"policy rejected {pw}")
+        raw = user_tools.create_user("jdoe", pw, "John", "Doe")
+        assert pw not in str(raw)
+        assert parse_response(raw)["success"] is False
+
+    def test_reset_password_supplied_failure_does_not_echo_password(
+        self, user_tools, mock_ldap_manager
+    ):
+        pw = "Zq9!rUntimeSecret"
+        _found(mock_ldap_manager)
+        mock_ldap_manager.modify.side_effect = LDAPException(f"bad {pw}")
+        raw = user_tools.reset_password("jdoe", pw)
+        assert pw not in str(raw)
+
+    def test_reset_password_generated_is_registered_but_still_returned(
+        self, user_tools, mock_ldap_manager
+    ):
+        from active_directory_mcp import redaction
+
+        _found(mock_ldap_manager)
+        data = parse_response(user_tools.reset_password("jdoe"))
+        assert data["new_password"] != redaction.REDACTED
+        assert redaction.redact(data["new_password"]) == redaction.REDACTED
