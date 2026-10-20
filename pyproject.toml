@@ -51,6 +51,7 @@ dev = [
     "types-requests>=2.31.0,<3.0.0",
     "types-ldap3>=2.9",
     "bandit>=1.9",
+    "pyyaml>=6",
 ]
 
 [project.urls]
@@ -115,6 +116,9 @@ source = ["src/active_directory_mcp"]
 branch = true
 
 [tool.coverage.report]
+# Measured 2026-10-20: 91.55% total (line+branch) on Python 3.11, 3.12 and 3.13 alike.
+# Floor = floor(91.55) - 1 = 90, leaving one point of headroom.
+fail_under = 90
 show_missing = true
 skip_empty = true
 
