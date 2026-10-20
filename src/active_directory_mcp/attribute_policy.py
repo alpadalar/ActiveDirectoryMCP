@@ -74,8 +74,20 @@ def _lower(names: Iterable[str]) -> FrozenSet[str]:
 
 _HARD_DENY_LOWER = _lower(HARD_DENY)
 
-for _type, _names in MODIFY_ALLOWLIST.items():
-    assert not (_lower(_names) & _HARD_DENY_LOWER), f"allow-list for {_type} intersects HARD_DENY"
+def _check_allowlists_disjoint(
+    allowlists: Mapping[str, Iterable[str]], hard_deny_lower: FrozenSet[str]
+) -> None:
+    """Raise if any allow-list names a hard-denied attribute (kept out of ``assert``
+    so ``python -O`` cannot strip the invariant)."""
+    for object_type, names in allowlists.items():
+        overlap = _lower(names) & hard_deny_lower
+        if overlap:
+            raise RuntimeError(
+                f"allow-list for {object_type} intersects HARD_DENY: {', '.join(sorted(overlap))}"
+            )
+
+
+_check_allowlists_disjoint(MODIFY_ALLOWLIST, _HARD_DENY_LOWER)
 
 
 class AttributeNotAllowedError(ValueError):

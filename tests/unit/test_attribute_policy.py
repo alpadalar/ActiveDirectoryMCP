@@ -92,3 +92,18 @@ def test_empty_mapping_ok():
 def test_unknown_type():
     with pytest.raises(ValueError):
         validate_modify_attributes("contact", {"mail": "x"})
+
+
+def test_disjoint_invariant_raises_not_asserts():
+    bad = {"user": ["description", "memberOf"]}
+    with pytest.raises(RuntimeError, match="user.*memberof"):
+        ap._check_allowlists_disjoint(bad, ap._HARD_DENY_LOWER)
+    ap._check_allowlists_disjoint({"user": ["description"]}, ap._HARD_DENY_LOWER)
+
+
+def test_module_contains_no_assert_statements():
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(ap))
+    assert not [n for n in ast.walk(tree) if isinstance(n, ast.Assert)]
