@@ -187,6 +187,13 @@ class BaseTool(ABC):
 
         return value
 
+    @staticmethod
+    def _to_int(value, default=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     def _get_attr_value(self, attributes: Dict[str, Any], attr_name: str, default: Any = None) -> Any:
         """
         Safely get an attribute value from LDAP attributes dict.

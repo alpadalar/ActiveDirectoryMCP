@@ -7,7 +7,7 @@
         "base_dn": "DC=yourdomain,DC=com",
         "bind_dn": "CN=ServiceAccount,OU=Service Accounts,DC=yourdomain,DC=com",
         "password": "YourSecureServiceAccountPassword",
-        "timeout": 30,
+        "connect_timeout": 30,
         "auto_bind": true,
         "receive_timeout": 10
     },
