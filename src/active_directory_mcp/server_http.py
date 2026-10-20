@@ -10,7 +10,7 @@ import logging
 import os
 import socket
 import sys
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 import uvicorn
 from fastmcp import FastMCP
@@ -28,6 +28,33 @@ from .registry import FastMCPToolSink, ToolContext, register_tools
 
 
 logger = logging.getLogger("active-directory-mcp.http")
+
+
+class _ShutdownHookServer(uvicorn.Server):
+    """uvicorn server that runs a cleanup hook inside its graceful shutdown.
+
+    uvicorn restores the previous signal handlers and re-raises a captured
+    SIGTERM/SIGINT before ``serve()`` returns, which would kill the process
+    (exit 143) before any cleanup placed after ``serve()`` could run. The hook
+    runs in ``shutdown()`` instead, and the captured signals are discarded so
+    a signal-initiated graceful stop ends with a normal return and exit code 0.
+    """
+
+    def __init__(self, config: uvicorn.Config, on_shutdown: Callable[[], None]) -> None:
+        super().__init__(config)
+        self._on_shutdown = on_shutdown
+
+    async def shutdown(self, sockets: Optional[List[socket.socket]] = None) -> None:
+        try:
+            await super().shutdown(sockets=sockets)
+        finally:
+            try:
+                self._on_shutdown()
+            except Exception:
+                logger.exception("Shutdown hook failed")
+            captured = getattr(self, "_captured_signals", None)
+            if isinstance(captured, list):
+                captured.clear()
 
 
 class ActiveDirectoryMCPHTTPServer:
@@ -133,7 +160,7 @@ class ActiveDirectoryMCPHTTPServer:
             lifespan="on",
             timeout_graceful_shutdown=2,
         )
-        server = uvicorn.Server(config)
+        server = _ShutdownHookServer(config, on_shutdown=self.ldap_manager.disconnect)
         self._uvicorn_server = server
         await server.serve(sockets=sockets)
 
@@ -146,8 +173,10 @@ class ActiveDirectoryMCPHTTPServer:
         """
         Start the HTTP MCP server.
 
-        uvicorn installs its own SIGINT/SIGTERM handlers and returns from
-        serve() on shutdown; LDAP is disconnected afterwards.
+        uvicorn installs its own SIGINT/SIGTERM handlers. LDAP is disconnected from
+        inside the server's shutdown (see ``_ShutdownHookServer``) because uvicorn
+        re-raises a captured SIGTERM before serve() returns; the ``finally`` below
+        is a second, idempotent disconnect.
         """
         try:
             self.logger.info(f"Starting Active Directory MCP HTTP server on {self.host}:{self.port}{self.path}")

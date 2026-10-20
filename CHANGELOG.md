@@ -184,7 +184,9 @@ and enforced by the golden snapshots in `tests/golden/`.
   `server`, `timestamp` and `ldap_connection`/`ldap_server`; the stdio transport adds
   `tests_passed` and its derived `status`. The HTTP `health` response now includes
   `timestamp`.
-- HTTP server shutdown is handled by uvicorn's SIGINT/SIGTERM handling (the LDAP
-  connection is closed afterwards); the custom signal handlers were removed.
+- HTTP server shutdown is handled by uvicorn's SIGINT/SIGTERM handling; the custom signal
+  handlers were removed. The LDAP connection is closed inside uvicorn's graceful shutdown
+  (uvicorn re-raises SIGTERM before `serve()` returns, so closing it afterwards was
+  skipped), and a signal-initiated stop exits with code 0.
 - The docker-compose healthcheck uses `GET /health` (the previous JSON-RPC POST check was
   also malformed YAML).
