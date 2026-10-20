@@ -184,3 +184,17 @@ def test_resolve_none_not_required_warns(caplog: pytest.LogCaptureFixture) -> No
     caplog.set_level(logging.WARNING, logger="active-directory-mcp.auth")
     assert resolve_auth(_sec(required=False), {}) is None
     assert "DISABLED" in caplog.text
+
+
+def test_resolve_env_plaintext_is_stripped_like_presented_header() -> None:
+    verifier = resolve_auth(_sec(), {auth.ENV_API_KEY: f"{KEY}\n"})
+    assert verifier is not None and verifier.verify(KEY)
+    verifier = resolve_auth(_sec(), {auth.ENV_API_KEY: f"  {KEY} "})
+    assert verifier is not None and verifier.verify(KEY)
+
+
+def test_resolve_env_plaintext_length_counted_after_strip() -> None:
+    padded = "short" + " " * 30
+    with pytest.raises(HTTPAuthConfigError):
+        resolve_auth(_sec(), {auth.ENV_API_KEY: padded})
+

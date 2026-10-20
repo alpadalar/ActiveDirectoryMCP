@@ -94,7 +94,9 @@ def resolve_auth(security: SecurityConfig, environ: Mapping[str, str]) -> Option
         if part:
             digests.append(part)
 
-    plaintext = environ.get(ENV_API_KEY, "")
+    # Strip like the presented header (_extract), so a trailing newline from an env_file or
+    # secret file cannot make the stored key unmatchable.
+    plaintext = environ.get(ENV_API_KEY, "").strip()
     if plaintext:
         if len(plaintext) < MIN_KEY_LENGTH:
             raise HTTPAuthConfigError(
