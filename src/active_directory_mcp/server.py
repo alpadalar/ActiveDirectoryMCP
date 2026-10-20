@@ -162,12 +162,15 @@ class ActiveDirectoryMCPServer:
     async def _run_server(self) -> None:
         """Run the MCP server with stdio transport."""
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+            # Lazy: the package __init__ imports this module at import time.
+            from . import __version__
+
             await self.mcp.run(
                 read_stream,
                 write_stream,
                 InitializationOptions(
                     server_name="ActiveDirectoryMCP",
-                    server_version="0.1.0",
+                    server_version=__version__,
                     capabilities=self.mcp.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},

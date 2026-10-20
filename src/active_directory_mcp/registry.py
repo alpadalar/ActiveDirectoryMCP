@@ -455,7 +455,18 @@ class StdioToolSink:
             return [
                 Content(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}, indent=2))
             ]
-        kwargs = {key: value for key, value in (arguments or {}).items() if key in spec.parameters}
+        provided = arguments or {}
+        for required in spec.input_schema.get("required", []):
+            if required not in provided:
+                return [
+                    Content(
+                        type="text",
+                        text=json.dumps(
+                            {"error": f"Missing required argument: {required}"}, indent=2
+                        ),
+                    )
+                ]
+        kwargs = {key: value for key, value in provided.items() if key in spec.parameters}
         result = spec.handler(**kwargs)
         if isinstance(result, list):
             return result

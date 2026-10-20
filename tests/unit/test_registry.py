@@ -286,6 +286,12 @@ def test_dispatch_serialises_non_list_results(ctx: ToolContext) -> None:
     assert json.loads(out[0].text)["n"] == 1
 
 
+def test_dispatch_missing_required_argument(ctx: ToolContext) -> None:
+    out = _stdio(ctx).dispatch("get_user", {})
+    assert json.loads(out[0].text) == {"error": "Missing required argument: username"}
+    ctx.user_tools.get_user.assert_not_called()
+
+
 def test_dispatch_unknown_tool(ctx: ToolContext) -> None:
     out = _stdio(ctx).dispatch("nope", {})
     assert json.loads(out[0].text) == {"error": "Unknown tool: nope"}
