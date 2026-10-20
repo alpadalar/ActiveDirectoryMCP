@@ -7,6 +7,7 @@ import pytest
 from active_directory_mcp.config.models import (
     ActiveDirectoryConfig,
     OrganizationalUnitsConfig,
+    SecurityConfig,
 )
 from active_directory_mcp.core.ldap_manager import LDAPManager
 from active_directory_mcp.tools.computer import ComputerTools
@@ -37,6 +38,8 @@ def mock_ldap_manager(ad_settings) -> Mock:
         computers_ou="CN=Computers,DC=test,DC=local",
         service_accounts_ou="CN=Service,DC=test,DC=local",
     )
+    manager.security_config = SecurityConfig()
+    manager.is_secure_channel.return_value = True
     manager.search.return_value = []
     for name in ("add", "modify", "delete", "move"):
         getattr(manager, name).return_value = True

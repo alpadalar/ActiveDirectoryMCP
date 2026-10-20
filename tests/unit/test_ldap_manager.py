@@ -318,3 +318,30 @@ class TestLifecycle:
             info = manager.test_connection()
         assert info["connected"] is False
         assert "unreachable" in info["error"]
+
+
+class TestSecureChannel:
+    def _conn(self, ldap3_seam, ssl, tls_started=False):
+        conn = ldap3_seam[1].return_value
+        conn.bind.return_value = True
+        conn.bound = True
+        conn.server.ssl = ssl
+        conn.tls_started = tls_started
+        return conn
+
+    def test_ldaps_is_secure(self, manager, ldap3_seam):
+        self._conn(ldap3_seam, ssl=True)
+        assert manager.is_secure_channel() is True
+
+    def test_plain_ldap_is_not_secure(self, manager, ldap3_seam):
+        self._conn(ldap3_seam, ssl=False)
+        assert manager.is_secure_channel() is False
+
+    def test_starttls_is_secure(self, manager, ldap3_seam):
+        self._conn(ldap3_seam, ssl=False, tls_started=True)
+        assert manager.is_secure_channel() is True
+
+    def test_connect_failure_propagates(self, manager, ldap3_seam):
+        ldap3_seam[1].side_effect = LDAPSocketOpenError("down")
+        with pytest.raises(LDAPException):
+            manager.is_secure_channel()

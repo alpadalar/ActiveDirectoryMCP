@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from active_directory_mcp.config.models import SecurityConfig
 from active_directory_mcp.tools.base import BaseTool
 
 EPOCH_1601 = datetime(1601, 1, 1, tzinfo=timezone.utc)
@@ -180,3 +181,89 @@ def test_base_has_no_handrolled_escape_chain():
     src = Path(validation.__file__).parent.joinpath("tools", "base.py").read_text()
     assert "\\2a" not in src
     assert "escape_chars" not in src
+
+
+# ---------------------------------------------------------------------------
+# Security enforcement helpers (SEC-03 / SEC-05 / SEC-06)
+# ---------------------------------------------------------------------------
+
+def _payload(result):
+    return json.loads(result[0].text)
+
+
+def test_require_secure_channel_secure(tool):
+    assert tool._require_secure_channel("reset_user_password") is None
+
+
+def test_require_secure_channel_insecure(tool, mock_ldap_manager):
+    mock_ldap_manager.is_secure_channel.return_value = False
+    data = _payload(tool._require_secure_channel("reset_user_password"))
+    assert data["success"] is False
+    assert data["error_code"] == "unicodePwd_requires_tls"
+    assert data["operation"] == "reset_user_password"
+
+
+def test_require_secure_channel_exception_fails_closed(tool, mock_ldap_manager):
+    mock_ldap_manager.is_secure_channel.side_effect = RuntimeError("boom pw=Hunter2")
+    data = _payload(tool._require_secure_channel("reset_user_password"))
+    assert data["error_code"] == "unicodePwd_requires_tls"
+    assert "Hunter2" not in json.dumps(data)
+
+
+def test_require_secure_channel_never_echoes_password(tool, mock_ldap_manager):
+    mock_ldap_manager.is_secure_channel.return_value = False
+    out = tool._require_secure_channel("reset_user_password")
+    assert "dummy-password" not in out[0].text
+
+
+def test_check_modify_attributes_accepts(tool):
+    assert tool._check_modify_attributes("user", {"mail": "a@b"}, "modify_user", "CN=x") is None
+
+
+def test_check_modify_attributes_rejects_shape(tool):
+    data = _payload(
+        tool._check_modify_attributes(
+            "user", {"userAccountControl": "SECRETVAL", "mail": "a"}, "modify_user", "CN=x"
+        )
+    )
+    assert data["success"] is False
+    assert data["error_code"] == "attribute_not_allowed"
+    assert data["object_type"] == "user"
+    assert data["rejected_attributes"] == ["userAccountControl"]
+    assert "mail" in data["allowed_attributes"]
+    assert data["target"] == "CN=x"
+    assert "SECRETVAL" not in json.dumps(data)
+
+
+def _entries(n):
+    return [{"dn": f"CN=e{i}", "attributes": {}} for i in range(n)]
+
+
+def _set_limit(mock_ldap_manager, limit):
+    mock_ldap_manager.security_config = SecurityConfig(max_list_results=limit)
+
+
+@pytest.mark.parametrize(
+    "available,expected_len,truncated",
+    [(2, 2, False), (3, 3, False), (4, 3, True), (50, 3, True)],
+)
+def test_capped_search_boundaries(tool, mock_ldap_manager, available, expected_len, truncated):
+    _set_limit(mock_ldap_manager, 3)
+    # the server honours size_limit=limit+1
+    mock_ldap_manager.search.side_effect = lambda **kw: _entries(available)[: kw["size_limit"]]
+    entries, was_truncated, limit = tool._capped_search(search_base="DC=x", search_filter="(a=b)")
+    assert (len(entries), was_truncated, limit) == (expected_len, truncated, 3)
+    assert mock_ldap_manager.search.call_args.kwargs["size_limit"] == 4
+
+
+def test_capped_search_unlimited(tool, mock_ldap_manager):
+    _set_limit(mock_ldap_manager, 0)
+    mock_ldap_manager.search.return_value = _entries(5000)
+    entries, truncated, limit = tool._capped_search(search_base="DC=x", search_filter="(a=b)")
+    assert (len(entries), truncated, limit) == (5000, False, 0)
+    assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
+def test_cap_metadata(tool):
+    assert tool._cap_metadata(True, 10) == {"truncated": True, "result_limit": 10}
+    assert tool._cap_metadata(False, 0) == {"truncated": False, "result_limit": None}

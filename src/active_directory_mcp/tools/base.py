@@ -1,7 +1,7 @@
 """Base class for Active Directory tools."""
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Mapping, Optional, Tuple
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 
@@ -11,6 +11,7 @@ from ldap3.core.exceptions import LDAPException
 from ..core.ldap_manager import LDAPManager
 from ..core.logging import get_logger, log_ldap_operation
 from .. import validation
+from ..attribute_policy import AttributeNotAllowedError, validate_modify_attributes
 from ..redaction import redact
 from ..validation import ValidationError
 
@@ -326,6 +327,88 @@ class BaseTool(ABC):
 
         # Otherwise wrap in a list
         return [value]
+
+    # ------------------------------------------------------------------
+    # Security enforcement helpers (SEC-03 / SEC-05 / SEC-06)
+    # ------------------------------------------------------------------
+
+    def _check_modify_attributes(
+        self,
+        object_type: str,
+        attributes: Mapping[str, Any],
+        operation: str,
+        target: str = "",
+    ) -> Optional[List[Content]]:
+        """Return a structured rejection if any attribute is not allow-listed, else None.
+
+        Only attribute names are logged or returned, never values.
+        """
+        try:
+            validate_modify_attributes(object_type, attributes)
+        except AttributeNotAllowedError as e:
+            self.logger.warning(
+                f"{operation}: rejected attributes for {object_type}: {', '.join(e.rejected)}"
+            )
+            return self._format_response(
+                {
+                    "success": False,
+                    "error_code": "attribute_not_allowed",
+                    "error": str(e),
+                    "operation": operation,
+                    "object_type": object_type,
+                    "rejected_attributes": list(e.rejected),
+                    "allowed_attributes": list(e.allowed),
+                    "target": target,
+                },
+                operation,
+            )
+        return None
+
+    def _require_secure_channel(self, operation: str) -> Optional[List[Content]]:
+        """Pre-flight for password writes; call BEFORE any mutation.
+
+        Returns None when the connection is LDAPS/StartTLS, otherwise an error
+        response. Fails closed: any error determining the channel counts as insecure.
+        """
+        try:
+            secure = self.ldap.is_secure_channel() is True
+        except Exception as e:
+            self.logger.warning(
+                f"{operation}: could not verify channel security ({type(e).__name__})"
+            )
+            secure = False
+        if secure:
+            return None
+        return self._format_response(
+            {
+                "success": False,
+                "error_code": "unicodePwd_requires_tls",
+                "error": (
+                    "Refusing to send a password over a non-TLS LDAP connection. "
+                    "Use an ldaps:// server URL (or StartTLS) and retry."
+                ),
+                "operation": operation,
+            },
+            operation,
+        )
+
+    def _capped_search(self, **search_kwargs: Any) -> Tuple[List[Dict[str, Any]], bool, int]:
+        """Search honouring security.max_list_results.
+
+        Returns (entries, truncated, limit). limit 0 means unlimited (explicit
+        opt-out). Otherwise limit+1 is requested so truncation is detected exactly.
+        """
+        limit = int(self.ldap.security_config.max_list_results)
+        if limit <= 0:
+            return self.ldap.search(**search_kwargs), False, 0
+        entries = self.ldap.search(**search_kwargs, size_limit=limit + 1)
+        truncated = len(entries) > limit
+        return entries[:limit], truncated, limit
+
+    @staticmethod
+    def _cap_metadata(truncated: bool, limit: int) -> Dict[str, Any]:
+        """Response metadata describing result capping (limit 0 -> null)."""
+        return {"truncated": truncated, "result_limit": limit if limit > 0 else None}
 
     @abstractmethod
     def get_schema_info(self) -> Dict[str, Any]:
