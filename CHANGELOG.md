@@ -5,18 +5,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- Release workflow: the pyproject version check also covers non-dry-run dispatches, the
-  tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
-  and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.
-- `get_ou_statistics` reports real counts (`total_objects`, `users`, `groups`, `computers`,
-  `sub_ous`) taken from the `get_ou_contents` payload instead of always returning zeros, and
-  passes through `truncated` / `result_limit`.
-- `LDAPManager.move` keeps every component of a multi-valued RDN (`CN=a+SN=b`).
-- `LDAPManager.search` rejects boolean, out-of-range and unknown `search_scope` values with
-  `ValueError` before any connection is made.
-
 ## [1.0.0] - Unreleased (date is set when the owner tags)
 
 The MCP tool names and parameters of the 42 original tools are unchanged in this release.
@@ -192,6 +180,15 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- Release workflow: the pyproject version check also covers non-dry-run dispatches, the
+  tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
+  and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.
+- `get_ou_statistics` reports real counts (`total_objects`, `users`, `groups`, `computers`,
+  `sub_ous`) taken from the `get_ou_contents` payload instead of always returning zeros, and
+  passes through `truncated` / `result_limit`.
+- `LDAPManager.move` keeps every component of a multi-valued RDN (`CN=a+SN=b`).
+- `LDAPManager.search` rejects boolean, out-of-range and unknown `search_scope` values with
+  `ValueError` before any connection is made.
 - `.env.example` no longer activates Azure Key Vault by default (it overrode `AD_BIND_DN` and
   `AD_PASSWORD` and failed startup against a placeholder vault); both credential options are
   commented and the file is safe for the `.sh` and `.bat` launchers.
