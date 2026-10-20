@@ -645,3 +645,71 @@ def test_validate_pool_size_ignored_warning(caplog):
     with caplog.at_level(logging.WARNING):
         validate_config(_cfg())
     assert "connection_pool_size" not in caplog.text
+
+
+# ---------------------------------------------------------------- SecurityConfig (SEC-01/02)
+
+from pydantic import ValidationError  # noqa: E402
+
+from active_directory_mcp.config.models import HttpAuthConfig, SecurityConfig  # noqa: E402
+
+_DIGEST = "a" * 64
+
+
+def test_security_defaults_are_read_only_and_authenticated():
+    sec = SecurityConfig()
+    assert sec.allow_writes is False
+    assert sec.allow_destructive is False
+    assert sec.max_list_results == 1000
+    assert sec.http_auth.required is True
+    assert sec.http_auth.api_key_sha256 == []
+    assert _cfg().security.allow_writes is False
+
+
+def test_security_round_trip():
+    sec = SecurityConfig(
+        allow_writes=True,
+        allow_destructive=True,
+        max_list_results=0,
+        http_auth={"required": False, "api_key_sha256": [_DIGEST.upper()]},
+    )
+    again = SecurityConfig.model_validate(sec.model_dump())
+    assert again == sec
+    assert again.http_auth.api_key_sha256 == [_DIGEST]
+
+
+def test_http_auth_rejects_unknown_key():
+    with pytest.raises(ValidationError):
+        HttpAuthConfig(api_key="plaintext")
+    with pytest.raises(ValidationError):
+        SecurityConfig(http_auth={"typo": 1})
+
+
+def test_http_auth_rejects_bad_digest_without_echo():
+    secret = "not-a-digest-secret"
+    with pytest.raises(ValidationError) as exc:
+        HttpAuthConfig(api_key_sha256=[_DIGEST, secret])
+    text = str(exc.value)
+    assert "api_key_sha256[1]" in text
+    assert secret not in text
+
+
+def test_allow_destructive_requires_allow_writes():
+    with pytest.raises(ValidationError, match="allow_destructive.*allow_writes"):
+        SecurityConfig(allow_destructive=True)
+    assert SecurityConfig(allow_writes=True, allow_destructive=True).allow_destructive
+
+
+def test_max_list_results_rejects_negative():
+    with pytest.raises(ValidationError):
+        SecurityConfig(max_list_results=-1)
+    assert SecurityConfig(max_list_results=0).max_list_results == 0
+
+
+def test_example_configs_still_load():
+    root = Path(__file__).resolve().parents[2]
+    found = [p for p in (root / "config").glob("*.json")] if (root / "config").is_dir() else []
+    for path in found:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if "active_directory" in data:
+            Config.model_validate(data)

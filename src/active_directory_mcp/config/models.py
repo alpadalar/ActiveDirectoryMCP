@@ -1,5 +1,6 @@
 """Configuration models for Active Directory MCP."""
 
+import re
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -110,8 +111,42 @@ class KeyVaultConfig(BaseModel):
         return v
 
 
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+class HttpAuthConfig(BaseModel):
+    """Authentication settings for the HTTP transport."""
+
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    required: bool = Field(
+        default=True, description="Require an API key on every HTTP request (default: true)"
+    )
+    api_key_sha256: List[str] = Field(
+        default_factory=list,
+        description=(
+            "SHA-256 hex digests of accepted API keys. Plaintext keys are never read "
+            "from the config file; supply them through the environment instead."
+        ),
+    )
+
+    @field_validator("api_key_sha256")
+    @classmethod
+    def validate_digests(cls, v: List[str]) -> List[str]:
+        """Require 64-char hex SHA-256 digests (lowered); never echo the offending value."""
+        normalized: List[str] = []
+        for index, entry in enumerate(v):
+            lowered = entry.lower() if isinstance(entry, str) else ""
+            if not _SHA256_HEX.match(lowered):
+                raise ValueError(
+                    f"api_key_sha256[{index}] must be a 64-character hex SHA-256 digest"
+                )
+            normalized.append(lowered)
+        return normalized
+
+
 class SecurityConfig(BaseModel):
-    """Security configuration for LDAP connections."""
+    """Security configuration for LDAP connections and tool-call enforcement."""
 
     model_config = ConfigDict(extra="forbid")
     
@@ -119,6 +154,30 @@ class SecurityConfig(BaseModel):
     validate_certificate: bool = Field(default=True, description="Validate server certificate")
     ca_cert_file: Optional[str] = Field(default=None, description="CA certificate file path")
     require_secure_connection: bool = Field(default=True, description="Require secure connection")
+    allow_writes: bool = Field(
+        default=False,
+        description="Permit write tools (create/modify/enable/disable/reset/move/membership)",
+    )
+    allow_destructive: bool = Field(
+        default=False,
+        description="Additionally permit destructive tools (delete_*); requires allow_writes",
+    )
+    max_list_results: int = Field(
+        default=1000,
+        ge=0,
+        description=(
+            "Maximum entries a list/search tool returns; 0 means unlimited (explicit opt-out)"
+        ),
+    )
+    http_auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
+
+    @model_validator(mode="after")
+    def _destructive_requires_writes(self) -> "SecurityConfig":
+        if self.allow_destructive and not self.allow_writes:
+            raise ValueError(
+                "security.allow_destructive requires security.allow_writes to be true"
+            )
+        return self
 
 
 class LoggingConfig(BaseModel):
