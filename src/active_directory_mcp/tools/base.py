@@ -356,6 +356,21 @@ class BaseTool(ABC):
 
         Only attribute names are logged or returned, never values.
         """
+        if not isinstance(attributes, Mapping):
+            return self._format_response(
+                {
+                    "success": False,
+                    "error_code": "invalid_attributes",
+                    "error": (
+                        "attributes must be an object mapping attribute names to values, "
+                        f"not {type(attributes).__name__}"
+                    ),
+                    "operation": operation,
+                    "object_type": object_type,
+                    "target": target,
+                },
+                operation,
+            )
         try:
             validate_modify_attributes(object_type, attributes)
         except AttributeNotAllowedError as e:

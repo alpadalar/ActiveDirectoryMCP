@@ -6,6 +6,7 @@ import pytest
 
 from active_directory_mcp.config.models import SecurityConfig
 from active_directory_mcp.tools.base import BaseTool
+from tests.support.helpers import parse_response
 
 EPOCH_1601 = datetime(1601, 1, 1, tzinfo=timezone.utc)
 NEVER = 9223372036854775807
@@ -267,3 +268,14 @@ def test_capped_search_unlimited(tool, mock_ldap_manager):
 def test_cap_metadata(tool):
     assert tool._cap_metadata(True, 10) == {"truncated": True, "result_limit": 10}
     assert tool._cap_metadata(False, 0) == {"truncated": False, "result_limit": None}
+
+
+@pytest.mark.parametrize("bad", ['{"description": "x"}', ["description"], 5])
+def test_check_modify_attributes_rejects_non_mapping_clearly(mock_ldap_manager, bad):
+    from active_directory_mcp.tools.group import GroupTools
+
+    tools = GroupTools(mock_ldap_manager)
+    data = parse_response(tools._check_modify_attributes("group", bad, "modify_group", "g"))
+    assert data["success"] is False and data["error_code"] == "invalid_attributes"
+    assert "must be an object" in data["error"]
+    assert "Attribute(s) not permitted" not in data["error"]
