@@ -24,9 +24,8 @@ docker compose up -d
 ### Manuel HTTP Server
 
 ```bash
-# Sanal ortamı hazırlayın
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
+# Bağımlılıkları uv.lock'tan kurun
+uv sync --all-extras
 
 # HTTP sunucusunu başlatın
 ./start_http_server.sh

@@ -47,18 +47,14 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
 - **MCP Inspector**: Compatible with debugging tools
 
 ### 🧪 **Quality Assurance**
-- **129/129 Tests Passing**: 100% test success rate across all modules
-- **Complete Test Coverage**: All 5 tool modules fully tested
-- **LDAP3 Compatible**: Latest library compatibility ensured
-- **Production Ready**: Thoroughly tested and validated
-- **Enterprise Testing**: Unit, Integration, and Performance tests
-- **Comprehensive Coverage**: Config, LDAP, tools, workflows, and performance
-- **Samba AD Test Environment**: Real AD protocols for testing
+- **Unit tests**: mocked ldap3, no server needed (`uv run pytest`)
+- **Integration tests**: run against a local OpenLDAP lab (`scripts/run_tests_with_ldap.sh`); the lab is OpenLDAP, not Active Directory
+- **Manual smoke scripts**: `tests/manual/`
 
 ## 📋 Prerequisites
 
-- Python 3.9 or higher
-- UV package manager (recommended) or pip
+- Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/) package manager
 - Access to Active Directory with appropriate permissions
 - LDAP/LDAPS connectivity to domain controllers
 
@@ -72,17 +68,16 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
    git clone https://github.com/alpadalar/ActiveDirectoryMCP.git
    cd ActiveDirectoryMCP
 
-   # Create and activate virtual environment
-   uv venv
-   source .venv/bin/activate  # Linux/macOS
-   # OR
-   .\.venv\Scripts\Activate.ps1  # Windows
    ```
 
 2. **Install dependencies:**
    ```bash
-   # Install with development dependencies
-   uv pip install -e ".[dev]"
+   # Install everything from uv.lock (dev tools and the Azure Key Vault extra)
+   uv sync --all-extras
+
+   # Or only what you need: runtime only is `uv sync`;
+   # Azure Key Vault support needs `uv sync --extra azure`;
+   # dev tools need `uv sync --extra dev`
    ```
 
 3. **Create configuration:**
@@ -124,13 +119,13 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
 
 ```bash
 # Test configuration
-python -c "import active_directory_mcp; print('Installation OK')"
+uv run python -c "import active_directory_mcp; print('Installation OK')"
 
-# Run tests
-pytest
+# Run unit tests (no server needed)
+uv run pytest
 
 # Test LDAP connection
-AD_MCP_CONFIG="ad-config/ad-config.json" python -m active_directory_mcp.server
+AD_MCP_CONFIG="ad-config/ad-config.json" uv run python -m active_directory_mcp.server
 ```
 
 ## 🚀 Running the Server
@@ -162,14 +157,16 @@ docker compose logs activedirectory-mcp
 
 ### 🧪 Development/Test Environment
 
-For development with included test LDAP server:
+For development with the included OpenLDAP lab (not Active Directory: no
+userAccountControl, unicodePwd or AD ACL semantics):
 
 ```bash
-# 1. Start test environment
-docker compose -f docker-compose-ad.yml up -d
+# 1. Start the lab (any throwaway password)
+export LAB_LDAP_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
+docker compose -f docker-compose-openldap.yml up -d
 
-# 2. Test the setup
-python test_ad_environment.py
+# 2. Run the live integration tests (starts and tears down its own lab)
+scripts/run_tests_with_ldap.sh
 
 # 3. Access services
 # - ActiveDirectoryMCP: http://localhost:8813/activedirectory-mcp
@@ -177,7 +174,7 @@ python test_ad_environment.py
 ```
 
 **Test Features:**
-- ✅ Includes OpenLDAP test server
+- ✅ Includes an OpenLDAP lab server (not Active Directory)
 - ✅ Pre-configured test data
 - ✅ Web-based LDAP management
 - ✅ No external AD required
@@ -352,7 +349,8 @@ manager).
 
 ActiveDirectoryMCP never requires the bind username or password to be stored
 in plaintext. Instead, configure Azure Key Vault and both are retrieved at
-startup:
+startup. Key Vault support is an optional extra: install it with
+`uv sync --extra azure` (or `uv sync --all-extras`).
 
 1. **Create secrets in Key Vault** holding the service account username (bind DN)
    and password:
@@ -444,7 +442,7 @@ resolved from any source.
 }
 ```
 
-### Connection Pool Configuration
+### Performance Configuration
 
 ```json
 {
@@ -459,95 +457,31 @@ resolved from any source.
 
 ## 🧪 Testing
 
-**✅ All Tests Passing (129/129)** - Production Ready!
+Three kinds of checks, described in detail in [TESTING_GUIDE.md](TESTING_GUIDE.md):
 
-### Quick Test Status
-- **Configuration Tests**: 8/8 ✅
-- **User Tools Tests**: 13/13 ✅
-- **Group Tools Tests**: 17/17 ✅
-- **Computer Tools Tests**: 18/18 ✅
-- **Security Tools Tests**: 14/14 ✅
-- **OU Tools Tests**: 18/18 ✅
-- **LDAP Manager Tests**: 12/12 ✅
-- **Integration Tests**: 20/20 ✅ (End-to-end workflows)
-- **Performance Tests**: 9/9 ✅ (Load & stress testing)
-- **Total**: 129/129 tests passing
-
-### Run Unit Tests
+### Unit tests (no server needed)
 ```bash
-# Run all tests with verbose output
-pytest -v
-
-# Run specific test categories
-pytest tests/test_config.py -v                    # Configuration tests
-pytest tests/test_ldap_manager.py -v              # LDAP manager tests
-pytest tests/test_user_tools.py -v                # User management tests
-pytest tests/test_group_tools.py -v               # Group management tests  
-pytest tests/test_computer_tools.py -v            # Computer management tests
-pytest tests/test_security_tools.py -v            # Security & audit tests
-pytest tests/test_organizational_unit_tools.py -v # OU management tests
-pytest tests/test_integration.py -v               # End-to-end workflow tests
-pytest tests/test_performance.py -v               # Performance & load tests
+uv run pytest
 ```
+ldap3 is mocked; nothing connects to a directory. Integration tests are deselected by default.
 
-### Test HTTP Server
+### Live integration tests (OpenLDAP lab)
 ```bash
-# Test HTTP endpoints directly
-python test_scripts/test_http_server.py
-
-# Custom server URL
-python test_scripts/test_http_server.py http://your-server:8813/activedirectory-mcp
+# Starts the lab with a throwaway password, runs `pytest -m integration`, tears down
+scripts/run_tests_with_ldap.sh
 ```
+The lab (`docker-compose-openldap.yml`) is OpenLDAP, not Active Directory: it does not enforce userAccountControl, unicodePwd TLS rules, lastLogon replication or AD ACLs. Requires Docker and free ports 389/636.
 
-### Run Integration Tests
+Lab data: users admin, jdoe, jsmith, mwilson, testadmin and a few groups from `ldap-init/01-structure.ldif`. Follow the lab logs with `docker logs -f openldap-lab`. The admin password is the per-run `LAB_LDAP_PASSWORD`.
+
+### Manual smoke scripts
 ```bash
-# Test with real AD connection (requires config)
-AD_MCP_CONFIG="ad-config/ad-config.json" pytest tests/test_integration.py -v
+# Needs a running HTTP server
+uv run python tests/manual/http_server_smoke.py [URL]
+
+# Needs AD_MCP_CONFIG pointing at a real directory
+uv run python tests/manual/real_ad_smoke.py
 ```
-
-### Run Performance Tests
-```bash
-# Run performance and load tests
-pytest tests/test_performance.py -v
-
-# Run specific performance categories
-pytest tests/test_performance.py::TestLargeDatasetPerformance -v      # Large dataset handling
-pytest tests/test_performance.py::TestConcurrentOperations -v         # Concurrent operations
-pytest tests/test_performance.py::TestMemoryAndResourceUsage -v       # Memory usage tests
-pytest tests/test_performance.py::TestStressScenarios -v              # Stress testing
-
-# Performance test features:
-# - Large dataset performance (10K+ users/groups)
-# - Concurrent operation testing (50+ simultaneous queries) 
-# - Memory usage validation
-# - Sustained load scenarios
-# - Connection pooling efficiency
-```
-
-### 🏢 Test with LDAP/AD Environment (Recommended)
-```bash
-# Start LDAP/AD test environment 
-docker-compose -f docker-compose-ad.yml up -d
-
-# Wait for services to be ready (30 seconds)
-docker logs -f openldap-ad-dc
-
-# Test ActiveDirectoryMCP with test environment
-python test_ad_environment.py
-
-# Expected output:
-# ✅ Connected to LDAP: 192.168.1.100:389
-# ✅ MCP Config: SUCCESS
-# ✅ HTTP API: SUCCESS
-# 🎉 Test environment ready!
-```
-
-**Test Environment Features:**
-- 🔗 LDAP Directory Service with AD-style structure
-- 👥 Test users: admin, jdoe, jsmith, mwilson, testadmin
-- 🔐 Test groups: IT Department, Sales Team, Marketing, All Users
-- 🖥️ Web Admin: http://localhost:8080 (cn=admin,dc=test,dc=local / Admin123!)
-- 📚 Full testing guide: [TESTING_GUIDE.md](TESTING_GUIDE.md)
 
 ### Test HTTP API
 ```bash
@@ -581,16 +515,11 @@ ActiveDirectoryMCP/
 │           ├── organizational_unit.py # OU management
 │           └── security.py         # Security & audit tools
 │
-├── 📁 tests/                       # Comprehensive test suite (129 tests)
-│   ├── test_config.py              # Configuration tests (8)
-│   ├── test_ldap_manager.py        # LDAP manager tests (12)
-│   ├── test_user_tools.py          # User management tests (13)
-│   ├── test_group_tools.py         # Group management tests (17)
-│   ├── test_computer_tools.py      # Computer management tests (18)
-│   ├── test_security_tools.py      # Security & audit tests (14)
-│   ├── test_organizational_unit_tools.py # OU management tests (18)
-│   ├── test_integration.py         # End-to-end workflow tests (20)
-│   └── test_performance.py         # Performance & load tests (9)
+├── 📁 tests/                       # Test suite
+│   ├── unit/                       # Mocked unit tests (default pytest run)
+│   ├── integration/                # Live-LDAP tests (pytest -m integration)
+│   ├── support/                    # Shared test helpers
+│   └── manual/                     # Manual smoke scripts (not collected)
 ├── 📁 ad-config/                   # Configuration files
 │   ├── ad-config.json             # Main server configuration
 │   ├── config.example.json        # Example configuration
@@ -599,9 +528,9 @@ ActiveDirectoryMCP/
 ├── 📄 Configuration Files
 │   ├── pyproject.toml             # Project metadata
 │   ├── docker-compose.yml         # Production deployment
-│   ├── docker-compose-ad.yml      # Test environment with LDAP
+│   ├── docker-compose-openldap.yml # OpenLDAP integration lab
 │   ├── Dockerfile                 # Container definition
-│   └── requirements.in            # Dependencies
+│   └── uv.lock                    # Locked dependencies
 │
 ├── 📄 Scripts
 │   ├── start_server.sh             # Stdio server launcher (Linux/macOS)
@@ -613,12 +542,6 @@ ActiveDirectoryMCP/
 ```
 
 ## 🔍 Troubleshooting
-
-### ✅ Recent Fixes (v0.1.0)
-- **LDAP3 Compatibility**: Fixed TLS configuration compatibility with latest ldap3 library
-- **Test Suite**: All 43 tests now passing successfully (100% success rate)
-- **Mock Issues**: Resolved integration test mocking for error scenarios
-- **Security Config**: Removed deprecated LDAP parameters for better compatibility
 
 ### Common Issues
 
@@ -681,7 +604,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**✅ Production Ready!** 🎉 Your comprehensive Active Directory MCP service is fully tested (129/129 tests passing) and ready for production deployment with complete HTTP transport support, performance validation, and enterprise-grade reliability.
+**Active Directory MCP.** Your comprehensive Active Directory MCP service provides stdio and HTTP transports; see the Testing section for what is and is not covered.
 
 ## 🔗 Related Projects
 
