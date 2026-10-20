@@ -11,5 +11,5 @@ setup(
     name="active-directory-mcp",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    python_requires=">=3.9",
+    python_requires=">=3.11",
 )

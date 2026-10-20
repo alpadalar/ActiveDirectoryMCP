@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "active-directory-mcp"
 version = "0.1.0"
 description = "A Model Context Protocol server for interacting with Active Directory"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [
     {name = "Alperen Adalar", email = "alp.adalar@gmail.com"}
 ]
@@ -18,10 +18,9 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Systems Administration",
     "Topic :: System :: Networking :: Authentication",
@@ -29,31 +28,25 @@ classifiers = [
 
 dependencies = [
     "mcp>=1.28,<2",
+    "fastmcp>=3.2,<4",
     "ldap3>=2.9.1,<3.0.0",
-    "requests>=2.31.0,<3.0.0",
     "pydantic>=2.6.0,<3.0.0",
-    "fastmcp>=0.2.0,<0.4.0",
-    "asgiref>=3.7.0,<4.0.0",
-    "cryptography>=41.0.0,<42.0.0",
-    "python-dateutil>=2.8.0,<3.0.0",
-    "azure-identity>=1.15.0,<2.0.0",
-    "azure-keyvault-secrets>=4.7.0,<5.0.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0,<8.0.0",
-    "black>=23.0.0,<24.0.0",
-    "mypy>=1.0.0,<2.0.0",
-    "pytest-asyncio>=0.21.0,<0.22.0",
-    "ruff>=0.1.0,<0.2.0",
-    "types-requests>=2.31.0,<3.0.0",
-    "pytest-mock>=3.11.0,<4.0.0",
+azure = [
+    "azure-identity>=1.15.0,<2.0.0",
+    "azure-keyvault-secrets>=4.7.0,<5.0.0",
 ]
-django = [
-    "django>=4.0.0,<5.0.0",
-    "djangorestframework>=3.14.0",
-    "pyjwt>=2.8.0",
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=7.1",
+    "ruff>=0.16",
+    "mypy>=1.17,<2",
+    "requests>=2.31.0,<3.0.0",
+    "types-requests>=2.31.0,<3.0.0",
 ]
 
 [project.urls]
@@ -72,13 +65,13 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
-    "-v",
+    "-ra",
     "--tb=short",
     "--strict-markers",
-    "--disable-warnings"
+    "-m", "not integration",
 ]
 markers = [
-    "integration: gerçek LDAP etkileşimli entegrasyon testleri"
+    "integration: requires a live LDAP server; deselected by default; run with -m integration",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:pyasn1.*",
@@ -89,7 +82,7 @@ filterwarnings = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -103,8 +96,18 @@ warn_no_return = true
 warn_unreachable = true
 
 
+[tool.coverage.run]
+source = ["src/active_directory_mcp"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
 [tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I"]
 ignore = []
-line-length = 100
-target-version = "py39"

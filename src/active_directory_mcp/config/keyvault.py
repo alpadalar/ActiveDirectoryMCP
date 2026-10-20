@@ -29,9 +29,9 @@ def _get_client(vault_url: str):
         from azure.keyvault.secrets import SecretClient
     except ImportError as exc:  # pragma: no cover - depends on optional install
         raise KeyVaultError(
-            "Azure Key Vault support requires the 'azure-identity' and "
-            "'azure-keyvault-secrets' packages. Install them with: "
-            "pip install azure-identity azure-keyvault-secrets"
+            "Azure Key Vault support requires the optional 'azure' extra "
+            "(azure-identity, azure-keyvault-secrets). Install it with: "
+            "uv sync --extra azure  or  pip install 'active-directory-mcp[azure]'"
         ) from exc
 
     credential = DefaultAzureCredential()

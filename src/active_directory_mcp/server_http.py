@@ -13,15 +13,7 @@ import signal
 from typing import Optional
 from datetime import datetime
 
-try:
-    from fastmcp import FastMCP
-    FASTMCP_AVAILABLE = True
-except ImportError:
-    try:
-        from mcp.server.fastmcp import FastMCP
-        FASTMCP_AVAILABLE = True
-    except ImportError:
-        FASTMCP_AVAILABLE = False
+from fastmcp import FastMCP
 
 from .config.loader import load_config, validate_config
 from .core.logging import setup_logging
@@ -60,9 +52,6 @@ class ActiveDirectoryMCPHTTPServer:
             port: Server port
             path: HTTP path for MCP endpoint
         """
-        if not FASTMCP_AVAILABLE:
-            raise RuntimeError("FastMCP is not available. Please install fastmcp package.")
-            
         # Load and validate configuration
         self.config = load_config(config_path)
         validate_config(self.config)
