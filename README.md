@@ -39,16 +39,12 @@ uv run pytest -q                 # optional: unit tests, no directory needed
 cp ad-config/config.example.json ad-config/ad-config.json
 ```
 
-Edit `ad-config/ad-config.json` before the first start. The example file is a template and does
-not start as shipped:
-
-- Set `active_directory.server`, `domain`, `base_dn` and `bind_dn` for your domain.
-- The server must use an `ldaps://` URL, for example `ldaps://dc.example.com:636`, while
-  `security.require_secure_connection` is true (the default).
-- Replace `security.ca_cert_file` with the path of your CA certificate, or delete the key to use the
-  system trust store. The placeholder path makes startup fail.
-- Delete the whole `key_vault` section unless you use Azure Key Vault. Otherwise the server tries
-  to reach the placeholder vault and aborts.
+Edit `ad-config/ad-config.json` before the first start: set `active_directory.server`, `domain`,
+`base_dn` and `bind_dn` for your domain. The example uses `ldaps://` URLs, which
+`security.require_secure_connection` (true by default) requires; for an internal CA add
+`security.ca_cert_file` with the path of your CA certificate (see [TLS](#tls)), otherwise the
+system trust store is used. The example contains no `key_vault` section; add one only if you use Azure Key Vault. With
+the placeholder host names it starts but cannot connect to a directory until you edit it.
 
 Provide the bind credential through the environment (or Key Vault, see
 [Credentials](#credentials)) and start the server:

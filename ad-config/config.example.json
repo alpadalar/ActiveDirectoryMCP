@@ -1,9 +1,9 @@
 {
     "active_directory": {
-        "server": "ldap://dc.example.com:389",
+        "server": "ldaps://dc.example.com:636",
         "server_pool": [
-            "ldap://dc1.example.com:389",
-            "ldap://dc2.example.com:389"
+            "ldaps://dc1.example.com:636",
+            "ldaps://dc2.example.com:636"
         ],
         "use_ssl": true,
         "ssl_port": 636,
@@ -14,11 +14,6 @@
         "auto_bind": true,
         "receive_timeout": 10
     },
-    "key_vault": {
-        "vault_url": "https://your-keyvault-name.vault.azure.net/",
-        "username_secret_name": "ad-bind-username",
-        "password_secret_name": "ad-bind-password"
-    },
     "organizational_units": {
         "users_ou": "OU=Users,DC=example,DC=com",
         "groups_ou": "OU=Groups,DC=example,DC=com",
@@ -28,7 +23,6 @@
     "security": {
         "enable_tls": true,
         "validate_certificate": true,
-        "ca_cert_file": "/path/to/ca-certificate.pem",
         "require_secure_connection": true,
         "allow_writes": false,
         "allow_destructive": false,

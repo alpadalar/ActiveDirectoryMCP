@@ -302,3 +302,15 @@ def test_tracked_tree_has_no_ai_residue():
     if not (REPO_ROOT / ".git").exists():
         pytest.skip("not inside a git checkout")
     assert mod.scan_tree(REPO_ROOT) == []
+
+
+def test_config_example_loads_as_shipped(monkeypatch):
+    """A copied ad-config/config.example.json must pass config validation unchanged."""
+    from active_directory_mcp.config.loader import load_config
+
+    monkeypatch.setenv("AD_BIND_DN", "CN=svc,DC=example,DC=com")
+    monkeypatch.setenv("AD_PASSWORD", "placeholder-pw")
+    config = load_config(str(REPO_ROOT / "ad-config" / "config.example.json"))
+    assert config.active_directory.server.startswith("ldaps://")
+    assert config.security.ca_cert_file is None
+    assert config.key_vault is None or not config.key_vault.vault_url
