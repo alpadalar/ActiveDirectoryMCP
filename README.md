@@ -470,6 +470,7 @@ Write access and the HTTP transport are locked down by default. Example (placeho
         "allow_writes": false,
         "allow_destructive": false,
         "max_list_results": 1000,
+        "protect_privileged_targets": true,
         "http_auth": {
             "required": true,
             "api_key_sha256": ["0000000000000000000000000000000000000000000000000000000000000000"]
@@ -481,7 +482,14 @@ Write access and the HTTP transport are locked down by default. Example (placeho
 - `allow_writes` enables create/modify/reset tools; `allow_destructive` additionally enables
   delete tools (destructive tools need both). Refused calls return a structured error.
 - `max_list_results` caps list and report tools (0 = unlimited); responses include
-  `truncated` and `result_limit`.
+  `truncated` and `result_limit`. The audit tools (`get_inactive_users`,
+  `get_password_policy_violations`, `get_stale_computers`) scan the whole directory and cap
+  only the findings they return.
+- `protect_privileged_targets` (default `true`) makes `add_group_member`,
+  `remove_group_member` and `reset_user_password` refuse privileged groups and accounts
+  (Domain/Enterprise/Schema Admins, Administrators, operator groups, `krbtgt`,
+  `Administrator`, anything with `adminCount=1`). Set it to `false` only if you accept that
+  anyone with `allow_writes` can change them.
 - Generate and hash an HTTP API key:
 
 ```bash

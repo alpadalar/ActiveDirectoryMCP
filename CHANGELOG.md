@@ -213,9 +213,29 @@ and enforced by the golden snapshots in `tests/golden/`.
   same way. `modify_user` no longer accepts a `password` key; use `reset_user_password`.
 - List and report tools are capped at `security.max_list_results` (default 1000, 0 =
   unlimited); responses carry `truncated` and `result_limit`.
-- Password operations refuse non-TLS connections (`unicodePwd_requires_tls`).
+- Password operations refuse non-TLS connections (`unicodePwd_requires_tls`). A TLS
+  connection with `security.validate_certificate: false` no longer counts as secure for
+  password writes.
+- `add_group_member`, `remove_group_member` and `reset_user_password` refuse privileged
+  targets (Domain Admins, Enterprise Admins, Schema Admins, Administrators, Account/Backup/
+  Server/Print Operators, `krbtgt`, `Administrator`, and any object with `adminCount=1`)
+  with `protected_target`. Set `security.protect_privileged_targets` to `false` to opt out
+  (default `true`).
+- `get_inactive_users`, `get_password_policy_violations` and `get_stale_computers` scan
+  the whole directory; `security.max_list_results` caps only the findings they return
+  (`truncated`/`result_limit` still apply), so offenders are not missed in large domains.
+- Calls blocked by the policy gate are logged at WARNING (tool name and risk only).
 
 ### Fixed (security enforcement)
+
+- `create_computer` validates `dns_hostname` (must be a valid host inside the configured
+  domain) and the computer name before deriving `dNSHostName` and the `HOST/` SPNs.
+- A plaintext `AD_MCP_HTTP_API_KEY` is stripped before hashing, like the presented key, so
+  a trailing newline from a secret file no longer causes 401 for every request.
+- The auth-failure log line writes a truncated `repr` of the request path (no log
+  forging).
+- `health` and `test_connection` error text is redacted; non-object `attributes` are
+  rejected with a clear message.
 
 - `reset_computer_password` now actually sets the generated 120-character password
   (`unicodePwd`, TLS required, `secrets`-based) and reports success only after the
