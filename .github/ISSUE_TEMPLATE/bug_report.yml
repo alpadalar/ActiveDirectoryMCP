@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a defect in the server or one of its tools
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities here. Use the security policy of this repository.
+
+        Never paste passwords, API keys, tokens or real distinguished names (DNs), host names
+        or user names from a production directory. Replace them with placeholders such as
+        `CN=user,DC=example,DC=com`.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `pip show active-directory-mcp` or the git commit.
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - stdio
+        - http
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: Name the tool and its parameters (without real identifiers).
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Redacted configuration
+      description: >-
+        Never paste passwords, API keys or real DNs. Remove or replace every secret and
+        real identifier before posting.
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: Never paste passwords, API keys or real DNs. Redact before posting.
+      render: text

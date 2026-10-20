@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose an improvement or a new tool
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The names and parameters of the existing tools are a frozen contract. New tools are
+        additive and must carry a risk classification (read, write or destructive).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: For a new tool, give the name, parameters and expected risk class.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
