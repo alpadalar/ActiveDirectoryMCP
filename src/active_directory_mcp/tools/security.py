@@ -1,7 +1,8 @@
 """Security and audit tools for Active Directory."""
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timedelta, timezone
 import base64
 
 import ldap3
@@ -251,9 +252,8 @@ class SecurityTools(BaseTool):
             List of MCP content objects with inactive user information
         """
         try:
-            # Calculate cutoff date
-            cutoff_date = datetime.now() - timedelta(days=days)
-            cutoff_filetime = self._convert_datetime_to_filetime(cutoff_date)
+            # Calculate cutoff date (UTC, same basis as the AD time helpers)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             
             # Build search filter
             search_filter = f"(objectClass={self.ldap.ad_config.user_object_class})"
@@ -276,9 +276,10 @@ class SecurityTools(BaseTool):
             inactive_users = []
             for entry in results:
                 last_logon = self._get_attr_value(entry['attributes'], 'lastLogon', 0)
+                last_logon_dt = self._ad_datetime(last_logon)
 
-                # Check if user is inactive
-                if last_logon == 0 or last_logon < cutoff_filetime:
+                # Check if user is inactive (unset/never counts as inactive)
+                if last_logon_dt is None or last_logon_dt < cutoff_date:
                     uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl'))
                     if uac is None:
                         self.logger.warning(f"Skipping {entry.get('dn')}: unreadable userAccountControl")
@@ -290,7 +291,7 @@ class SecurityTools(BaseTool):
                         'sam_account_name': self._get_attr_value(entry['attributes'], 'sAMAccountName', ''),
                         'display_name': self._get_attr_value(entry['attributes'], 'displayName', ''),
                         'mail': self._get_attr_value(entry['attributes'], 'mail', ''),
-                        'last_logon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                        'last_logon': last_logon_dt if last_logon_dt is not None else 'Never',
                         'days_inactive': self._get_days_since_last_logon({'lastLogon': last_logon}),
                         'enabled': not bool(uac & 0x0002),
                         'group_count': len(member_of),
@@ -354,7 +355,7 @@ class SecurityTools(BaseTool):
             )
 
             violations = []
-            current_time = self._convert_datetime_to_filetime(datetime.now())
+            current_time = self._convert_datetime_to_filetime(datetime.now(timezone.utc))
 
             for entry in user_results:
                 uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl'))
@@ -364,16 +365,14 @@ class SecurityTools(BaseTool):
                 pwd_last_set_raw = self._get_attr_value(entry['attributes'], 'pwdLastSet', 0)
                 account_expires_raw = self._get_attr_value(entry['attributes'], 'accountExpires', 0)
 
-                # Convert datetime objects to FILETIME integers if needed
-                if isinstance(pwd_last_set_raw, datetime):
-                    pwd_last_set = self._convert_datetime_to_filetime(pwd_last_set_raw)
-                else:
-                    pwd_last_set = pwd_last_set_raw if pwd_last_set_raw is not None else 0
-
-                if isinstance(account_expires_raw, datetime):
-                    account_expires = self._convert_datetime_to_filetime(account_expires_raw)
-                else:
-                    account_expires = account_expires_raw if account_expires_raw is not None else 0
+                # Normalise datetime / int / numeric-string values to FILETIME ints
+                # (0 = unset or never)
+                pwd_last_set_dt = self._ad_datetime(pwd_last_set_raw)
+                pwd_last_set = self._convert_datetime_to_filetime(pwd_last_set_dt) if pwd_last_set_dt else 0
+                account_expires_dt = self._ad_datetime(account_expires_raw)
+                account_expires = (
+                    self._convert_datetime_to_filetime(account_expires_dt) if account_expires_dt else 0
+                )
 
                 user_violations = []
 
@@ -406,7 +405,7 @@ class SecurityTools(BaseTool):
                         'display_name': self._get_attr_value(entry['attributes'], 'displayName', ''),
                         'violations': user_violations,
                         'enabled': not bool(uac & 0x0002),
-                        'pwd_last_set': self._convert_filetime_to_datetime(pwd_last_set) if pwd_last_set > 0 else 'Never'
+                        'pwd_last_set': pwd_last_set_dt if pwd_last_set_dt is not None else 'Never'
                     }
 
                     violations.append(violation_info)
@@ -496,7 +495,7 @@ class SecurityTools(BaseTool):
                                     'mail': self._get_attr_value(user_entry['attributes'], 'mail', ''),
                                     'privileged_group': group_name,
                                     'enabled': not bool(uac & 0x0002),
-                                    'last_logon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                                    'last_logon': self._ad_datetime(last_logon) or 'Never',
                                     'days_since_logon': days_since_logon,
                                     'logon_count': self._get_attr_value(user_entry['attributes'], 'logonCount', 0),
                                     'bad_pwd_count': self._get_attr_value(user_entry['attributes'], 'badPwdCount', 0),
@@ -512,50 +511,68 @@ class SecurityTools(BaseTool):
                     self.logger.warning(f"Failed to audit group {group_name}: {group_error}")
                     continue
             
-            # Sort by risk level and name
-            admin_accounts.sort(key=lambda x: (x['risk_level'], x['sam_account_name']))
+            # Sort by severity (HIGH first), then by name
+            admin_accounts.sort(
+                key=lambda x: (self._risk_rank(x['risk_level']), x['sam_account_name'])
+            )
             
             log_ldap_operation("audit_admin_accounts", self.ldap.ad_config.base_dn, True, f"Audited {len(admin_accounts)} admin accounts")
             
             return self._format_response({
                 "admin_accounts": admin_accounts,
                 "total_admin_accounts": len(admin_accounts),
-                "high_risk_count": len([acc for acc in admin_accounts if acc['risk_level'] == 'high']),
-                "medium_risk_count": len([acc for acc in admin_accounts if acc['risk_level'] == 'medium']),
-                "low_risk_count": len([acc for acc in admin_accounts if acc['risk_level'] == 'low'])
+                "high_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'high']),
+                "medium_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'medium']),
+                "low_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'low'])
             }, "audit_admin_accounts")
             
         except Exception as e:
             return self._handle_ldap_error(e, "audit_admin_accounts", self.ldap.ad_config.base_dn)
     
     def _convert_time_interval(self, value) -> Dict[str, Any]:
-        """Convert AD time interval to human readable format."""
-        if isinstance(value, timedelta):
-            # ldap3 already converted this AD Interval attribute to a timedelta;
-            # store a JSON-serializable seconds count instead of the object itself
-            seconds = abs(value.total_seconds())
-            raw_value = seconds
-        else:
-            raw_value = value
-            if value == 0:
-                return {"raw": 0, "description": "Never"}
-            # AD time intervals are in 100-nanosecond units (negative for intervals)
-            seconds = abs(value) / 10000000
+        """Convert an AD time interval to a human readable dict.
 
-        if seconds == 0:
-            return {"raw": raw_value, "description": "Never"}
-        elif seconds < 60:
-            return {"raw": raw_value, "seconds": seconds, "description": f"{seconds:.0f} seconds"}
-        elif seconds < 3600:
-            minutes = seconds / 60
-            return {"raw": raw_value, "seconds": seconds, "description": f"{minutes:.0f} minutes"}
-        elif seconds < 86400:
-            hours = seconds / 3600
-            return {"raw": raw_value, "seconds": seconds, "description": f"{hours:.0f} hours"}
+        Accepts a timedelta (what ldap3 returns for AD interval attributes), a signed
+        100-ns tick count (int) or a numeric string (schema-less mode). `raw` is the
+        interval magnitude in 100-ns ticks for every input type (0 for unset); the
+        "never" sentinels (0, -2**63, 2**63-1, timedelta.max) report
+        raw 0 / 2**63-1 and description "Never" without a `seconds` key.
+        """
+        never_ticks = 9223372036854775807
+        # Anything longer than ~27,000 years is the AD "never" marker, not a real interval
+        never_threshold = 10 ** 7 * 864000000000
+
+        if value is None:
+            return {"raw": 0, "description": "Never"}
+        if isinstance(value, timedelta):
+            ticks = abs((value // timedelta(microseconds=1)) * 10)
         else:
-            days = seconds / 86400
-            return {"raw": raw_value, "seconds": seconds, "description": f"{days:.0f} days"}
-    
+            number = self._to_int(value)
+            if number is None:
+                return {"raw": value, "description": "Unknown"}
+            ticks = abs(number)
+
+        if ticks == 0:
+            return {"raw": 0, "description": "Never"}
+        if ticks > never_threshold:
+            return {"raw": never_ticks, "description": "Never"}
+
+        seconds = ticks / 10000000
+        if seconds < 60:
+            description = f"{seconds:.0f} seconds"
+        elif seconds < 3600:
+            description = f"{seconds / 60:.0f} minutes"
+        elif seconds < 86400:
+            description = f"{seconds / 3600:.0f} hours"
+        else:
+            description = f"{seconds / 86400:.0f} days"
+        return {"raw": ticks, "seconds": seconds, "description": description}
+
+    @staticmethod
+    def _risk_rank(risk_level: Any) -> int:
+        """Severity rank for sorting: HIGH=0, MEDIUM=1, LOW=2, anything else=3."""
+        return {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(str(risk_level).upper(), 3)
+
     def _is_privileged_group(self, group_name: str) -> bool:
         """Check if a group is considered privileged."""
         privileged_groups = [
@@ -634,84 +651,53 @@ class SecurityTools(BaseTool):
     
     def _get_security_recommendation(self, risk_level: str, risk_factors: List[str]) -> str:
         """Get security recommendation based on risk assessment."""
-        if risk_level == "HIGH":
+        level = str(risk_level).upper()
+        if level == "HIGH":
             return "Immediate action required: Review and remediate high-risk security issues"
-        elif risk_level == "MEDIUM":
+        elif level == "MEDIUM":
             return "Review account permissions and consider implementing additional security controls"
         else:
             return "Monitor account activity and maintain current security posture"
     
-    def _convert_filetime_to_datetime(self, filetime: int) -> datetime:
-        """Convert Windows FILETIME to datetime."""
-        return datetime(1601, 1, 1) + timedelta(microseconds=filetime / 10)
-    
-    def _convert_datetime_to_filetime(self, dt: datetime) -> int:
-        """Convert datetime to Windows FILETIME."""
-        from datetime import timezone
-
-        # If dt is timezone-aware, convert to UTC and make naive
-        if dt.tzinfo is not None:
-            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-        epoch = datetime(1601, 1, 1)
-        delta = dt - epoch
-        return int(delta.total_seconds() * 10000000)
-    
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
-        """Get number of days since last logon."""
-        # Support both dict with 'lastLogon' key and raw value
-        if isinstance(attributes.get('lastLogon'), (int, float)):
-            last_logon = attributes.get('lastLogon', 0)
-        else:
-            last_logon = self._get_attr_value(attributes, 'lastLogon', 0)
-        if last_logon == 0:
-            return None
+        """Whole days since last logon; None when unset/never. Accepts datetime, int, numeric str."""
+        return self._days_since(self._get_attr_value(attributes, 'lastLogon', 0))
 
-        try:
-            last_logon_date = self._convert_filetime_to_datetime(last_logon)
-            return (datetime.now() - last_logon_date).days
-        except:
-            return None
-    
     # Additional methods for security testing
-    def check_password_policy(self) -> Dict[str, Any]:
+    def check_password_policy(self) -> List[Dict[str, Any]]:
         """Check password policy compliance."""
         try:
-            # get_domain_info returns List[Content], parse the JSON response
             domain_response = self.get_domain_info()
-            if not domain_response or len(domain_response) == 0:
-                return {'success': False, 'error': 'Domain info not found'}
-                
-            import json
-            domain_info = json.loads(domain_response[0].text)
-            
-            if not domain_info.get('success', True):
-                return {'success': False, 'error': domain_info.get('error', 'Unknown error')}
-                
-            policy_data = domain_info
-            
+            if not domain_response:
+                raise Exception("Domain info not found")
+
+            policy_data = json.loads(domain_response[0].text)
+            if not policy_data.get('success', True):
+                # Pass the structured get_domain_info error through unchanged
+                return domain_response
+
+            pwd_policy = policy_data.get('password_policy', {})
             compliance = {
                 'policy_compliant': True,
                 'recommendations': [],
-                'password_policy': policy_data.get('password_policy', {}),
-                'lockout_policy': policy_data.get('lockout_policy', {})
+                'password_policy': pwd_policy,
             }
-            
-            # Check policy strength
-            pwd_policy = policy_data.get('password_policy', {})
-            if pwd_policy.get('min_length', 0) < 8:
+
+            min_length = self._to_int(pwd_policy.get('min_password_length'), 0)
+            if min_length < 8:
                 compliance['policy_compliant'] = False
                 compliance['recommendations'].append('Increase minimum password length to at least 8 characters')
-            
-            if pwd_policy.get('history_length', 0) < 5:
+
+            history_length = self._to_int(pwd_policy.get('password_history_length'), 0)
+            if history_length < 5:
                 compliance['policy_compliant'] = False
                 compliance['recommendations'].append('Increase password history to at least 5 passwords')
-                
-            return self._format_response(True, compliance)
-            
+
+            return self._format_response(compliance, "check_password_policy")
+
         except Exception as e:
             return self._handle_ldap_error(e, 'check_password_policy', 'domain')
-    
+
     def find_weak_passwords(self) -> List[Dict[str, Any]]:
         """Find users with weak passwords (mock implementation)."""
         try:
@@ -839,25 +825,13 @@ class SecurityTools(BaseTool):
             return 'low'
     
     def _calculate_password_age(self, account_data: Dict[str, Any]) -> Optional[int]:
-        """Calculate password age in days."""
-        pwd_last_set = self._get_attr_value(account_data, 'pwdLastSet', 0)
-        if pwd_last_set == 0 or pwd_last_set is None:
-            return -1  # Test expects -1 for never set or None
-
-        try:
-            # Handle datetime objects directly (for tests)
-            if isinstance(pwd_last_set, datetime):
-                pwd_set_date = pwd_last_set
-            else:
-                pwd_set_date = self._convert_filetime_to_datetime(pwd_last_set)
-            return (datetime.now() - pwd_set_date).days
-        except:
-            return -1  # Test expects -1 for errors
+        """Password age in days; -1 means never set (or an unusable value)."""
+        age = self._days_since(self._get_attr_value(account_data, 'pwdLastSet', 0))
+        return -1 if age is None else age
 
     def generate_security_report(self) -> List[Dict[str, Any]]:
         """Generate comprehensive security report."""
         try:
-            from datetime import datetime
             report_timestamp = datetime.now().isoformat()
             
             # Collect data from various security methods
@@ -867,7 +841,6 @@ class SecurityTools(BaseTool):
             password_policy_response = self.check_password_policy()
             
             # Parse responses (they are List[Content])
-            import json
             domain_info = json.loads(domain_info_response[0].text) if domain_info_response else {}
             admin_audit = json.loads(admin_audit_response[0].text) if admin_audit_response else {}
             privileged_groups = json.loads(privileged_groups_response[0].text) if privileged_groups_response else {}
