@@ -1,7 +1,7 @@
 """Computer management tools for Active Directory."""
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
@@ -71,9 +71,9 @@ class ComputerTools(BaseTool):
                 }
 
                 # Add last logon information
-                last_logon = self._get_attr_value(entry['attributes'], 'lastLogon', 0)
-                if last_logon and last_logon != 0:
-                    computer_info['lastLogon'] = self._convert_filetime_to_datetime(last_logon)
+                last_logon = self._ad_datetime(self._get_attr_value(entry['attributes'], 'lastLogon'))
+                if last_logon is not None:
+                    computer_info['lastLogon'] = last_logon
                 
                 # Add additional attributes if present
                 for attr in attributes:
@@ -478,37 +478,37 @@ class ComputerTools(BaseTool):
             List of MCP content objects with stale computer information
         """
         try:
-            # Calculate cutoff date
-            cutoff_date = datetime.now() - timedelta(days=days)
-            cutoff_filetime = self._convert_datetime_to_filetime(cutoff_date)
-            
+            # Calculate cutoff date (UTC-aware, matching the shared AD time helpers)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
             # Search for all computers
             search_filter = "(objectClass=computer)"
             attributes = ['sAMAccountName', 'dNSHostName', 'lastLogon', 'pwdLastSet', 'operatingSystem', 'description']
-            
+
             results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=search_filter,
                 attributes=attributes
             )
-            
+
             stale_computers = []
             for entry in results:
-                last_logon = self._get_attr_value(entry['attributes'], 'lastLogon', 0)
+                entry_attrs = entry['attributes']
+                last_logon = self._ad_datetime(self._get_attr_value(entry_attrs, 'lastLogon'))
 
-                # Check if computer is stale
-                if last_logon == 0 or last_logon < cutoff_filetime:
+                # Never logged on (None) or logged on before the cutoff is stale
+                if last_logon is None or last_logon < cutoff_date:
                     computer_info = {
                         'dn': entry['dn'],
-                        'sAMAccountName': self._get_attr_value(entry['attributes'], 'sAMAccountName', ''),
-                        'dNSHostName': self._get_attr_value(entry['attributes'], 'dNSHostName', ''),
-                        'operatingSystem': self._get_attr_value(entry['attributes'], 'operatingSystem', ''),
-                        'description': self._get_attr_value(entry['attributes'], 'description', ''),
-                        'lastLogon': self._convert_filetime_to_datetime(last_logon) if last_logon > 0 else 'Never',
+                        'sAMAccountName': self._get_attr_value(entry_attrs, 'sAMAccountName', ''),
+                        'dNSHostName': self._get_attr_value(entry_attrs, 'dNSHostName', ''),
+                        'operatingSystem': self._get_attr_value(entry_attrs, 'operatingSystem', ''),
+                        'description': self._get_attr_value(entry_attrs, 'description', ''),
+                        'lastLogon': last_logon if last_logon is not None else 'Never',
                         'daysSinceLastLogon': self._get_days_since_last_logon(entry_attrs)
                     }
                     stale_computers.append(computer_info)
-            
+
             log_ldap_operation("get_stale_computers", self.ldap.ad_config.base_dn, True, f"Found {len(stale_computers)} stale computers")
             
             return self._format_response({
@@ -579,50 +579,14 @@ class ComputerTools(BaseTool):
         return bool(value & 0x80000)  # Check TRUSTED_FOR_DELEGATION flag
     
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
-        """Get number of days since last logon."""
-        last_logon = self._get_attr_value(attributes, 'lastLogon', 0)
-        if last_logon == 0 or last_logon is None:
-            return None
-
-        try:
-            last_logon_date = self._convert_filetime_to_datetime(last_logon)
-            return (datetime.now() - last_logon_date).days
-        except:
-            return None
+        """Days since last logon; None when the computer never logged on."""
+        return self._days_since(self._get_attr_value(attributes, 'lastLogon'))
 
     def _get_password_age_days(self, attributes: Dict[str, Any]) -> Optional[int]:
-        """Get number of days since password was last set."""
-        pwd_last_set = self._get_attr_value(attributes, 'pwdLastSet', 0)
-        if pwd_last_set == 0:
-            return None
+        """Days since the machine password was set; None when unset."""
+        return self._days_since(self._get_attr_value(attributes, 'pwdLastSet'))
 
-        try:
-            pwd_date = self._convert_filetime_to_datetime(pwd_last_set)
-            return (datetime.now() - pwd_date).days
-        except:
-            return None
-    
-    def _convert_filetime_to_datetime(self, filetime) -> datetime:
-        """Convert Windows FILETIME to datetime."""
-        # If already datetime, return as is
-        if isinstance(filetime, datetime):
-            return filetime
-            
-        # Convert integer FILETIME (100-nanosecond intervals since January 1, 1601)
-        if isinstance(filetime, (int, float)) and filetime != 0:
-            return datetime(1601, 1, 1) + timedelta(microseconds=filetime / 10)
-        
-        # Default fallback
-        return datetime.now()
-    
-    def _convert_datetime_to_filetime(self, dt: datetime) -> int:
-        """Convert datetime to Windows FILETIME."""
-        # FILETIME is 100-nanosecond intervals since January 1, 1601
-        epoch = datetime(1601, 1, 1)
-        delta = dt - epoch
-        return int(delta.total_seconds() * 10000000)
-    
-    # Additional methods that tests expect
+    # Legacy helper tools (fabricated data; scheduled for removal in Phase 4, SEC-04)
     def get_computer_status(self, computer_name: str) -> Dict[str, Any]:
         """Get detailed status information about a computer."""
         try:
