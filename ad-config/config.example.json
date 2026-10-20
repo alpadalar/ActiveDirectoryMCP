@@ -10,10 +10,14 @@
         "domain": "example.com",
         "base_dn": "DC=example,DC=com",
         "bind_dn": "CN=service-account,OU=Service Accounts,DC=example,DC=com",
-        "password": "your-service-account-password",
         "timeout": 30,
         "auto_bind": true,
         "receive_timeout": 10
+    },
+    "key_vault": {
+        "vault_url": "https://your-keyvault-name.vault.azure.net/",
+        "username_secret_name": "ad-bind-username",
+        "password_secret_name": "ad-bind-password"
     },
     "organizational_units": {
         "users_ou": "OU=Users,DC=example,DC=com",

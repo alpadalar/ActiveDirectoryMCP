@@ -43,6 +43,9 @@ services:
       - HTTP_HOST=0.0.0.0
       - HTTP_PORT=8813
       - HTTP_PATH=/activedirectory-mcp
+      # Test-only credential for the local openldap-ad container above.
+      # Never do this for production - use Azure Key Vault instead (see docker-compose.yml).
+      - AD_PASSWORD=Admin123!
     ports:
       - "8813:8813"
     volumes:

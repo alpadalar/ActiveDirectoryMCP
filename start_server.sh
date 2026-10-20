@@ -16,14 +16,22 @@ fi
 # Activate virtual environment
 source .venv/bin/activate
 
+# Load environment variables from .env, if present (see .env.example)
+if [ -f ".env" ]; then
+    echo "Loading environment variables from .env"
+    set -a
+    source .env
+    set +a
+fi
+
 # Check if config file exists
 if [ -z "$AD_MCP_CONFIG" ]; then
-    export AD_MCP_CONFIG="ad-config/config.json"
+    export AD_MCP_CONFIG="ad-config/ad-config.json"
 fi
 
 if [ ! -f "$AD_MCP_CONFIG" ]; then
     echo "Configuration file not found: $AD_MCP_CONFIG"
-    echo "Please copy ad-config/config.example.json to ad-config/config.json and configure it."
+    echo "Please copy ad-config/config.example.json to ad-config/ad-config.json and configure it."
     exit 1
 fi
 

@@ -14,7 +14,14 @@ class ActiveDirectoryConfig(BaseModel):
     domain: str = Field(..., description="Active Directory domain")
     base_dn: str = Field(..., description="Base Distinguished Name")
     bind_dn: str = Field(..., description="Service account DN for binding")
-    password: str = Field(..., description="Service account password")
+    password: Optional[str] = Field(
+        default=None,
+        description=(
+            "Service account password. Leave unset and configure 'key_vault' "
+            "(recommended) to retrieve it securely from Azure Key Vault instead "
+            "of storing it in plaintext."
+        ),
+    )
     timeout: int = Field(default=30, description="Connection timeout in seconds")
     auto_bind: bool = Field(default=True, description="Automatically bind on connection")
     receive_timeout: int = Field(default=10, description="Receive timeout in seconds")
@@ -35,6 +42,33 @@ class OrganizationalUnitsConfig(BaseModel):
     groups_ou: str = Field(..., description="Groups organizational unit DN")
     computers_ou: str = Field(..., description="Computers organizational unit DN")
     service_accounts_ou: str = Field(..., description="Service accounts organizational unit DN")
+
+
+class KeyVaultConfig(BaseModel):
+    """Azure Key Vault configuration for secure credential retrieval."""
+
+    vault_url: str = Field(
+        ..., description="Azure Key Vault URL, e.g. https://your-vault.vault.azure.net/"
+    )
+    username_secret_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of the Key Vault secret holding the AD bind DN / username. "
+            "Optional - if unset, 'active_directory.bind_dn' from the config file is used."
+        ),
+    )
+    password_secret_name: str = Field(
+        default="ad-bind-password",
+        description="Name of the Key Vault secret holding the AD service account password",
+    )
+
+    @field_validator('vault_url')
+    @classmethod
+    def validate_vault_url(cls, v):
+        """Validate Key Vault URL format."""
+        if not v.startswith('https://'):
+            raise ValueError('Key Vault URL must start with https://')
+        return v
 
 
 class SecurityConfig(BaseModel):
@@ -96,6 +130,10 @@ class Config(BaseModel):
     
     active_directory: ActiveDirectoryConfig
     organizational_units: OrganizationalUnitsConfig
+    key_vault: Optional[KeyVaultConfig] = Field(
+        default=None,
+        description="Azure Key Vault settings used to retrieve secrets such as the bind password",
+    )
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)

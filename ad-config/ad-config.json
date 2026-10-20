@@ -3,8 +3,7 @@
         "server": "ldap://192.168.1.100:389",
         "domain": "test.local",
         "base_dn": "dc=test,dc=local",
-        "bind_dn": "cn=admin,dc=test,dc=local",
-        "password": "Admin123!"
+        "bind_dn": "cn=admin,dc=test,dc=local"
     },
     "organizational_units": {
         "users_ou": "ou=people,dc=test,dc=local",
