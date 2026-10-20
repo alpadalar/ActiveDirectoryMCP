@@ -6,16 +6,17 @@ import os
 import ssl
 import time
 from threading import Lock
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import ldap3
-from ldap3 import ALL, ALL_ATTRIBUTES, BASE, SUBTREE, Connection, Server
+from ldap3 import ALL, ALL_ATTRIBUTES, BASE, LEVEL, SUBTREE, Connection, Server
 from ldap3.core.exceptions import (
     LDAPBindError,
     LDAPException,
     LDAPNoSuchObjectResult,
     LDAPSocketOpenError,
 )
+from ldap3.utils.dn import safe_rdn
 
 from ..config.models import (
     ActiveDirectoryConfig,
@@ -25,13 +26,19 @@ from ..config.models import (
 )
 from ..redaction import redact
 
+_SCOPE_BY_INT: Dict[int, Literal["BASE", "LEVEL", "SUBTREE"]] = {
+    0: BASE,
+    1: LEVEL,
+    2: SUBTREE,
+}
+
 SKIP_SCHEMA = os.environ.get("AD_MCP_SKIP_SCHEMA", "").lower() in ("1", "true", "yes")
 
 
 class _CIDict(dict):
     """Dict with case-insensitive key lookup; keeps the original keys."""
 
-    def _find(self, key):
+    def _find(self, key: Any) -> Any:
         if isinstance(key, str):
             low = key.lower()
             for k in self.keys():
@@ -39,13 +46,13 @@ class _CIDict(dict):
                     return k
         return key
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Any) -> Any:
         return super().__getitem__(self._find(key))
 
-    def __contains__(self, key):
+    def __contains__(self, key: Any) -> bool:
         return super().__contains__(self._find(key))
 
-    def get(self, key, default=None):
+    def get(self, key: Any, default: Any = None) -> Any:
         return super().get(self._find(key), default)
 
 
@@ -150,7 +157,7 @@ class LDAPManager:
             if self._connection and self._connection.bound:
                 return self._connection
 
-            last_error = None
+            last_error: Optional[Exception] = None
             attempts = (
                 max_attempts if max_attempts is not None else self.performance_config.max_retries
             )
@@ -158,7 +165,7 @@ class LDAPManager:
             for attempt in range(attempts):
                 try:
                     # Try each server in the pool
-                    for server in self._server_pool:
+                    for server in self._server_pool or []:
                         try:
                             logger.debug(f"Attempting connection to {server.host}:{server.port}")
 
@@ -268,7 +275,7 @@ class LDAPManager:
         search_base: str,
         search_filter: str,
         attributes: Union[List[str], str] = ALL_ATTRIBUTES,
-        search_scope: str = SUBTREE,
+        search_scope: Union[Literal["BASE", "LEVEL", "SUBTREE"], int] = SUBTREE,
         size_limit: int = 0,
         time_limit: int = 0,
     ) -> List[Dict[str, Any]]:
@@ -279,7 +286,8 @@ class LDAPManager:
             search_base: Base DN for search
             search_filter: LDAP filter string
             attributes: Attributes to retrieve
-            search_scope: Search scope (SUBTREE, ONELEVEL, BASE)
+            search_scope: Search scope (SUBTREE, LEVEL, BASE) or the ldap3 integer
+                equivalents 0/1/2 (BASE/LEVEL/SUBTREE), which are normalised to the constants
             size_limit: Maximum number of results (0 = no limit)
             time_limit: Server-side time limit in seconds per request (0 = server default)
 
@@ -303,6 +311,10 @@ class LDAPManager:
 
             extra_kwargs: Dict[str, Any] = {"time_limit": time_limit} if time_limit > 0 else {}
 
+            scope: Literal["BASE", "LEVEL", "SUBTREE"] = (
+                _SCOPE_BY_INT[search_scope] if isinstance(search_scope, int) else search_scope
+            )
+
             entries = []
             cookie = None
 
@@ -311,14 +323,14 @@ class LDAPManager:
                     success = connection.search(
                         search_base=search_base,
                         search_filter=search_filter,
-                        search_scope=search_scope,
+                        search_scope=scope,
                         attributes=attributes,
                         paged_size=paged_size,
                         paged_cookie=cookie,
                         **extra_kwargs,
                     )
                 except LDAPNoSuchObjectResult:
-                    if search_scope == BASE:
+                    if scope == BASE:
                         # A BASE probe of a missing entry means "does not exist".
                         break
                     raise
@@ -479,7 +491,9 @@ class LDAPManager:
         try:
             logger.debug(f"Moving entry {dn} to {new_parent}")
 
-            success = connection.modify_dn(dn, new_superior=new_parent)
+            # ldap3 requires the relative DN (first RDN of the entry) as a positional argument
+            relative_dn = safe_rdn(dn, decompose=False)[0]
+            success = connection.modify_dn(dn, relative_dn, new_superior=new_parent)
 
             if success:
                 logger.info(f"Successfully moved entry {dn} to {new_parent}")
@@ -532,10 +546,10 @@ class LDAPManager:
             logger.error(f"Connection test failed: {e}")
             return {"connected": False, "error": redact(str(e))}
 
-    def __enter__(self):
+    def __enter__(self) -> "LDAPManager":
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
         self.disconnect()

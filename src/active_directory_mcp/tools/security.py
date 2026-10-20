@@ -555,7 +555,7 @@ class SecurityTools(BaseTool):
                 "Administrators",
             ]
 
-            admin_accounts = []
+            admin_accounts: List[Dict[str, Any]] = []
 
             for group_name in privileged_groups:
                 try:
@@ -706,7 +706,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "audit_admin_accounts", self.ldap.ad_config.base_dn)
 
-    def _convert_time_interval(self, value) -> Dict[str, Any]:
+    def _convert_time_interval(self, value: Any) -> Dict[str, Any]:
         """Convert an AD time interval to a human readable dict.
 
         Accepts a timedelta (what ldap3 returns for AD interval attributes), a signed

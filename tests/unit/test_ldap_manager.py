@@ -271,7 +271,16 @@ class TestWriteOperations:
     def test_move_passes_new_superior(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
         manager.move("CN=a,OU=x", "OU=y")
-        conn_cls.return_value.modify_dn.assert_called_once_with("CN=a,OU=x", new_superior="OU=y")
+        conn_cls.return_value.modify_dn.assert_called_once_with(
+            "CN=a,OU=x", "CN=a", new_superior="OU=y"
+        )
+
+    def test_move_keeps_escaped_comma_in_relative_dn(self, manager, ldap3_seam):
+        _, conn_cls = ldap3_seam
+        manager.move("CN=a\\,b,OU=x", "OU=y")
+        conn_cls.return_value.modify_dn.assert_called_once_with(
+            "CN=a\\,b,OU=x", "CN=a\\,b", new_superior="OU=y"
+        )
 
     @pytest.mark.parametrize(
         "method,args",

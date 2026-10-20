@@ -5,6 +5,7 @@ This module provides an HTTP transport layer for the MCP server,
 supporting both regular HTTP and streamable HTTP transports.
 """
 
+import argparse
 import asyncio
 import logging
 import os
@@ -223,10 +224,10 @@ class ActiveDirectoryMCPCommand:
 
     help = "Active Directory MCP HTTP Server"
 
-    def __init__(self):
-        self.server = None
+    def __init__(self) -> None:
+        self.server: Optional[ActiveDirectoryMCPHTTPServer] = None
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         """Add command line arguments."""
         parser.add_argument(
             "--host", type=str, default="0.0.0.0", help="Server host (default: 0.0.0.0)"
@@ -240,7 +241,7 @@ class ActiveDirectoryMCPCommand:
         )
         parser.add_argument("--config", type=str, help="Configuration file path")
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         """Handle the command execution."""
         config_path = options.get("config") or os.getenv("AD_MCP_CONFIG")
 
@@ -254,9 +255,8 @@ class ActiveDirectoryMCPCommand:
         self.server.run()
 
 
-def main():
+def main() -> None:
     """Main entry point for standalone execution."""
-    import argparse
 
     parser = argparse.ArgumentParser(description="Active Directory MCP HTTP Server")
     command = ActiveDirectoryMCPCommand()

@@ -152,7 +152,7 @@ def _parse(dn: Any) -> List[_RdnComponent]:
     for attr, value, _sep in parts:
         if not attr or not value.strip():
             raise ValidationError("DN contains an empty attribute or value")
-    return parts
+    return list(parts)
 
 
 def _rdns(parts: List[_RdnComponent]) -> List[FrozenSet[Tuple[str, str]]]:
@@ -200,7 +200,7 @@ def validate_dn(dn: Any, base_dn: Optional[str] = None, *, allow_base: bool = Tr
             raise ValidationError("DN is outside the configured base DN")
         if not allow_base and _rdns(parts) == _rdns(base_parts):
             raise ValidationError("DN must be beneath the base DN, not equal to it")
-    return dn.strip()
+    return str(dn.strip())
 
 
 def is_dn_under(dn: Any, base_dn: str) -> bool:

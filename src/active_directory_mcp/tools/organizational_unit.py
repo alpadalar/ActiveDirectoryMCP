@@ -1,7 +1,7 @@
 """Organizational Unit management tools for Active Directory."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import ldap3
 from ldap3 import MODIFY_REPLACE
@@ -605,7 +605,7 @@ class OrganizationalUnitTools(BaseTool):
             log_ldap_operation("get_ou_contents", ou_dn, True, f"Retrieved {len(contents)} objects")
 
             # Count by type
-            type_counts = {}
+            type_counts: Dict[str, int] = {}
             for obj in contents:
                 obj_type = obj["type"]
                 type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
@@ -749,7 +749,7 @@ class OrganizationalUnitTools(BaseTool):
         parent_dn: Optional[str] = None,
         description: Optional[str] = None,
         manager_dn: Optional[str] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> List[Content]:
         """Alias for create_ou method."""
         # Handle both parameter names for backward compatibility
@@ -769,11 +769,11 @@ class OrganizationalUnitTools(BaseTool):
 
     def move_organizational_unit(
         self,
-        ou_dn: str = None,
-        source_dn: str = None,
-        new_parent_dn: str = None,
-        destination_parent_dn: str = None,
-        target_parent_dn: str = None,
+        ou_dn: Optional[str] = None,
+        source_dn: Optional[str] = None,
+        new_parent_dn: Optional[str] = None,
+        destination_parent_dn: Optional[str] = None,
+        target_parent_dn: Optional[str] = None,
     ) -> List[Content]:
         """Alias for move_ou method."""
         # Handle both parameter names for backward compatibility
@@ -783,7 +783,9 @@ class OrganizationalUnitTools(BaseTool):
             new_parent_dn = destination_parent_dn
         if target_parent_dn is not None:
             new_parent_dn = target_parent_dn
-        return self.move_ou(ou_dn, new_parent_dn)
+        # Missing DNs are rejected by move_ou's own validation (structured error), so the
+        # Optional values are deliberately forwarded rather than pre-checked here.
+        return self.move_ou(cast(str, ou_dn), cast(str, new_parent_dn))
 
     # Convenience accessors
     def get_ou_children(self, ou_dn: str) -> List[Content]:

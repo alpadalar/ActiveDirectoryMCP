@@ -22,6 +22,7 @@ import logging
 import os
 import signal
 import sys
+from types import FrameType
 from typing import Any, Dict, List, Optional
 
 import mcp.server.stdio
@@ -141,12 +142,13 @@ class ActiveDirectoryMCPServer:
         self._tool_handlers = sink.handlers
 
         # Register the list_tools handler
-        @self.mcp.list_tools()
+        # mcp's lowlevel Server.list_tools()/call_tool() decorator factories are unannotated.
+        @self.mcp.list_tools()  # type: ignore[untyped-decorator]
         async def handle_list_tools() -> list[types.Tool]:
             return self._tools
 
         # Register the call_tool handler
-        @self.mcp.call_tool()
+        @self.mcp.call_tool()  # type: ignore[untyped-decorator]
         async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
             try:
                 return sink.dispatch(name, arguments)
@@ -197,7 +199,7 @@ class ActiveDirectoryMCPServer:
         The server runs until terminated by a signal or fatal error.
         """
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, frame: Optional[FrameType]) -> None:
             self.logger.info("Received signal to shutdown...")
             self.ldap_manager.disconnect()
             sys.exit(0)
@@ -246,7 +248,7 @@ class ActiveDirectoryMCPServer:
             sys.exit(1)
 
 
-def main():
+def main() -> None:
     """Main entry point for the server."""
     config_path = os.getenv("AD_MCP_CONFIG")
     if not config_path:

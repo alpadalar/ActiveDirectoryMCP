@@ -1,7 +1,7 @@
 """Configuration models for Active Directory MCP."""
 
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
@@ -45,13 +45,13 @@ class ActiveDirectoryConfig(BaseModel):
 
     @field_validator("user_object_class", "group_object_class", "computer_object_class")
     @classmethod
-    def validate_object_classes(cls, v):
+    def validate_object_classes(cls, v: Any) -> str:
         """Reject values that could break out of an LDAP filter (WR-05)."""
         return validate_object_class(v)
 
     @field_validator("server")
     @classmethod
-    def validate_server(cls, v):
+    def validate_server(cls, v: str) -> str:
         """Validate server URL format."""
         if not v.startswith(("ldap://", "ldaps://")):
             raise ValueError("Server must start with ldap:// or ldaps://")
@@ -101,7 +101,7 @@ class KeyVaultConfig(BaseModel):
 
     @field_validator("vault_url")
     @classmethod
-    def validate_vault_url(cls, v):
+    def validate_vault_url(cls, v: str) -> str:
         """Validate Key Vault URL format."""
         if not v.startswith("https://"):
             raise ValueError("Key Vault URL must start with https://")
@@ -222,7 +222,7 @@ class LoggingConfig(BaseModel):
 
     @field_validator("level")
     @classmethod
-    def validate_level(cls, v):
+    def validate_level(cls, v: str) -> str:
         """Validate logging level."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
@@ -248,7 +248,7 @@ class PerformanceConfig(BaseModel):
 
     @field_validator("connection_pool_size", "max_retries", "page_size")
     @classmethod
-    def validate_positive_int(cls, v):
+    def validate_positive_int(cls, v: Optional[int]) -> Optional[int]:
         """Validate positive integers."""
         if v is not None and v <= 0:
             raise ValueError("Value must be positive")
@@ -256,7 +256,7 @@ class PerformanceConfig(BaseModel):
 
     @field_validator("retry_delay")
     @classmethod
-    def validate_positive_float(cls, v):
+    def validate_positive_float(cls, v: float) -> float:
         """Validate positive float."""
         if v <= 0:
             raise ValueError("Retry delay must be positive")
@@ -286,7 +286,7 @@ class Config(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _fill_default_ous(cls, data):
+    def _fill_default_ous(cls, data: Any) -> Any:
         """Fill missing organizational_units entries from base_dn-derived defaults."""
         if not isinstance(data, dict):
             return data

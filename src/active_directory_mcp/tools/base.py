@@ -3,7 +3,7 @@
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, overload
 
 from ldap3.core.exceptions import LDAPException
 from mcp.types import TextContent as Content
@@ -54,7 +54,7 @@ class BaseTool(ABC):
         self.ldap = ldap_manager
         self.logger = get_logger(self.__class__.__name__)
 
-    def _serialize_datetime(self, obj):
+    def _serialize_datetime(self, obj: Any) -> Any:
         """Helper function to serialize datetime objects."""
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -275,8 +275,16 @@ class BaseTool(ABC):
         """Escape a value for use in an LDAP filter (delegates to validation module)."""
         return validation.escape_filter_value(value)
 
+    @overload
     @staticmethod
-    def _to_int(value, default=None):
+    def _to_int(value: Any) -> Optional[int]: ...
+
+    @overload
+    @staticmethod
+    def _to_int(value: Any, default: int) -> int: ...
+
+    @staticmethod
+    def _to_int(value: Any, default: Optional[int] = None) -> Optional[int]:
         """Convert an LDAP value to int; returns `default` (None) if it cannot be parsed."""
         if isinstance(value, (list, tuple)):
             value = value[0] if value else None
@@ -358,7 +366,7 @@ class BaseTool(ABC):
     def _check_modify_attributes(
         self,
         object_type: str,
-        attributes: Mapping[str, Any],
+        attributes: Any,  # untrusted tool input: validated below, may arrive as any JSON type
         operation: str,
         target: str = "",
     ) -> Optional[List[Content]]:

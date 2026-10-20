@@ -13,6 +13,7 @@ credential sources.
 
 import logging
 from functools import lru_cache
+from typing import Any
 
 logger = logging.getLogger("active-directory-mcp.keyvault")
 
@@ -22,7 +23,7 @@ class KeyVaultError(RuntimeError):
 
 
 @lru_cache(maxsize=None)
-def _get_client(vault_url: str):
+def _get_client(vault_url: str) -> Any:
     """Build (and cache) a SecretClient for the given vault URL."""
     try:
         from azure.identity import DefaultAzureCredential
@@ -65,4 +66,4 @@ def get_secret(vault_url: str, secret_name: str) -> str:
     if not secret.value:
         raise KeyVaultError(f"Secret '{secret_name}' in Key Vault '{vault_url}' is empty")
 
-    return secret.value
+    return str(secret.value)

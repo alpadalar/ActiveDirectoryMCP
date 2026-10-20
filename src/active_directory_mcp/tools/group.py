@@ -631,7 +631,7 @@ class GroupTools(BaseTool):
             members = []
             processed_groups = set()  # To avoid infinite recursion
 
-            def process_members(dns_to_process, level=0):
+            def process_members(dns_to_process: List[str], level: int = 0) -> None:
                 for member_dn in dns_to_process:
                     if not validation.is_dn_under(member_dn, self._base_dn()):
                         self.logger.warning(

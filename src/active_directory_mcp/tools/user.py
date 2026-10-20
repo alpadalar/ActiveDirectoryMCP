@@ -4,7 +4,7 @@ import json
 import secrets
 import string
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import ldap3
 from ldap3 import MODIFY_REPLACE
@@ -357,7 +357,7 @@ class UserTools(BaseTool):
                 e, "create_user", user_dn if "user_dn" in locals() else username
             )
 
-    def modify_user(self, username: str, attributes: Dict[str, Any]) -> List[Content]:
+    def modify_user(self, username: str, attributes: Union[Dict[str, Any], str]) -> List[Content]:
         """
         Modify user attributes.
 
@@ -374,11 +374,10 @@ class UserTools(BaseTool):
         """
         try:
             # Handle case where attributes might be passed as a JSON string
-            if isinstance(attributes, str):
-                attributes = json.loads(attributes)
+            attrs: Any = json.loads(attributes) if isinstance(attributes, str) else attributes
 
-            if isinstance(attributes, dict) and any(
-                isinstance(k, str) and k.lower() == "password" for k in attributes
+            if isinstance(attrs, dict) and any(
+                isinstance(k, str) and k.lower() == "password" for k in attrs
             ):
                 return self._format_response(
                     {
@@ -395,7 +394,7 @@ class UserTools(BaseTool):
                     },
                     "modify_user",
                 )
-            rejection = self._check_modify_attributes("user", attributes, "modify_user", username)
+            rejection = self._check_modify_attributes("user", attrs, "modify_user", username)
             if rejection is not None:
                 return rejection
 
@@ -422,7 +421,7 @@ class UserTools(BaseTool):
 
             # Prepare modifications
             modifications = {}
-            for attr, value in attributes.items():
+            for attr, value in attrs.items():
                 if isinstance(value, list):
                     modifications[attr] = [(MODIFY_REPLACE, value)]
                 else:
@@ -443,7 +442,7 @@ class UserTools(BaseTool):
                 {
                     "username": username,
                     "dn": user_dn,
-                    "modified_attributes": list(attributes.keys()),
+                    "modified_attributes": list(attrs.keys()),
                 },
             )
 
