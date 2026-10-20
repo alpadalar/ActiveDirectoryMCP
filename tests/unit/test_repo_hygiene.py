@@ -465,3 +465,40 @@ def test_config_example_loads_as_shipped(monkeypatch):
     assert config.active_directory.server.startswith("ldaps://")
     assert config.security.ca_cert_file is None
     assert config.key_vault is None or not config.key_vault.vault_url
+
+
+def _active_env_assignments(rel: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in (REPO_ROOT / rel).read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, _, value = stripped.partition("=")
+        values[key] = value
+    return values
+
+
+def test_env_example_does_not_enable_key_vault_by_default():
+    """CR-03: a copied .env must not route startup through Azure Key Vault."""
+    active = _active_env_assignments(".env.example")
+    for key, value in active.items():
+        if key.startswith("AZURE_"):
+            assert value == "", key
+    assert not active.get("AZURE_KEYVAULT_URL")
+
+
+def test_env_example_values_are_launcher_safe():
+    """The .sh launchers `source` the file and the .bat launchers read it literally."""
+    for key, value in _active_env_assignments(".env.example").items():
+        assert not any(ch in value for ch in " \"'"), key
+
+
+def test_copied_env_example_plus_plaintext_credentials_loads_without_azure(monkeypatch):
+    from active_directory_mcp.config.loader import load_config
+
+    for key, value in _active_env_assignments(".env.example").items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("AD_BIND_DN", "CN=svc,DC=example,DC=com")
+    monkeypatch.setenv("AD_PASSWORD", "placeholder-pw")
+    config = load_config(str(REPO_ROOT / "ad-config" / "config.example.json"))
+    assert config.active_directory.password.get_secret_value() == "placeholder-pw"
