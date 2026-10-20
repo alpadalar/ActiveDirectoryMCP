@@ -650,7 +650,12 @@ class UserTools(BaseTool):
             return self._handle_ldap_error(e, operation, username)
     
     def _set_user_password(self, user_dn: str, password: str) -> None:
-        """Set user password using LDAP modify operation (TLS only)."""
+        """Set user password using LDAP modify operation (TLS only).
+
+        The channel is checked here again on purpose (defence in depth): callers run
+        ``_require_secure_channel`` before any mutation, but this is the last point before
+        the password leaves the process, and it is also reached by the create_user path.
+        """
         if not self.ldap.is_secure_channel():
             raise RuntimeError(
                 "Refusing to send unicodePwd over a non-TLS LDAP connection"
