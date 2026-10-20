@@ -164,9 +164,9 @@ cython_debug/
 
 # Active Directory MCP specific
 ad-config/*
-!ad-config/ad-config.json
-!ad-config/config.example.json
-!ad-config/production-config.example.json
+!ad-config/*.example.json
+.venv.freeze.txt
+.ruff_cache/
 *.log
 *.pem
 *.crt

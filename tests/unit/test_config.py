@@ -452,12 +452,11 @@ def test_example_configs_parse(rel):
     assert "connection_pool_size" not in data.get("performance", {})
 
 
-def test_local_ad_config_parses():
-    path = REPO_ROOT / "ad-config" / "ad-config.json"
-    if not path.exists():
-        pytest.skip("ad-config/ad-config.json not present")
-    assert Config(**json.loads(path.read_text(encoding="utf-8")))
-
+def test_lab_example_config_loads(monkeypatch):
+    monkeypatch.setenv("LAB_LDAP_PASSWORD", "lab-throwaway-value")
+    path = REPO_ROOT / "ad-config" / "openldap-lab.example.json"
+    config = load_config(str(path))
+    assert config.active_directory.password.get_secret_value() == "lab-throwaway-value"
 
 
 # --- Loader hardening (02-02 task 2) ---

@@ -29,7 +29,15 @@
         "enable_tls": true,
         "validate_certificate": true,
         "ca_cert_file": "/path/to/ca-certificate.pem",
-        "require_secure_connection": true
+        "require_secure_connection": true,
+        "allow_writes": false,
+        "allow_destructive": false,
+        "max_list_results": 1000,
+        "protect_privileged_targets": true,
+        "audit_log_path": null,
+        "http_auth": {
+            "required": true
+        }
     },
     "logging": {
         "level": "INFO",

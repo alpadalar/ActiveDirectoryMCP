@@ -46,13 +46,17 @@ services:
     depends_on:
       - openldap
     environment:
-      - AD_MCP_CONFIG=/app/ad-config/ad-config.json
+      - AD_MCP_CONFIG=/app/ad-config/openldap-lab.example.json
       - HTTP_HOST=0.0.0.0
       - HTTP_PORT=8813
       - HTTP_PATH=/activedirectory-mcp
-      # Throwaway lab credential for the local openldap container above.
-      # Never do this for production - use Azure Key Vault instead (see docker-compose.yml).
-      - AD_PASSWORD=${LAB_LDAP_PASSWORD:?set LAB_LDAP_PASSWORD (any throwaway value) before starting the lab}
+      # Throwaway lab credential for the local openldap container above; the lab config
+      # references it as ${LAB_LDAP_PASSWORD}. Never do this for production - use Azure
+      # Key Vault instead (see docker-compose.yml).
+      - LAB_LDAP_PASSWORD=${LAB_LDAP_PASSWORD:?set LAB_LDAP_PASSWORD (any throwaway value) before starting the lab}
+      # API key for the HTTP transport. The server refuses to start without one, so set it
+      # before starting the activedirectory-mcp service (the openldap service alone does not need it).
+      - AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:-}
     ports:
       - "8813:8813"
     volumes:

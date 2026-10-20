@@ -1,0 +1,39 @@
+{
+    "active_directory": {
+        "server": "ldap://192.168.1.100:389",
+        "domain": "test.local",
+        "base_dn": "dc=test,dc=local",
+        "bind_dn": "cn=admin,dc=test,dc=local",
+        "password": "${LAB_LDAP_PASSWORD}",
+        "use_ssl": false,
+        "auto_bind": true,
+        "user_object_class": "inetOrgPerson",
+        "group_object_class": "groupOfNames",
+        "computer_object_class": "device"
+    },
+    "organizational_units": {
+        "users_ou": "ou=people,dc=test,dc=local",
+        "groups_ou": "ou=groups,dc=test,dc=local",
+        "computers_ou": "ou=computers,dc=test,dc=local",
+        "service_accounts_ou": "ou=people,dc=test,dc=local"
+    },
+    "security": {
+        "enable_tls": false,
+        "validate_certificate": false,
+        "require_secure_connection": false,
+        "allow_writes": false,
+        "allow_destructive": false,
+        "max_list_results": 1000,
+        "http_auth": {
+            "required": true
+        }
+    },
+    "logging": {
+        "level": "DEBUG"
+    },
+    "performance": {
+        "max_retries": 3,
+        "retry_delay": 1.0,
+        "page_size": 100
+    }
+}
