@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "active-directory-mcp"
-version = "0.1.0"
+version = "1.0.0"
 description = "A Model Context Protocol server for interacting with Active Directory"
 requires-python = ">=3.11"
 authors = [
@@ -14,7 +14,7 @@ readme = "README.md"
 license = {text = "MIT"}
 keywords = ["active-directory", "mcp", "ldap", "ad", "authentication", "directory-services"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
