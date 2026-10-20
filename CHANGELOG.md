@@ -164,3 +164,27 @@ and enforced by the golden snapshots in `tests/golden/`.
 - Golden tool-surface snapshots for the stdio and HTTP transports under `tests/golden`,
   plus `scripts/check_python_matrix.sh` to verify they are identical on Python 3.11-3.13.
 - Shared AD time helpers on `BaseTool` replacing the divergent per-module converters.
+- `GET /health` on the HTTP server: unauthenticated liveness endpoint returning
+  `{"status", "server", "version"}`; it performs no LDAP probe and discloses no hostnames
+  or credentials. The `health` MCP tool remains the LDAP-aware status call.
+- `X-Request-ID` (a valid inbound id is echoed, otherwise generated), `X-Content-Type-Options:
+  nosniff` and `Cache-Control: no-store` (unless the response sets its own) on HTTP responses.
+- Both transports now register their 42 tools from one registry (`registry.py`) and the
+  HTTP server serves the output of one app factory (`http_app.build_http_app`).
+- Deterministic mocked-LDAP test harness (`tests/support/mock_directory.py`, ldap3
+  MOCK_SYNC) and a live-uvicorn end-to-end test with a real MCP client session
+  (`tests/e2e`).
+
+### Changed (server consolidation)
+
+- Tool descriptions are now served from `tools/definitions.py` and are identical on the
+  stdio and HTTP transports (previously two different short strings). Tool names,
+  parameters and schemas are unchanged; the golden snapshots are byte-identical.
+- The `health` tool is one shared implementation: both transports report `status`,
+  `server`, `timestamp` and `ldap_connection`/`ldap_server`; the stdio transport adds
+  `tests_passed` and its derived `status`. The HTTP `health` response now includes
+  `timestamp`.
+- HTTP server shutdown is handled by uvicorn's SIGINT/SIGTERM handling (the LDAP
+  connection is closed afterwards); the custom signal handlers were removed.
+- The docker-compose healthcheck uses `GET /health` (the previous JSON-RPC POST check was
+  also malformed YAML).
