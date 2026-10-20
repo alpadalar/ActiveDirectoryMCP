@@ -644,34 +644,36 @@ class OrganizationalUnitTools(BaseTool):
             return []
     
     def _delete_ou_contents(self, ou_dn: str) -> None:
-        """Recursively delete all contents of an OU."""
-        try:
-            # Get all child objects
-            results = self.ldap.search(
-                search_base=ou_dn,
-                search_filter="(objectClass=*)",
-                attributes=['objectClass'],
-                search_scope=1  # ONELEVEL equivalent
-            )
-            
-            # Delete in reverse order (deepest first)
-            for entry in reversed(results):
-                child_dn = entry['dn']
-                object_classes = entry['attributes'].get('objectClass', [])
-                
-                # If it's an OU, recursively delete its contents first
-                if 'organizationalUnit' in object_classes:
-                    self._delete_ou_contents(child_dn)
-                
-                # Delete the object
-                try:
-                    self.ldap.delete(child_dn)
-                except Exception as e:
-                    self.logger.warning(f"Failed to delete child object {child_dn}: {e}")
-                    
-        except Exception as e:
-            self.logger.error(f"Error deleting OU contents: {e}")
-    
+        """Recursively delete all contents of an OU.
+
+        Raises on any listing or child-delete failure (naming the failed DN) so the caller
+        never reports success for a partially emptied OU.
+        """
+        # Get all child objects (a listing failure propagates)
+        results = self.ldap.search(
+            search_base=ou_dn,
+            search_filter="(objectClass=*)",
+            attributes=['objectClass'],
+            search_scope=1  # ONELEVEL equivalent
+        )
+
+        # Delete in reverse order (deepest first)
+        for entry in reversed(results):
+            child_dn = entry['dn']
+            object_classes = entry['attributes'].get('objectClass', [])
+
+            # If it's an OU, recursively delete its contents first
+            if 'organizationalUnit' in object_classes:
+                self._delete_ou_contents(child_dn)
+
+            # Delete the object
+            try:
+                deleted = self.ldap.delete(child_dn)
+            except Exception as e:
+                raise Exception(f"Failed to delete child object {child_dn}: {e}") from e
+            if not deleted:
+                raise Exception(f"Failed to delete child object {child_dn}")
+
     # Alias methods for backward compatibility
     def list_organizational_units(self, parent_ou: Optional[str] = None, filter_criteria: Optional[str] = None,
                                 attributes: Optional[List[str]] = None, recursive: bool = True) -> List[Dict[str, Any]]:
