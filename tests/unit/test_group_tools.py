@@ -254,3 +254,55 @@ class TestHelpers:
         schema = group_tools.get_schema_info()
         for op in ("list_groups", "add_member", "remove_member", "get_members"):
             assert op in schema["operations"]
+
+
+class TestGroupInputHardening:
+    def test_list_groups_rejects_out_of_base_ou(self, group_tools, mock_ldap_manager):
+        data = parse_response(group_tools.list_groups(ou="OU=X,DC=evil,DC=com"))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.search.assert_not_called()
+
+    @pytest.mark.parametrize("bad", ["(a=1))(|(objectClass=*)", "dept=IT"])
+    def test_list_groups_rejects_malformed_filter(self, group_tools, mock_ldap_manager, bad):
+        data = parse_response(group_tools.list_groups(filter_criteria=bad))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.search.assert_not_called()
+
+    def test_list_groups_valid_filter_text_unchanged(self, group_tools, mock_ldap_manager):
+        group_tools.list_groups(filter_criteria="(mail=*)")
+        sent = mock_ldap_manager.search.call_args.kwargs["search_filter"]
+        assert sent == f"(&(objectClass={group_tools.ldap.ad_config.group_object_class})(mail=*))"
+
+    def test_create_group_escapes_rdn(self, group_tools, mock_ldap_manager):
+        data = parse_response(group_tools.create_group("a,OU=Admins"))
+        assert data["success"] is True
+        assert mock_ldap_manager.add.call_args.args[0] == (
+            "CN=a\\,OU\\=Admins,CN=Groups,DC=test,DC=local"
+        )
+
+    def test_create_group_rejects_out_of_base_ou(self, group_tools, mock_ldap_manager):
+        data = parse_response(group_tools.create_group("g", ou="OU=X,DC=evil,DC=com"))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.add.assert_not_called()
+
+    @pytest.mark.parametrize("method", ["add_member", "remove_member"])
+    def test_member_dn_outside_base_rejected(self, group_tools, mock_ldap_manager, method):
+        data = parse_response(getattr(group_tools, method)("Sales", "CN=Evil,DC=evil,DC=com"))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.search.assert_not_called()
+        mock_ldap_manager.modify.assert_not_called()
+
+    def test_get_members_skips_out_of_base_member(self, group_tools, mock_ldap_manager):
+        outside = "CN=Evil,DC=evil,DC=com"
+        mock_ldap_manager.search.side_effect = [
+            [ldap_entry(GROUP_DN, sAMAccountName="Sales", member=[outside, MEMBER])],
+            [ldap_entry(MEMBER, sAMAccountName="jdoe", objectClass=["user"])],
+        ]
+        data = parse_response(group_tools.get_members("Sales"))
+        assert [m["dn"] for m in data["members"]] == [MEMBER]
+        bases = [c.kwargs["search_base"] for c in mock_ldap_manager.search.call_args_list]
+        assert outside not in bases

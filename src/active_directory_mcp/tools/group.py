@@ -7,6 +7,8 @@ from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 
 from .base import BaseTool
 from ..core.logging import log_ldap_operation
+from .. import validation
+from ..validation import ValidationError
 
 
 class GroupTools(BaseTool):
@@ -25,20 +27,18 @@ class GroupTools(BaseTool):
         Returns:
             List of MCP content objects with group information
         """
+        search_base = ou or ""
         try:
-            # Determine search base
+            # Determine search base (confined to base_dn)
             if ou:
-                search_base = ou
+                search_base = self._confined_dn(ou)
             else:
                 search_base = self.ldap.ad_config.base_dn
-            
+
             # Build search filter
             group_object_class = self.ldap.ad_config.group_object_class
             base_filter = f"(objectClass={group_object_class})"
-            if filter_criteria:
-                search_filter = f"(&{base_filter}{filter_criteria})"
-            else:
-                search_filter = base_filter
+            search_filter = validation.combine_filters(base_filter, filter_criteria)
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -96,6 +96,8 @@ class GroupTools(BaseTool):
             
             return self._format_response(response_data, "list_groups")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "list_groups", search_base)
         except Exception as e:
             return self._handle_ldap_error(e, "list_groups", search_base)
     
@@ -192,7 +194,7 @@ class GroupTools(BaseTool):
                 display_name = group_name
             
             # Build DN
-            group_dn = f"CN={display_name},{ou}"
+            group_dn = self._build_dn(display_name, ou)
             
             # Check if group already exists
             existing_group = self.ldap.search(
@@ -253,6 +255,8 @@ class GroupTools(BaseTool):
             else:
                 raise Exception("Failed to create group")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "create_group", ou or group_name)
         except Exception as e:
             return self._handle_ldap_error(e, "create_group", group_dn if 'group_dn' in locals() else group_name)
     
@@ -374,6 +378,8 @@ class GroupTools(BaseTool):
             List of MCP content objects with result
         """
         try:
+            member_dn = self._confined_dn(member_dn)
+
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
@@ -421,6 +427,8 @@ class GroupTools(BaseTool):
             else:
                 raise Exception("Failed to add member to group")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "add_member", f"{group_name} -> {member_dn}")
         except Exception as e:
             return self._handle_ldap_error(e, "add_member", f"{group_name} -> {member_dn}")
     
@@ -436,6 +444,8 @@ class GroupTools(BaseTool):
             List of MCP content objects with result
         """
         try:
+            member_dn = self._confined_dn(member_dn)
+
             # Find group DN
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
@@ -483,6 +493,8 @@ class GroupTools(BaseTool):
             else:
                 raise Exception("Failed to remove member from group")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "remove_member", f"{group_name} -> {member_dn}")
         except Exception as e:
             return self._handle_ldap_error(e, "remove_member", f"{group_name} -> {member_dn}")
     
@@ -520,6 +532,11 @@ class GroupTools(BaseTool):
             
             def process_members(dns_to_process, level=0):
                 for member_dn in dns_to_process:
+                    if not validation.is_dn_under(member_dn, self._base_dn()):
+                        self.logger.warning(
+                            "Skipping member outside base DN while resolving group members"
+                        )
+                        continue
                     try:
                         # Get member details
                         member_info = self.ldap.search(
