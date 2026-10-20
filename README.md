@@ -340,13 +340,16 @@ manager).
 - `get_inactive_users` - Inactive user detection
 - `get_password_policy_violations` - Policy compliance
 - `audit_admin_accounts` - Administrative account audit
+- `get_nested_group_members` - All direct and nested group members (server-side chain query)
+- `get_rootdse_info` - rootDSE details of the answering domain controller
 
 ### 🔧 System Tools
 - `test_connection` - LDAP connectivity test
 - `health` - Server health check
 - `get_schema_info` - Tool schema information
+- `get_tls_posture` - Configured TLS settings, live channel (ldaps/starttls/plaintext) and findings
 
-> **⚠️ Note**: ActiveDirectoryMCP provides 42 tools total. Some LLM models may experience issues with this many tools.
+> **⚠️ Note**: ActiveDirectoryMCP provides 45 tools total. Some LLM models may experience issues with this many tools.
 
 ## 🔒 Security Configuration
 
@@ -471,6 +474,7 @@ Write access and the HTTP transport are locked down by default. Example (placeho
         "allow_destructive": false,
         "max_list_results": 1000,
         "protect_privileged_targets": true,
+        "audit_log_path": "/var/log/ad-mcp/audit.jsonl",
         "http_auth": {
             "required": true,
             "api_key_sha256": ["0000000000000000000000000000000000000000000000000000000000000000"]
@@ -490,6 +494,10 @@ Write access and the HTTP transport are locked down by default. Example (placeho
   (Domain/Enterprise/Schema Admins, Administrators, operator groups, `krbtgt`,
   `Administrator`, anything with `adminCount=1`). Set it to `false` only if you accept that
   anyone with `allow_writes` can change them.
+- `audit_log_path` (default unset) writes one JSON line per write or destructive tool call
+  (timestamp, tool, risk, target, outcome, redacted arguments; no passwords) to an
+  append-only file created with mode `0600`. The server refuses to start if the path
+  cannot be opened, and logs a warning when `allow_writes` is true without a path.
 - Generate and hash an HTTP API key:
 
 ```bash

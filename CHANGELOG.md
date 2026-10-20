@@ -164,6 +164,19 @@ and enforced by the golden snapshots in `tests/golden/`.
 - `check_password_policy` returns `policy_compliant`, `recommendations` and
   `password_policy`; the always-empty `lockout_policy` key was dropped.
 
+### Added (Phase 4.1)
+
+- Audit trail: every write and destructive tool call is recorded as one JSON line
+  (timestamp, tool, risk, target, outcome, redacted arguments) in the file set by the new
+  `security.audit_log_path` option (mode `0600`, append-only; passwords are never stored).
+- Three new read-only tools: `get_nested_group_members` (transitive membership through one
+  server-side chain query), `get_rootdse_info` (allow-listed rootDSE attributes) and
+  `get_tls_posture` (configured TLS settings, live channel ldaps/starttls/plaintext, TLS
+  version and cipher when available, and findings; no secrets or paths are returned).
+- The tool count goes from 42 to 45. The golden snapshots changed additively only: the
+  original 42 entries are byte-identical (enforced by a fingerprint test,
+  `tests/unit/test_golden_additive.py`); the only altered existing line is `tool_count`.
+
 ### Added
 
 - Unit test suite under `tests/unit` (mocked LDAP, no directory server needed).
