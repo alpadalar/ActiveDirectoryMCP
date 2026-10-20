@@ -282,6 +282,13 @@ class TestWriteOperations:
             "CN=a\\,b,OU=x", "CN=a\\,b", new_superior="OU=y"
         )
 
+    def test_move_keeps_all_components_of_multivalued_rdn(self, manager, ldap3_seam):
+        _, conn_cls = ldap3_seam
+        manager.move("CN=a+SN=b,OU=x", "OU=y")
+        conn_cls.return_value.modify_dn.assert_called_once_with(
+            "CN=a+SN=b,OU=x", "CN=a+SN=b", new_superior="OU=y"
+        )
+
     @pytest.mark.parametrize(
         "method,args",
         [

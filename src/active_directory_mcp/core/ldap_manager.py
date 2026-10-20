@@ -492,7 +492,8 @@ class LDAPManager:
             logger.debug(f"Moving entry {dn} to {new_parent}")
 
             # ldap3 requires the relative DN (first RDN of the entry) as a positional argument
-            relative_dn = safe_rdn(dn, decompose=False)[0]
+            # Multi-valued RDNs (a=1+b=2) come back as separate components; keep them all.
+            relative_dn = "+".join(safe_rdn(dn, decompose=False))
             success = connection.modify_dn(dn, relative_dn, new_superior=new_parent)
 
             if success:
