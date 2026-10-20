@@ -11,6 +11,7 @@ from fastmcp import FastMCP
 from fastmcp.tools import FunctionTool
 
 from active_directory_mcp import __version__
+from active_directory_mcp.policy import ToolPolicy
 from active_directory_mcp.registry import (
     FastMCPToolSink,
     StdioToolSink,
@@ -42,6 +43,8 @@ def make_ctx(**overrides: Any) -> ToolContext:
         "security_tools": MagicMock(spec=SecurityTools),
         "ldap_manager": Mock(),
         "server_name": "TestServer",
+        # Dispatch-table tests exercise write tools; the gate has its own tests.
+        "policy": ToolPolicy(True, True),
     }
     values.update(overrides)
     return ToolContext(**values)

@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 from mcp import types
 from mcp.types import TextContent as Content
 
+from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
 from .tools.definitions import TOOL_DESCRIPTIONS, TOOL_INPUT_SCHEMAS
 
 logger = logging.getLogger("active-directory-mcp.registry")
@@ -42,6 +43,7 @@ class ToolContext:
     server_name: str
     endpoint: Optional[str] = None
     health_extras: Callable[[], Dict[str, Any]] = _no_extras
+    policy: Optional[ToolPolicy] = None  # None resolves to the most restrictive policy
 
 
 @dataclass(frozen=True)
@@ -389,15 +391,24 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
 
 
 def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
-    """Return the 42 tool specs in a stable order (KeyError if a definition is missing)."""
+    """Return the 42 tool specs in a stable order (KeyError if a definition is missing).
+
+    Every handler is wrapped by the policy gate; a tool without a risk
+    classification is a build-time error (fail closed).
+    """
+    policy = ctx.policy if ctx.policy is not None else ToolPolicy(False, False)
+    handlers = _handlers(ctx)
+    unclassified = [name for name in handlers if name not in RISK_CLASSIFICATION]
+    if unclassified:
+        raise RuntimeError(f"Tools without a risk classification: {', '.join(unclassified)}")
     return [
         ToolSpec(
             name=name,
             description=TOOL_DESCRIPTIONS[name],
             input_schema=TOOL_INPUT_SCHEMAS[name],
-            handler=handler,
+            handler=guard(name, handler, policy),
         )
-        for name, handler in _handlers(ctx).items()
+        for name, handler in handlers.items()
     ]
 
 
