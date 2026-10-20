@@ -148,7 +148,7 @@ class UserTools(BaseTool):
             }
 
             # Add computed fields
-            uac = self._get_attr_value(user_entry['attributes'], 'userAccountControl', 0)
+            uac = self._get_attr_value(user_entry['attributes'], 'userAccountControl')
             user_info['computed'] = {
                 'enabled': self._is_user_enabled(uac),
                 'locked': self._is_user_locked(uac),
@@ -609,20 +609,19 @@ class UserTools(BaseTool):
         
         return ''.join(password)
     
-    @staticmethod
-    def _to_int(value, default=0):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
-    def _is_user_enabled(self, uac_value: int) -> bool:
-        """Check if user account is enabled based on userAccountControl."""
-        return not bool(self._to_int(uac_value) & 0x0002)  # Check ACCOUNTDISABLE flag
+    def _is_user_enabled(self, uac_value: int) -> Optional[bool]:
+        """Check if user account is enabled based on userAccountControl (None if unknown)."""
+        uac = self._to_int(uac_value)
+        if uac is None:
+            return None
+        return not bool(uac & 0x0002)  # Check ACCOUNTDISABLE flag
     
-    def _is_user_locked(self, uac_value: int) -> bool:
-        """Check if user account is locked based on userAccountControl."""
-        return bool(self._to_int(uac_value) & 0x0010)  # Check LOCKOUT flag
+    def _is_user_locked(self, uac_value: int) -> Optional[bool]:
+        """Check if user account is locked based on userAccountControl (None if unknown)."""
+        uac = self._to_int(uac_value)
+        if uac is None:
+            return None
+        return bool(uac & 0x0010)  # Check LOCKOUT flag
     
     def _is_password_expired(self, attributes: Dict[str, Any]) -> bool:
         """Check if user password is expired."""

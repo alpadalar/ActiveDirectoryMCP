@@ -203,7 +203,9 @@ class SecurityTools(BaseTool):
                     continue
 
             # Check account status
-            uac = self._to_int(self._get_attr_value(user_entry['attributes'], 'userAccountControl', 0))
+            uac = self._to_int(self._get_attr_value(user_entry['attributes'], 'userAccountControl'))
+            if uac is None:
+                raise ValueError(f"Cannot determine userAccountControl for user '{username}'")
             account_status = {
                 'enabled': not bool(uac & 0x0002),  # ACCOUNTDISABLE
                 'locked': bool(uac & 0x0010),       # LOCKOUT
@@ -268,7 +270,10 @@ class SecurityTools(BaseTool):
 
                 # Check if user is inactive
                 if last_logon == 0 or last_logon < cutoff_filetime:
-                    uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl', 0))
+                    uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl'))
+                    if uac is None:
+                        self.logger.warning(f"Skipping {entry.get('dn')}: unreadable userAccountControl")
+                        continue
                     member_of = self._get_attr_list(entry['attributes'], 'memberOf')
 
                     user_info = {
@@ -343,7 +348,10 @@ class SecurityTools(BaseTool):
             current_time = self._convert_datetime_to_filetime(datetime.now())
 
             for entry in user_results:
-                uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl', 0))
+                uac = self._to_int(self._get_attr_value(entry['attributes'], 'userAccountControl'))
+                if uac is None:
+                    self.logger.warning(f"Skipping {entry.get('dn')}: unreadable userAccountControl")
+                    continue
                 pwd_last_set_raw = self._get_attr_value(entry['attributes'], 'pwdLastSet', 0)
                 account_expires_raw = self._get_attr_value(entry['attributes'], 'accountExpires', 0)
 
@@ -443,7 +451,10 @@ class SecurityTools(BaseTool):
                             
                             if user_results:
                                 user_entry = user_results[0]
-                                uac = self._to_int(self._get_attr_value(user_entry['attributes'], 'userAccountControl', 0))
+                                uac = self._to_int(self._get_attr_value(user_entry['attributes'], 'userAccountControl'))
+                                if uac is None:
+                                    self.logger.warning(f"Skipping admin audit for {member_dn}: unreadable userAccountControl")
+                                    continue
 
                                 # Check for security issues
                                 security_issues = []

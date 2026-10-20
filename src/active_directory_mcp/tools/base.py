@@ -188,7 +188,10 @@ class BaseTool(ABC):
         return value
 
     @staticmethod
-    def _to_int(value, default=0):
+    def _to_int(value, default=None):
+        """Convert an LDAP value to int; returns `default` (None) if it cannot be parsed."""
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
         try:
             return int(value)
         except (TypeError, ValueError):
