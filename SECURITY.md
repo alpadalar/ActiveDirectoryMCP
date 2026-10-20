@@ -255,6 +255,15 @@ commits (compose files, README, LDIF fixtures and test scripts). It is in the pu
   a value, so a new credential in an already-baselined file is still reported. The baseline holds the
   lab credential in the first commits and later compose and script edits, plus synthetic test and
   documentation strings reviewed by hand. The gate fails on any new finding.
+- Baseline review (2026-10-20): the 101 fingerprints in `.gitleaksignore` were re-checked with a
+  throwaway script that resolves each `commit:file:rule:line` to the blob, re-applies the rule from
+  `.gitleaks.toml` and prints only a classification and counts, never a matched value. Result: no
+  finding looks like real secret material. Matches are environment references (`${VAR}`), documented
+  placeholders and word-based example values (README Azure sections), prose or comments (the CHANGELOG
+  URL-shape sentence, the "throwaway value" compose comment), an environment variable name constant
+  (not a key), test fixtures under `tests/`, and the lab and LDIF fixture values already described
+  above, which are treated as compromised and must not be reused. High-entropy strings outside
+  `tests/`, `ad-config/` and `ldap-init/` were not found.
 - AI-residue scan (`scripts/ai_residue_scan.py`): the tracked tree and all commit messages are clean except
   one merged upstream pull request commit that carries third-party `Co-authored-by` trailers. It is allow-listed
   by SHA in `scripts/ai_residue_allowlist.txt` and was not rewritten.
