@@ -245,12 +245,16 @@ commits (compose files, README, LDIF fixtures and test scripts). It is in the pu
 - Treat the value as compromised. Rotate it everywhere it was or may have been used, and never reuse it.
 - The maintainer's checklist tracks as pending, owner-side actions: a decision on purging the history,
   enabling GitHub secret scanning with push protection, and enabling private vulnerability reporting.
-- Scan results (`.planning` evidence, scan of 2026-10-20): the scripted full-history and tree scan
-  (`scripts/secret_scan.py` with `.gitleaks.toml` rules; the gitleaks binary was not available) covered
-  all refs, 117 commits at the time the baseline was taken, and the tracked tree. Every finding is in the
-  committed baseline `scripts/secret_scan_baseline.txt` (commit, path and rule only): the lab credential in
-  the first commits and later compose and script edits, plus synthetic test and lab fixture values reviewed
-  by hand. The gate fails on any new finding.
+- Scan results (scan of 2026-10-20, re-run after the Phase 5 review fixes): the scripted full-history
+  and tree scan (`scripts/secret_scan.py` with the custom rules in `.gitleaks.toml`) covers all refs,
+  including merge-commit diffs, and the tracked tree. The gitleaks binary was not available, so the
+  `useDefault` gitleaks rules were not exercised; only the custom rules ran. The allow-list accepts
+  exact placeholder values only (`${VAR}`, `<name>`, `changeme`, `YourSecurePassword`,
+  `REPLACE_WITH_...`), not substrings. Every remaining finding is in the committed baseline
+  `scripts/secret_scan_baseline.txt`, which stores a per-value fingerprint, the path and the rule, never
+  a value, so a new credential in an already-baselined file is still reported. The baseline holds the
+  lab credential in the first commits and later compose and script edits, plus synthetic test and
+  documentation strings reviewed by hand. The gate fails on any new finding.
 - AI-residue scan (`scripts/ai_residue_scan.py`): the tracked tree and all commit messages are clean except
   one merged upstream pull request commit that carries third-party `Co-authored-by` trailers. It is allow-listed
   by SHA in `scripts/ai_residue_allowlist.txt` and was not rewritten.

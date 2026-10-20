@@ -5,6 +5,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `.env.example` no longer activates Azure Key Vault by default (it overrode `AD_BIND_DN` and
+  `AD_PASSWORD` and failed startup against a placeholder vault); both credential options are
+  commented and the file is safe for the `.sh` and `.bat` launchers.
+- `docker-compose.yml` passes `AD_BIND_DN` and `AD_PASSWORD` through to the container and the
+  README Docker quickstart sets them, so the container no longer exits and restarts in a loop.
+  The dead `AD_SERVER`, `AD_BASE_DN` and `HTTP_*` overrides were removed (the image fixes the
+  HTTP address).
+- `ad-config/production-config.example.json` uses `ldaps://` and no longer points at a CA file
+  the repository does not ship, so it passes startup validation as shipped.
+- `ldap-init/01-structure.ldif` no longer carries literal `userPassword` values.
+
+### Security
+
+- Release secret scan: the allow-list now matches the whole captured value against exact
+  placeholder shapes instead of any substring, the baseline stores per-value fingerprints so a new
+  credential in an already-baselined file is reported, merge-commit diffs are scanned, and the
+  rules cover unquoted, single-quoted, `:`-separated, `secret`/`api_key`/`token` and
+  `ldap://user:pw@host` shapes.
+- AI-residue scan: also detects session trailers, `claude.ai/code` links, agent-named author
+  e-mails and annotated tag messages; history allow-list entries need at least 12 hex digits.
+
+### Documentation
+
+- SECURITY.md and the generated tool-risk table state that auditing is opt-in
+  (`security.audit_log_path`, unset by default).
+- The README no longer claims nothing leaves the host except to the directory server (Azure Key
+  Vault is contacted when configured) and describes the audit file as opened in append mode.
+
 ## [1.0.0] - Unreleased (date is set when the owner tags)
 
 The MCP tool names and parameters of the 42 original tools are unchanged in this release.
