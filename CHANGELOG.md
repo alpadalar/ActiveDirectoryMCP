@@ -35,6 +35,31 @@ and enforced by the golden snapshots in `tests/golden/`.
   startup unless you set `"require_secure_connection": false` explicitly (as the lab
   configs do). Phase 2 owns the remaining plaintext-LDAP gate.
 
+- Configuration is strict: unknown keys in any section (for example
+  `security.check_names` or a typo such as `passwrd`) now fail at load time instead of
+  being ignored. Remove stale keys from existing configuration files.
+- `${VAR}` placeholders are expanded anywhere inside a string and variable names are
+  limited to `[A-Za-z_][A-Za-z0-9_]*`; an unset variable without a default fails with a
+  message that names only the variable.
+- `security.require_secure_connection: true` now also rejects `security.enable_tls: false`.
+- User, group, computer and OU tools reject DNs (`ou`, `parent_ou`, `ou_dn`,
+  `new_parent_dn`, `member_dn`) that are outside the configured `base_dn`, and
+  `get_members` skips nested members outside it. Multi-root deployments are not
+  supported.
+- `filter_criteria` is validated (balanced parenthesized terms, at most 1024 characters,
+  must parse as an LDAP filter). Previously any string was interpolated into the search
+  filter. See `docs/input-validation.md`.
+- `*_object_class` configuration values are validated and rejected if they contain filter
+  metacharacters.
+- The bind password is a `SecretStr`; its repr and JSON dump are masked, and registered
+  secrets are redacted from all log handlers, connection errors and tool error responses.
+
+### Deprecated
+
+- `performance.connection_pool_size` is accepted but ignored (one serialized LDAP
+  connection is used); a warning is logged at startup. It will be removed in a later
+  release.
+
 ### Fixed
 
 - Expired accounts are now detected when ldap3 returns a datetime for `accountExpires`
@@ -78,6 +103,16 @@ and enforced by the golden snapshots in `tests/golden/`.
   `generate_security_report` works again (it always returned an error).
 - `create_computer` and `create_group` no longer raise `AttributeError` when `ou` is
   omitted.
+
+- `create_user`, `create_group`, `create_computer` and `create_ou` now escape the
+  RDN value, so names containing `,`, `+`, `=` and similar characters create one object
+  in the intended container instead of a malformed or misplaced DN (review finding WR-04).
+- `create_user` honours `organizational_units.users_ou` (WR-03) and computer
+  operations honour `computer_object_class` with validated object-class values (WR-05).
+- the environment placeholder resolver expands in-string placeholders and
+  colon-containing defaults (WR-06).
+- bare `except:` handlers were removed and silent exception swallowing now logs a
+  warning; `list_*` tools no longer hit an unbound variable when validation fails early.
 
 ### Output changes
 
