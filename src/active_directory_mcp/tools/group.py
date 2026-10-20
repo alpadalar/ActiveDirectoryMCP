@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
+from mcp.types import TextContent as Content
 
 from .. import validation
 from ..core.logging import log_ldap_operation
@@ -20,7 +21,7 @@ class GroupTools(BaseTool):
         ou: Optional[str] = None,
         filter_criteria: Optional[str] = None,
         attributes: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         List groups in Active Directory.
 
@@ -117,9 +118,7 @@ class GroupTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "list_groups", search_base)
 
-    def get_group(
-        self, group_name: str, attributes: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    def get_group(self, group_name: str, attributes: Optional[List[str]] = None) -> List[Content]:
         """
         Get detailed information about a specific group.
 
@@ -206,7 +205,7 @@ class GroupTools(BaseTool):
         group_scope: str = "Global",
         group_type: str = "Security",
         additional_attributes: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Create a new group in Active Directory.
 
@@ -312,7 +311,7 @@ class GroupTools(BaseTool):
                 e, "create_group", group_dn if "group_dn" in locals() else group_name
             )
 
-    def modify_group(self, group_name: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def modify_group(self, group_name: str, attributes: Dict[str, Any]) -> List[Content]:
         """
         Modify group attributes.
 
@@ -384,7 +383,7 @@ class GroupTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "modify_group", group_name)
 
-    def delete_group(self, group_name: str) -> List[Dict[str, Any]]:
+    def delete_group(self, group_name: str) -> List[Content]:
         """
         Delete a group from Active Directory.
 
@@ -434,7 +433,7 @@ class GroupTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "delete_group", group_name)
 
-    def add_member(self, group_name: str, member_dn: str) -> List[Dict[str, Any]]:
+    def add_member(self, group_name: str, member_dn: str) -> List[Content]:
         """
         Add a member to a group.
 
@@ -513,7 +512,7 @@ class GroupTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "add_member", f"{group_name} -> {member_dn}")
 
-    def remove_member(self, group_name: str, member_dn: str) -> List[Dict[str, Any]]:
+    def remove_member(self, group_name: str, member_dn: str) -> List[Content]:
         """
         Remove a member from a group.
 
@@ -597,7 +596,7 @@ class GroupTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "remove_member", f"{group_name} -> {member_dn}")
 
-    def get_members(self, group_name: str, recursive: bool = False) -> List[Dict[str, Any]]:
+    def get_members(self, group_name: str, recursive: bool = False) -> List[Content]:
         """
         Get members of a group.
 

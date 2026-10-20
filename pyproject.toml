@@ -49,6 +49,8 @@ dev = [
     "mypy>=1.17,<2",
     "requests>=2.31.0,<3.0.0",
     "types-requests>=2.31.0,<3.0.0",
+    "types-ldap3>=2.9",
+    "bandit>=1.9",
 ]
 
 [project.urls]
@@ -85,6 +87,10 @@ filterwarnings = [
 
 [tool.mypy]
 python_version = "3.11"
+# Scope: the shipped package only. Tests are deliberately outside the gate: they monkeypatch
+# methods and build mock-typed fixtures (hundreds of method-assign / mock-attr errors that are
+# not defects). CI runs a bare `uv run mypy`.
+files = ["src"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

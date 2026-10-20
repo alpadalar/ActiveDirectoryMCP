@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import ldap3
 from ldap3 import MODIFY_REPLACE
 from ldap3.core.exceptions import LDAPException
+from mcp.types import TextContent as Content
 
 from .. import validation
 from ..core.logging import log_ldap_operation
@@ -25,7 +26,7 @@ class UserTools(BaseTool):
         ou: Optional[str] = None,
         filter_criteria: Optional[str] = None,
         attributes: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         List users in Active Directory.
 
@@ -129,9 +130,7 @@ class UserTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "list_users", search_base)
 
-    def get_user(
-        self, username: str, attributes: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    def get_user(self, username: str, attributes: Optional[List[str]] = None) -> List[Content]:
         """
         Get detailed information about a specific user.
 
@@ -225,7 +224,7 @@ class UserTools(BaseTool):
         email: Optional[str] = None,
         ou: Optional[str] = None,
         additional_attributes: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Create a new user in Active Directory.
 
@@ -358,7 +357,7 @@ class UserTools(BaseTool):
                 e, "create_user", user_dn if "user_dn" in locals() else username
             )
 
-    def modify_user(self, username: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def modify_user(self, username: str, attributes: Dict[str, Any]) -> List[Content]:
         """
         Modify user attributes.
 
@@ -451,7 +450,7 @@ class UserTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "modify_user", username)
 
-    def delete_user(self, username: str) -> List[Dict[str, Any]]:
+    def delete_user(self, username: str) -> List[Content]:
         """
         Delete a user from Active Directory.
 
@@ -500,7 +499,7 @@ class UserTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "delete_user", username)
 
-    def enable_user(self, username: str) -> List[Dict[str, Any]]:
+    def enable_user(self, username: str) -> List[Content]:
         """
         Enable a user account.
 
@@ -512,7 +511,7 @@ class UserTools(BaseTool):
         """
         return self._set_user_account_control(username, 512, "enable")  # 512 = Normal account
 
-    def disable_user(self, username: str) -> List[Dict[str, Any]]:
+    def disable_user(self, username: str) -> List[Content]:
         """
         Disable a user account.
 
@@ -526,7 +525,7 @@ class UserTools(BaseTool):
 
     def reset_password(
         self, username: str, new_password: Optional[str] = None, force_change: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Reset user password.
 
@@ -610,7 +609,7 @@ class UserTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "reset_password", username)
 
-    def get_user_groups(self, username: str) -> List[Dict[str, Any]]:
+    def get_user_groups(self, username: str) -> List[Content]:
         """
         Get groups that a user is member of.
 
@@ -690,7 +689,7 @@ class UserTools(BaseTool):
 
     def _set_user_account_control(
         self, username: str, uac_value: int, operation: str
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """Set user account control value."""
         try:
             # Find user DN

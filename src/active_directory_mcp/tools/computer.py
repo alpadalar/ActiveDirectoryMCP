@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ldap3 import MODIFY_REPLACE
+from mcp.types import TextContent as Content
 
 from .. import validation
 from ..core.logging import log_ldap_operation
@@ -31,7 +32,7 @@ class ComputerTools(BaseTool):
         ou: Optional[str] = None,
         filter_criteria: Optional[str] = None,
         attributes: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         List computer objects in Active Directory.
 
@@ -140,7 +141,7 @@ class ComputerTools(BaseTool):
 
     def get_computer(
         self, computer_name: str, attributes: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Get detailed information about a specific computer.
 
@@ -230,7 +231,7 @@ class ComputerTools(BaseTool):
         ou: Optional[str] = None,
         dns_hostname: Optional[str] = None,
         additional_attributes: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Create a new computer object in Active Directory.
 
@@ -353,9 +354,7 @@ class ComputerTools(BaseTool):
                 e, "create_computer", computer_dn if "computer_dn" in locals() else computer_name
             )
 
-    def modify_computer(
-        self, computer_name: str, attributes: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    def modify_computer(self, computer_name: str, attributes: Dict[str, Any]) -> List[Content]:
         """
         Modify computer attributes.
 
@@ -431,7 +430,7 @@ class ComputerTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "modify_computer", computer_name)
 
-    def delete_computer(self, computer_name: str) -> List[Dict[str, Any]]:
+    def delete_computer(self, computer_name: str) -> List[Content]:
         """
         Delete a computer from Active Directory.
 
@@ -487,7 +486,7 @@ class ComputerTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "delete_computer", computer_name)
 
-    def enable_computer(self, computer_name: str) -> List[Dict[str, Any]]:
+    def enable_computer(self, computer_name: str) -> List[Content]:
         """
         Enable a computer account.
 
@@ -501,7 +500,7 @@ class ComputerTools(BaseTool):
             computer_name, 4096, "enable"
         )  # 4096 = Enabled workstation trust account
 
-    def disable_computer(self, computer_name: str) -> List[Dict[str, Any]]:
+    def disable_computer(self, computer_name: str) -> List[Content]:
         """
         Disable a computer account.
 
@@ -515,7 +514,7 @@ class ComputerTools(BaseTool):
             computer_name, 4098, "disable"
         )  # 4098 = Disabled workstation trust account
 
-    def reset_computer_password(self, computer_name: str) -> List[Dict[str, Any]]:
+    def reset_computer_password(self, computer_name: str) -> List[Content]:
         """
         Set a new random machine-account password (TLS required).
 
@@ -595,7 +594,7 @@ class ComputerTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "reset_computer_password", computer_name)
 
-    def get_stale_computers(self, days: int = 90) -> List[Dict[str, Any]]:
+    def get_stale_computers(self, days: int = 90) -> List[Content]:
         """
         Get computers that haven't logged in for specified number of days.
 
@@ -669,7 +668,7 @@ class ComputerTools(BaseTool):
 
     def _set_computer_account_control(
         self, computer_name: str, uac_value: int, operation: str
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """Set computer account control value."""
         try:
             # Normalize computer name

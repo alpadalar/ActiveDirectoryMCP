@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import ldap3
+from mcp.types import TextContent as Content
 
 from ..core.logging import log_ldap_operation
 from .base import BaseTool
@@ -19,7 +20,7 @@ LASTLOGON_NOTE = (
 class SecurityTools(BaseTool):
     """Tools for Active Directory security operations and auditing."""
 
-    def get_domain_info(self) -> List[Dict[str, Any]]:
+    def get_domain_info(self) -> List[Content]:
         """
         Get domain information and security settings.
 
@@ -99,7 +100,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "get_domain_info", self.ldap.ad_config.base_dn)
 
-    def get_privileged_groups(self) -> List[Dict[str, Any]]:
+    def get_privileged_groups(self) -> List[Content]:
         """
         Get information about privileged groups in the domain.
 
@@ -193,7 +194,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "get_privileged_groups", self.ldap.ad_config.base_dn)
 
-    def get_user_permissions(self, username: str) -> List[Dict[str, Any]]:
+    def get_user_permissions(self, username: str) -> List[Content]:
         """
         Get effective permissions for a user by analyzing group memberships.
 
@@ -302,9 +303,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "get_user_permissions", username)
 
-    def get_inactive_users(
-        self, days: int = 90, include_disabled: bool = False
-    ) -> List[Dict[str, Any]]:
+    def get_inactive_users(self, days: int = 90, include_disabled: bool = False) -> List[Content]:
         """
         Get users who haven't logged in for specified number of days.
 
@@ -405,7 +404,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "get_inactive_users", self.ldap.ad_config.base_dn)
 
-    def get_password_policy_violations(self) -> List[Dict[str, Any]]:
+    def get_password_policy_violations(self) -> List[Content]:
         """
         Get users with password policy violations.
 
@@ -540,7 +539,7 @@ class SecurityTools(BaseTool):
                 e, "get_password_policy_violations", self.ldap.ad_config.base_dn
             )
 
-    def audit_admin_accounts(self) -> List[Dict[str, Any]]:
+    def audit_admin_accounts(self) -> List[Content]:
         """
         Audit administrative accounts for security compliance.
 
@@ -852,7 +851,7 @@ class SecurityTools(BaseTool):
         return self._days_since(self._get_attr_value(attributes, "lastLogon", 0))
 
     # Additional policy checks
-    def check_password_policy(self) -> List[Dict[str, Any]]:
+    def check_password_policy(self) -> List[Content]:
         """Check password policy compliance."""
         try:
             domain_response = self.get_domain_info()
@@ -890,7 +889,7 @@ class SecurityTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "check_password_policy", "domain")
 
-    def generate_security_report(self) -> List[Dict[str, Any]]:
+    def generate_security_report(self) -> List[Content]:
         """Generate comprehensive security report."""
         try:
             report_timestamp = datetime.now().isoformat()

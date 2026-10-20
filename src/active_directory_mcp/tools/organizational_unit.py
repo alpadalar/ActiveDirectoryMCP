@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import ldap3
 from ldap3 import MODIFY_REPLACE
+from mcp.types import TextContent as Content
 
 from .. import validation
 from ..core.logging import log_ldap_operation
@@ -17,7 +18,7 @@ logger = logging.getLogger("active-directory-mcp.OrganizationalUnitTools")
 class OrganizationalUnitTools(BaseTool):
     """Tools for managing Active Directory Organizational Units."""
 
-    def _dn_error(self, operation: str, exc: ValidationError, **dns: str) -> List[Dict[str, Any]]:
+    def _dn_error(self, operation: str, exc: ValidationError, **dns: str) -> List[Content]:
         """Structured rejection for a malformed or out-of-base_dn DN (no LDAP call made)."""
         reason = str(exc)
         if "outside the configured base DN" in reason:
@@ -34,7 +35,7 @@ class OrganizationalUnitTools(BaseTool):
         filter_criteria: Optional[str] = None,
         attributes: Optional[List[str]] = None,
         recursive: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         List Organizational Units in Active Directory.
 
@@ -143,7 +144,7 @@ class OrganizationalUnitTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "list_ous", search_base)
 
-    def get_ou(self, ou_dn: str, attributes: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def get_ou(self, ou_dn: str, attributes: Optional[List[str]] = None) -> List[Content]:
         """
         Get detailed information about a specific Organizational Unit.
 
@@ -225,7 +226,7 @@ class OrganizationalUnitTools(BaseTool):
         description: Optional[str] = None,
         managed_by: Optional[str] = None,
         additional_attributes: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Create a new Organizational Unit.
 
@@ -307,7 +308,7 @@ class OrganizationalUnitTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "create_ou", ou_dn if "ou_dn" in locals() else name)
 
-    def modify_ou(self, ou_dn: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def modify_ou(self, ou_dn: str, attributes: Dict[str, Any]) -> List[Content]:
         """
         Modify OU attributes.
 
@@ -370,7 +371,7 @@ class OrganizationalUnitTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "modify_ou", ou_dn)
 
-    def delete_ou(self, ou_dn: str, force: bool = False) -> List[Dict[str, Any]]:
+    def delete_ou(self, ou_dn: str, force: bool = False) -> List[Content]:
         """
         Delete an Organizational Unit.
 
@@ -437,7 +438,7 @@ class OrganizationalUnitTools(BaseTool):
         except Exception as e:
             return self._handle_ldap_error(e, "delete_ou", ou_dn)
 
-    def move_ou(self, ou_dn: str, new_parent_dn: str) -> List[Dict[str, Any]]:
+    def move_ou(self, ou_dn: str, new_parent_dn: str) -> List[Content]:
         """
         Move an OU to a new parent.
 
@@ -518,7 +519,7 @@ class OrganizationalUnitTools(BaseTool):
 
     def get_ou_contents(
         self, ou_dn: str, object_types: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """
         Get contents of an OU (users, groups, computers, sub-OUs).
 
@@ -731,13 +732,13 @@ class OrganizationalUnitTools(BaseTool):
         filter_criteria: Optional[str] = None,
         attributes: Optional[List[str]] = None,
         recursive: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Content]:
         """Alias for list_ous method."""
         return self.list_ous(parent_ou, filter_criteria, attributes, recursive)
 
     def get_organizational_unit(
         self, ou_dn: str, attributes: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    ) -> List[Content]:
         """Alias for get_ou method."""
         return self.get_ou(ou_dn, attributes)
 
@@ -749,7 +750,7 @@ class OrganizationalUnitTools(BaseTool):
         description: Optional[str] = None,
         manager_dn: Optional[str] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> List[Content]:
         """Alias for create_ou method."""
         # Handle both parameter names for backward compatibility
         if parent_dn is not None:
@@ -758,11 +759,11 @@ class OrganizationalUnitTools(BaseTool):
             kwargs["managed_by"] = manager_dn
         return self.create_ou(name, parent_ou, description, **kwargs)
 
-    def modify_organizational_unit(self, ou_dn: str, attributes: Dict[str, Any]) -> Dict[str, Any]:
+    def modify_organizational_unit(self, ou_dn: str, attributes: Dict[str, Any]) -> List[Content]:
         """Alias for modify_ou method."""
         return self.modify_ou(ou_dn, attributes)
 
-    def delete_organizational_unit(self, ou_dn: str, force: bool = False) -> Dict[str, Any]:
+    def delete_organizational_unit(self, ou_dn: str, force: bool = False) -> List[Content]:
         """Alias for delete_ou method."""
         return self.delete_ou(ou_dn, force)
 
@@ -773,7 +774,7 @@ class OrganizationalUnitTools(BaseTool):
         new_parent_dn: str = None,
         destination_parent_dn: str = None,
         target_parent_dn: str = None,
-    ) -> Dict[str, Any]:
+    ) -> List[Content]:
         """Alias for move_ou method."""
         # Handle both parameter names for backward compatibility
         if source_dn is not None:
@@ -785,28 +786,34 @@ class OrganizationalUnitTools(BaseTool):
         return self.move_ou(ou_dn, new_parent_dn)
 
     # Convenience accessors
-    def get_ou_children(self, ou_dn: str) -> Dict[str, Any]:
+    def get_ou_children(self, ou_dn: str) -> List[Content]:
         """Get child objects of an OU."""
         return self.get_ou_contents(ou_dn)
 
-    def get_ou_statistics(self, ou_dn: str) -> Dict[str, Any]:
+    def get_ou_statistics(self, ou_dn: str) -> List[Content]:
         """Get statistics for an OU."""
         try:
             # get_ou_contents returns List[Content], parse the JSON response
             contents_response = self.get_ou_contents(ou_dn)
             if not contents_response or len(contents_response) == 0:
-                return {"success": False, "error": "OU contents not found", "ou_dn": ou_dn}
+                return self._format_response(
+                    {"success": False, "error": "OU contents not found", "ou_dn": ou_dn},
+                    "get_ou_statistics",
+                )
 
             import json
 
             contents = json.loads(contents_response[0].text)
 
             if not contents.get("success", True):
-                return {
-                    "success": False,
-                    "error": contents.get("error", "Unknown error"),
-                    "ou_dn": ou_dn,
-                }
+                return self._format_response(
+                    {
+                        "success": False,
+                        "error": contents.get("error", "Unknown error"),
+                        "ou_dn": ou_dn,
+                    },
+                    "get_ou_statistics",
+                )
 
             stats = {
                 "ou_dn": ou_dn,
