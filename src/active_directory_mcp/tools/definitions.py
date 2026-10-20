@@ -1,5 +1,7 @@
 """Tool definitions and descriptions for Active Directory MCP."""
 
+from typing import Any, Dict
+
 # User Management Tool Descriptions
 LIST_USERS_DESC = """List users in Active Directory with optional filtering.
 
@@ -26,7 +28,7 @@ Returns detailed user profile with security assessment."""
 CREATE_USER_DESC = """Create a new user account in Active Directory.
 
 Creates a user with specified attributes in the designated organizational unit.
-Automatically sets up user principal name, enables account, and applies security settings.
+Sets the user principal name, sets the initial password and enables the account.
 
 Example:
 - create_user(username="jsmith", password="TempPass123!", first_name="John", 
@@ -42,7 +44,7 @@ and organizational data.
 Example:
 - modify_user(username="jsmith", attributes={"department": "Marketing", "title": "Manager"})
 
-Supports password changes and account property modifications."""
+The password cannot be changed with this tool; use reset_user_password instead."""
 
 DELETE_USER_DESC = """Delete a user account from Active Directory.
 
@@ -124,7 +126,7 @@ Example:
 - create_group(group_name="Marketing Team", group_scope="Global", 
                group_type="Security", description="Marketing department")
 
-Automatically configures group properties."""
+Fails if a group with that name already exists."""
 
 MODIFY_GROUP_DESC = """Modify group attributes and properties.
 
@@ -134,16 +136,16 @@ and other attributes.
 Example:
 - modify_group(group_name="Sales Team", attributes={"description": "Updated description"})
 
-Preserves group membership during modifications."""
+Returns an error if the group is not found."""
 
 DELETE_GROUP_DESC = """Delete a group from Active Directory.
 
-Permanently removes group and all membership associations.
+Permanently removes the group object.
 
 Example:
 - delete_group(group_name="Old Project Team")
 
-Validates group existence and membership before deletion."""
+Validates group existence before deletion."""
 
 ADD_GROUP_MEMBER_DESC = """Add a member to a group.
 
@@ -152,7 +154,7 @@ Adds user, computer, or group as member of specified group.
 Example:
 - add_group_member(group_name="Sales Team", member_dn="CN=John Smith,OU=Users,DC=company,DC=com")
 
-Supports nested group memberships."""
+Fails if the member is already in the group."""
 
 REMOVE_GROUP_MEMBER_DESC = """Remove a member from a group.
 
@@ -203,7 +205,7 @@ Configures DNS hostname and enables account.
 Example:
 - create_computer(computer_name="NEW-DESKTOP", description="Marketing workstation")
 
-Automatically sets up computer trust relationship."""
+Fails if a computer with that name already exists."""
 
 MODIFY_COMPUTER_DESC = """Modify computer attributes and properties.
 
@@ -213,7 +215,7 @@ Example:
 - modify_computer(computer_name="DESKTOP-ABC123", 
                   attributes={"description": "Updated description", "location": "Building A"})
 
-Preserves critical computer account settings."""
+Returns an error if the computer is not found."""
 
 DELETE_COMPUTER_DESC = """Delete a computer object from Active Directory.
 
@@ -244,12 +246,12 @@ Useful for temporary computer isolation."""
 
 RESET_COMPUTER_PASSWORD_DESC = """Reset computer account password.
 
-Forces computer to re-establish trust relationship with domain.
+Sets pwdLastSet to 0 on the computer account and returns a generated password value.
 
 Example:
 - reset_computer_password(computer_name="DESKTOP-ABC123")
 
-Resolves computer authentication issues."""
+Returns an error if the computer is not found."""
 
 GET_STALE_COMPUTERS_DESC = """Get computers that haven't logged in for specified days.
 
@@ -299,7 +301,7 @@ Example:
 - modify_organizational_unit(ou_dn="OU=Sales,DC=company,DC=com",
                             attributes={"description": "Updated description"})
 
-Preserves OU structure during modifications."""
+Returns an error if the OU is not found."""
 
 DELETE_ORGANIZATIONAL_UNIT_DESC = """Delete an Organizational Unit.
 
@@ -419,3 +421,438 @@ Example:
 - get_schema_info()
 
 Useful for API documentation and integration."""
+
+
+# Single description source: exposed tool name -> description (consumed by registry.py)
+TOOL_DESCRIPTIONS: Dict[str, str] = {
+    "list_users": LIST_USERS_DESC,
+    "get_user": GET_USER_DESC,
+    "create_user": CREATE_USER_DESC,
+    "modify_user": MODIFY_USER_DESC,
+    "delete_user": DELETE_USER_DESC,
+    "enable_user": ENABLE_USER_DESC,
+    "disable_user": DISABLE_USER_DESC,
+    "reset_user_password": RESET_USER_PASSWORD_DESC,
+    "get_user_groups": GET_USER_GROUPS_DESC,
+    "list_groups": LIST_GROUPS_DESC,
+    "get_group": GET_GROUP_DESC,
+    "create_group": CREATE_GROUP_DESC,
+    "modify_group": MODIFY_GROUP_DESC,
+    "delete_group": DELETE_GROUP_DESC,
+    "add_group_member": ADD_GROUP_MEMBER_DESC,
+    "remove_group_member": REMOVE_GROUP_MEMBER_DESC,
+    "get_group_members": GET_GROUP_MEMBERS_DESC,
+    "list_computers": LIST_COMPUTERS_DESC,
+    "get_computer": GET_COMPUTER_DESC,
+    "create_computer": CREATE_COMPUTER_DESC,
+    "modify_computer": MODIFY_COMPUTER_DESC,
+    "delete_computer": DELETE_COMPUTER_DESC,
+    "enable_computer": ENABLE_COMPUTER_DESC,
+    "disable_computer": DISABLE_COMPUTER_DESC,
+    "reset_computer_password": RESET_COMPUTER_PASSWORD_DESC,
+    "get_stale_computers": GET_STALE_COMPUTERS_DESC,
+    "list_organizational_units": LIST_ORGANIZATIONAL_UNITS_DESC,
+    "get_organizational_unit": GET_ORGANIZATIONAL_UNIT_DESC,
+    "create_organizational_unit": CREATE_ORGANIZATIONAL_UNIT_DESC,
+    "modify_organizational_unit": MODIFY_ORGANIZATIONAL_UNIT_DESC,
+    "delete_organizational_unit": DELETE_ORGANIZATIONAL_UNIT_DESC,
+    "move_organizational_unit": MOVE_ORGANIZATIONAL_UNIT_DESC,
+    "get_organizational_unit_contents": GET_ORGANIZATIONAL_UNIT_CONTENTS_DESC,
+    "get_domain_info": GET_DOMAIN_INFO_DESC,
+    "get_privileged_groups": GET_PRIVILEGED_GROUPS_DESC,
+    "get_user_permissions": GET_USER_PERMISSIONS_DESC,
+    "get_inactive_users": GET_INACTIVE_USERS_DESC,
+    "get_password_policy_violations": GET_PASSWORD_POLICY_VIOLATIONS_DESC,
+    "audit_admin_accounts": AUDIT_ADMIN_ACCOUNTS_DESC,
+    "test_connection": TEST_CONNECTION_DESC,
+    "health": HEALTH_DESC,
+    "get_schema_info": GET_SCHEMA_INFO_DESC,
+}
+
+# Stdio input schemas, moved verbatim from the former server.py _define_tools
+TOOL_INPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "list_users": {
+        "type": "object",
+        "properties": {
+            "ou": {"type": "string", "description": "Organizational Unit DN to search in"},
+            "filter_criteria": {"type": "string", "description": "Additional LDAP filter criteria"},
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+    },
+    "get_user": {
+        "type": "object",
+        "properties": {
+            "username": {
+                "type": "string",
+                "description": "Username (sAMAccountName) to search for",
+            },
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+        "required": ["username"],
+    },
+    "create_user": {
+        "type": "object",
+        "properties": {
+            "username": {"type": "string", "description": "Username (sAMAccountName)"},
+            "password": {"type": "string", "description": "User password"},
+            "first_name": {"type": "string", "description": "User's first name"},
+            "last_name": {"type": "string", "description": "User's last name"},
+            "email": {"type": "string", "description": "User's email address"},
+            "ou": {"type": "string", "description": "Organizational Unit DN to create user in"},
+            "additional_attributes": {
+                "type": "object",
+                "description": "Additional attributes to set",
+            },
+        },
+        "required": ["username", "password", "first_name", "last_name"],
+    },
+    "modify_user": {
+        "type": "object",
+        "properties": {
+            "username": {"type": "string", "description": "Username to modify"},
+            "attributes": {"type": "object", "description": "Dictionary of attributes to modify"},
+        },
+        "required": ["username", "attributes"],
+    },
+    "delete_user": {
+        "type": "object",
+        "properties": {"username": {"type": "string", "description": "Username to delete"}},
+        "required": ["username"],
+    },
+    "enable_user": {
+        "type": "object",
+        "properties": {"username": {"type": "string", "description": "Username to enable"}},
+        "required": ["username"],
+    },
+    "disable_user": {
+        "type": "object",
+        "properties": {"username": {"type": "string", "description": "Username to disable"}},
+        "required": ["username"],
+    },
+    "reset_user_password": {
+        "type": "object",
+        "properties": {
+            "username": {"type": "string", "description": "Username to reset password for"},
+            "new_password": {
+                "type": "string",
+                "description": "New password (auto-generated if not provided)",
+            },
+            "force_change": {
+                "type": "boolean",
+                "description": "Force user to change password at next logon",
+                "default": True,
+            },
+        },
+        "required": ["username"],
+    },
+    "get_user_groups": {
+        "type": "object",
+        "properties": {"username": {"type": "string", "description": "Username to get groups for"}},
+        "required": ["username"],
+    },
+    "list_groups": {
+        "type": "object",
+        "properties": {
+            "ou": {"type": "string", "description": "Organizational Unit DN to search in"},
+            "filter_criteria": {"type": "string", "description": "Additional LDAP filter criteria"},
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+    },
+    "get_group": {
+        "type": "object",
+        "properties": {
+            "group_name": {
+                "type": "string",
+                "description": "Group name (sAMAccountName) to search for",
+            },
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+        "required": ["group_name"],
+    },
+    "create_group": {
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Group name (sAMAccountName)"},
+            "display_name": {"type": "string", "description": "Display name for the group"},
+            "description": {"type": "string", "description": "Group description"},
+            "ou": {"type": "string", "description": "Organizational Unit DN to create group in"},
+            "group_scope": {
+                "type": "string",
+                "description": "Group scope (Global, DomainLocal, Universal)",
+                "default": "Global",
+            },
+            "group_type": {
+                "type": "string",
+                "description": "Group type (Security, Distribution)",
+                "default": "Security",
+            },
+            "additional_attributes": {
+                "type": "object",
+                "description": "Additional attributes to set",
+            },
+        },
+        "required": ["group_name"],
+    },
+    "modify_group": {
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Group name to modify"},
+            "attributes": {"type": "object", "description": "Dictionary of attributes to modify"},
+        },
+        "required": ["group_name", "attributes"],
+    },
+    "delete_group": {
+        "type": "object",
+        "properties": {"group_name": {"type": "string", "description": "Group name to delete"}},
+        "required": ["group_name"],
+    },
+    "add_group_member": {
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Group name to add member to"},
+            "member_dn": {"type": "string", "description": "Distinguished name of member to add"},
+        },
+        "required": ["group_name", "member_dn"],
+    },
+    "remove_group_member": {
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Group name to remove member from"},
+            "member_dn": {
+                "type": "string",
+                "description": "Distinguished name of member to remove",
+            },
+        },
+        "required": ["group_name", "member_dn"],
+    },
+    "get_group_members": {
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Group name to get members for"},
+            "recursive": {
+                "type": "boolean",
+                "description": "Include members of nested groups",
+                "default": False,
+            },
+        },
+        "required": ["group_name"],
+    },
+    "list_computers": {
+        "type": "object",
+        "properties": {
+            "ou": {"type": "string", "description": "Organizational Unit DN to search in"},
+            "filter_criteria": {"type": "string", "description": "Additional LDAP filter criteria"},
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+    },
+    "get_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {
+                "type": "string",
+                "description": "Computer name (sAMAccountName) to search for",
+            },
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+        "required": ["computer_name"],
+    },
+    "create_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {"type": "string", "description": "Computer name (without $ suffix)"},
+            "description": {"type": "string", "description": "Computer description"},
+            "ou": {"type": "string", "description": "Organizational Unit DN to create computer in"},
+            "dns_hostname": {"type": "string", "description": "DNS hostname"},
+            "additional_attributes": {
+                "type": "object",
+                "description": "Additional attributes to set",
+            },
+        },
+        "required": ["computer_name"],
+    },
+    "modify_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {"type": "string", "description": "Computer name to modify"},
+            "attributes": {"type": "object", "description": "Dictionary of attributes to modify"},
+        },
+        "required": ["computer_name", "attributes"],
+    },
+    "delete_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {"type": "string", "description": "Computer name to delete"}
+        },
+        "required": ["computer_name"],
+    },
+    "enable_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {"type": "string", "description": "Computer name to enable"}
+        },
+        "required": ["computer_name"],
+    },
+    "disable_computer": {
+        "type": "object",
+        "properties": {
+            "computer_name": {"type": "string", "description": "Computer name to disable"}
+        },
+        "required": ["computer_name"],
+    },
+    "reset_computer_password": {
+        "type": "object",
+        "properties": {
+            "computer_name": {
+                "type": "string",
+                "description": "Computer name to reset password for",
+            }
+        },
+        "required": ["computer_name"],
+    },
+    "get_stale_computers": {
+        "type": "object",
+        "properties": {
+            "days": {
+                "type": "integer",
+                "description": "Number of days to consider stale",
+                "default": 90,
+            }
+        },
+    },
+    "list_organizational_units": {
+        "type": "object",
+        "properties": {
+            "parent_ou": {"type": "string", "description": "Parent OU DN to search in"},
+            "filter_criteria": {"type": "string", "description": "Additional LDAP filter criteria"},
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+            "recursive": {
+                "type": "boolean",
+                "description": "Search recursively in sub-OUs",
+                "default": True,
+            },
+        },
+    },
+    "get_organizational_unit": {
+        "type": "object",
+        "properties": {
+            "ou_dn": {"type": "string", "description": "Distinguished name of the OU"},
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific attributes to retrieve",
+            },
+        },
+        "required": ["ou_dn"],
+    },
+    "create_organizational_unit": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Name of the OU"},
+            "parent_ou": {"type": "string", "description": "Parent OU DN"},
+            "description": {"type": "string", "description": "OU description"},
+            "managed_by": {"type": "string", "description": "DN of user/group managing this OU"},
+            "additional_attributes": {
+                "type": "object",
+                "description": "Additional attributes to set",
+            },
+        },
+        "required": ["name"],
+    },
+    "modify_organizational_unit": {
+        "type": "object",
+        "properties": {
+            "ou_dn": {"type": "string", "description": "OU distinguished name to modify"},
+            "attributes": {"type": "object", "description": "Dictionary of attributes to modify"},
+        },
+        "required": ["ou_dn", "attributes"],
+    },
+    "delete_organizational_unit": {
+        "type": "object",
+        "properties": {
+            "ou_dn": {"type": "string", "description": "OU distinguished name to delete"},
+            "force": {
+                "type": "boolean",
+                "description": "Force deletion even if OU contains objects",
+                "default": False,
+            },
+        },
+        "required": ["ou_dn"],
+    },
+    "move_organizational_unit": {
+        "type": "object",
+        "properties": {
+            "ou_dn": {"type": "string", "description": "OU distinguished name to move"},
+            "new_parent_dn": {"type": "string", "description": "New parent OU distinguished name"},
+        },
+        "required": ["ou_dn", "new_parent_dn"],
+    },
+    "get_organizational_unit_contents": {
+        "type": "object",
+        "properties": {
+            "ou_dn": {"type": "string", "description": "OU distinguished name"},
+            "object_types": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Types of objects to include",
+            },
+        },
+        "required": ["ou_dn"],
+    },
+    "get_domain_info": {"type": "object", "properties": {}},
+    "get_privileged_groups": {"type": "object", "properties": {}},
+    "get_user_permissions": {
+        "type": "object",
+        "properties": {
+            "username": {"type": "string", "description": "Username to analyze permissions for"}
+        },
+        "required": ["username"],
+    },
+    "get_inactive_users": {
+        "type": "object",
+        "properties": {
+            "days": {
+                "type": "integer",
+                "description": "Number of days to consider inactive",
+                "default": 90,
+            },
+            "include_disabled": {
+                "type": "boolean",
+                "description": "Include disabled accounts in results",
+                "default": False,
+            },
+        },
+    },
+    "get_password_policy_violations": {"type": "object", "properties": {}},
+    "audit_admin_accounts": {"type": "object", "properties": {}},
+    "test_connection": {"type": "object", "properties": {}},
+    "health": {"type": "object", "properties": {}},
+    "get_schema_info": {"type": "object", "properties": {}},
+}
