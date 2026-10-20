@@ -211,3 +211,10 @@ def test_docker_quickstart_supplies_bind_credentials() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     for name in ("AD_BIND_DN", "AD_PASSWORD"):
         assert re.search(rf"^\s*- {name}=\$\{{{name}:-\}}\s*$", compose, flags=re.MULTILINE), name
+
+
+def test_readme_does_not_overstate_network_or_audit_guarantees() -> None:
+    """WR-08 / IN-03: Key Vault contacts Azure; O_APPEND does not make a file tamper-proof."""
+    assert "Nothing is sent anywhere" not in README
+    assert "append-only" not in README.lower()
+    assert "Azure Key Vault" in README.split("## Requirements", 1)[0]

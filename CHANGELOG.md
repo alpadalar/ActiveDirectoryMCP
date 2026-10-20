@@ -52,7 +52,7 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 - Audit trail: every write and destructive tool call is recorded as one JSON line
   (timestamp, tool, risk, target, outcome, redacted arguments) in the file set by the new
-  `security.audit_log_path` option (mode `0600`, append-only; passwords are never stored).
+  `security.audit_log_path` option (opened in append mode, mode `0600`; passwords are never stored).
 - Three new read-only tools: `get_nested_group_members` (transitive membership through one
   server-side chain query), `get_rootdse_info` (allow-listed rootDSE attributes) and
   `get_tls_posture` (configured TLS settings, live channel ldaps/starttls/plaintext, TLS

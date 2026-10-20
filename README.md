@@ -19,7 +19,9 @@ responsibility of the operator before relying on it in production.
 - The HTTP transport refuses to start without an API key and answers `401` to every request that
   does not present one (only `GET /health` is open).
 - List and report tools return at most `security.max_list_results` entries (default 1000).
-- Nothing is sent anywhere except to the directory server you configure.
+- Outbound connections go only to the directory server you configure and, if you configure Azure Key
+  Vault, to Azure Key Vault and the Azure identity endpoints. Logs and the optional audit file are
+  written locally.
 
 ## Requirements
 
@@ -281,8 +283,9 @@ Write access and the HTTP transport are locked down by default. Example (placeho
   anything with `adminCount=1`). Set it to false only if you accept that anyone with
   `allow_writes` can change them.
 - `security.audit_log_path` (default unset) writes one JSON line per write or destructive tool call
-  (timestamp, tool, risk, target, outcome, redacted arguments; no passwords) to an append-only file
-  created with mode `0600`. The server refuses to start if the path cannot be opened and logs a
+  (timestamp, tool, risk, target, outcome, redacted arguments; no passwords) to a file opened in append mode
+  with mode `0600` (the service user can still truncate or delete it; use `chattr +a` or ship the
+  lines elsewhere if you need tamper resistance). The server refuses to start if the path cannot be opened and logs a
   warning when `allow_writes` is true without a path. Destructive calls also write an `intent`
   record first; HTTP calls add an `actor`.
 - `security.audit_fail_closed` (default false, needs `audit_log_path`) refuses write and destructive
