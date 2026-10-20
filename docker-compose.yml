@@ -9,31 +9,31 @@ services:
       # Configuration file path
       - AD_MCP_CONFIG=/app/ad-config/ad-config.json
       
-      # HTTP server settings
-      - HTTP_HOST=0.0.0.0
-      - HTTP_PORT=8813
-      - HTTP_PATH=/activedirectory-mcp
+      # The HTTP bind address, port and path are fixed by the image ENTRYPOINT (0.0.0.0:8813
+      # /activedirectory-mcp). Change the published port in "ports" below instead.
 
       # Required API key for the HTTP transport (compose refuses to start without it).
       # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
       - AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:?set AD_MCP_HTTP_API_KEY (see README)}
       
       # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
-      # - AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
-      # - AZURE_KEYVAULT_SECRET_USERNAME=ad-bind-username
+      # - AZURE_KEYVAULT_URL=https://<vault-name>.vault.azure.net/
+      # - AZURE_KEYVAULT_SECRET_USERNAME=<secret-name-for-bind-username>
       # - AZURE_KEYVAULT_SECRET_PASSWORD=<secret-name-for-bind-password>
       # Authentication uses DefaultAzureCredential (managed identity, az login, or
       # a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET).
-      # - AZURE_TENANT_ID=your-azure-ad-tenant-id
-      # - AZURE_CLIENT_ID=your-app-registration-client-id
+      # - AZURE_TENANT_ID=<tenant-id>
+      # - AZURE_CLIENT_ID=<client-id>
       # - AZURE_CLIENT_SECRET=<app-registration-client-secret>
       
-      # Optional: Override config via environment variables
-      # - AD_SERVER=ldap://your-ad-server.domain.com:389
-      # - AD_BIND_DN=CN=ServiceAccount,OU=Service Accounts,DC=domain,DC=com
-      # - AD_PASSWORD=YourSecurePassword  # discouraged - prefer Azure Key Vault above
-      # - AD_BASE_DN=DC=domain,DC=com
-      
+      # --- Bind credentials: set ONE of Azure Key Vault (above) or these two ---
+      # Compose reads them from your shell (or a ".env" file next to this file); empty means
+      # unset. Without Key Vault, AD_PASSWORD is required (the server exits at startup
+      # without it) and AD_BIND_DN overrides "active_directory.bind_dn" from the config file.
+      # Plaintext AD_PASSWORD is discouraged: it is visible in "docker inspect".
+      - AD_BIND_DN=${AD_BIND_DN:-}
+      - AD_PASSWORD=${AD_PASSWORD:-}
+
     ports:
       - "8813:8813"
       

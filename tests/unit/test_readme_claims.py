@@ -172,3 +172,42 @@ def test_readme_style() -> None:
     assert not re.search(r"(?m)^\s*(?:uv sync --all-extras|uv sync)\s*$", README), (
         "quickstart must use 'uv sync --locked'"
     )
+
+
+def _src_corpus() -> str:
+    return "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "src").rglob("*.py"))
+
+
+def _assigned_env_names(text: str) -> Set[str]:
+    """Names assigned as ``- NAME=`` / ``# - NAME=`` / ``NAME=`` (active or commented)."""
+    return set(re.findall(r"^\s*(?:#\s*)?(?:-\s*)?([A-Z][A-Z0-9_]{2,})=", text, flags=re.MULTILINE))
+
+
+def test_compose_env_overrides_are_read_by_the_server() -> None:
+    """WR-05: no documented override may be a name the server never reads."""
+    corpus = _src_corpus()
+    named = _assigned_env_names((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    assert {"AD_MCP_CONFIG", "AD_BIND_DN", "AD_PASSWORD"} <= named
+    missing = sorted(name for name in named if name not in corpus)
+    assert not missing, f"docker-compose.yml names variables nothing in src/ reads: {missing}"
+
+
+def test_env_example_names_are_read_by_the_server_or_launchers() -> None:
+    corpus = _src_corpus() + "\n".join(
+        (ROOT / n).read_text(encoding="utf-8")
+        for n in ("start_server.sh", "start_http_server.sh")
+    )
+    named = _assigned_env_names((ROOT / ".env.example").read_text(encoding="utf-8"))
+    missing = sorted(name for name in named if name not in corpus)
+    assert not missing, f".env.example names variables nothing reads: {missing}"
+
+
+def test_docker_quickstart_supplies_bind_credentials() -> None:
+    """WR-06: the compose quickstart must pass a bind password or the container crash-loops."""
+    section = README.split("\n## Docker\n", 1)[1].split("\n## ", 1)[0]
+    block = re.search(r"```bash\nexport AD_MCP_HTTP_API_KEY.*?```", section, flags=re.DOTALL)
+    assert block, "Docker quickstart block not found"
+    assert "AD_BIND_DN" in block.group(0) and "AD_PASSWORD" in block.group(0)
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    for name in ("AD_BIND_DN", "AD_PASSWORD"):
+        assert re.search(rf"^\s*- {name}=\$\{{{name}:-\}}\s*$", compose, flags=re.MULTILINE), name

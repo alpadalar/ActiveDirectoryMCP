@@ -113,14 +113,21 @@ With Compose, which mounts `./ad-config` read-only and refuses to start without 
 ```bash
 export AD_MCP_HTTP_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 cp ad-config/config.example.json ad-config/ad-config.json     # then edit it as described above
+export AD_BIND_DN='CN=service-account,OU=Service Accounts,DC=example,DC=com'
+read -rs AD_PASSWORD && export AD_PASSWORD                     # not echoed; skip both with Key Vault
 docker compose up -d
 docker compose ps
 curl -sf http://127.0.0.1:8813/health
 ```
 
-Bind credentials for the container come from Azure Key Vault or from the `AD_BIND_DN` and
-`AD_PASSWORD` variables (commented in `docker-compose.yml`; prefer Key Vault). Do not bake secrets
-into the image or the config file.
+Compose passes `AD_BIND_DN` and `AD_PASSWORD` from your shell (or a `.env` file next to
+`docker-compose.yml`) into the container. Without them, and without Key Vault, the server exits at
+startup with "No AD bind password available" and `restart: unless-stopped` keeps retrying, so check
+`docker compose logs` if `/health` does not answer. For Azure Key Vault, uncomment the
+`AZURE_KEYVAULT_*` lines in `docker-compose.yml` instead and leave `AD_PASSWORD` unset; the
+plaintext variable is visible in `docker inspect`, so prefer Key Vault. Do not bake secrets into the
+image or the config file. The HTTP address inside the container is fixed (`0.0.0.0:8813`); change the
+published port in `ports`, not an environment variable.
 
 Verification note: `docker build`, the fail-fast start without a key, `/health`, the `401` without a
 key and acceptance of both key headers were exercised against a container without a reachable

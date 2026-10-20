@@ -47,9 +47,6 @@ services:
       - openldap
     environment:
       - AD_MCP_CONFIG=/app/ad-config/openldap-lab.example.json
-      - HTTP_HOST=0.0.0.0
-      - HTTP_PORT=8813
-      - HTTP_PATH=/activedirectory-mcp
       # Throwaway lab credential for the local openldap container above; the lab config
       # references it as ${LAB_LDAP_PASSWORD}. Never do this for production - use Azure
       # Key Vault instead (see docker-compose.yml).
