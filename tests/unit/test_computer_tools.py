@@ -373,3 +373,63 @@ def test_schema_info_lists_operations(computer_tools):
 def test_response_is_valid_json_text(computer_tools):
     result = computer_tools.get_computer("x")
     json.loads(result[0].text)
+
+
+# ------------------------------------------------- config/validator hardening
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"ou": "OU=X,DC=evil,DC=com"},
+        {"ou": "not-a-dn"},
+        {"filter_criteria": "(name=a*"},
+        {"filter_criteria": ")(objectClass=*"},
+    ],
+    ids=["out-of-base", "malformed-dn", "unbalanced", "breakout"],
+)
+def test_list_computers_rejects_hostile_input_without_search(
+    computer_tools, mock_ldap_manager, kwargs
+):
+    data = parse_response(computer_tools.list_computers(**kwargs))
+    assert data["success"] is False
+    mock_ldap_manager.search.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda t: t.list_computers(),
+        lambda t: t.get_computer("PC"),
+        lambda t: t.modify_computer("PC", {"description": "x"}),
+        lambda t: t.delete_computer("PC"),
+        lambda t: t.enable_computer("PC"),
+        lambda t: t.disable_computer("PC"),
+        lambda t: t.reset_computer_password("PC"),
+        lambda t: t.get_stale_computers(),
+    ],
+    ids=["list", "get", "modify", "delete", "enable", "disable", "reset", "stale"],
+)
+def test_filters_use_configured_computer_object_class(
+    computer_tools, mock_ldap_manager, ad_settings, call
+):
+    ad_settings.computer_object_class = "device"
+    call(computer_tools)
+    flt = mock_ldap_manager.search.call_args.kwargs["search_filter"]
+    assert "objectClass=device" in flt
+    assert "objectClass=computer" not in flt
+
+
+def test_create_computer_escapes_rdn(computer_tools, mock_ldap_manager):
+    data = parse_response(computer_tools.create_computer("pc,OU=Admins"))
+    assert data["success"] is True
+    dn = mock_ldap_manager.add.call_args.args[0]
+    assert dn.startswith("CN=pc\\,OU=Admins,")
+    assert dn.endswith("CN=Computers,DC=test,DC=local")
+
+
+def test_create_computer_rejects_out_of_base_ou(computer_tools, mock_ldap_manager):
+    data = parse_response(computer_tools.create_computer("PC", ou="OU=X,DC=evil,DC=com"))
+    assert data["success"] is False
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.add.assert_not_called()

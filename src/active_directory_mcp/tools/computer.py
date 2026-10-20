@@ -7,12 +7,18 @@ import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 
 from .base import BaseTool
+from .. import validation
+from ..validation import ValidationError
 from ..core.logging import log_ldap_operation
 
 
 class ComputerTools(BaseTool):
     """Tools for managing Active Directory computer objects."""
     
+    def _computer_filter(self) -> str:
+        """Base filter for computer objects using the configured (validated) objectClass."""
+        return f"(objectClass={self.ldap.ad_config.computer_object_class})"
+
     def list_computers(self, ou: Optional[str] = None, filter_criteria: Optional[str] = None,
                       attributes: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
@@ -26,19 +32,16 @@ class ComputerTools(BaseTool):
         Returns:
             List of MCP content objects with computer information
         """
+        search_base = ou or self.ldap.ad_config.base_dn
         try:
-            # Determine search base
+            # Determine search base (confined to base_dn)
             if ou:
-                search_base = ou
-            else:
-                search_base = self.ldap.ad_config.base_dn
-            
-            # Build search filter
-            base_filter = f"(objectClass={self.ldap.ad_config.computer_object_class})"
-            if filter_criteria:
-                search_filter = f"(&{base_filter}{filter_criteria})"
-            else:
-                search_filter = base_filter
+                search_base = self._confined_dn(ou)
+
+            # Build search filter (filter_criteria validated before any LDAP call)
+            search_filter = validation.combine_filters(
+                self._computer_filter(), filter_criteria or None
+            )
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -97,6 +100,8 @@ class ComputerTools(BaseTool):
             
             return self._format_response(response_data, "list_computers")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "list_computers", search_base)
         except Exception as e:
             return self._handle_ldap_error(e, "list_computers", search_base)
     
@@ -118,7 +123,7 @@ class ComputerTools(BaseTool):
             
             # Build search filter
             escaped_computer_name = self._escape_ldap_filter(computer_name)
-            search_filter = f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={escaped_computer_name}))"
+            search_filter = f"(&{self._computer_filter()}(sAMAccountName={escaped_computer_name}))"
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -195,8 +200,8 @@ class ComputerTools(BaseTool):
             if ou is None:
                 ou = self.ldap.organizational_units.computers_ou
             
-            # Build DN
-            computer_dn = f"CN={computer_cn},{ou}"
+            # Build DN (escaped RDN value, parent confined to base_dn)
+            computer_dn = self._build_dn(computer_cn, ou)
             
             # Check if computer already exists
             existing_computer = self.ldap.search(
@@ -268,6 +273,8 @@ class ComputerTools(BaseTool):
             else:
                 raise Exception("Failed to create computer object")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "create_computer", ou or "")
         except Exception as e:
             return self._handle_ldap_error(e, "create_computer", computer_dn if 'computer_dn' in locals() else computer_name)
     
@@ -290,7 +297,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&{self._computer_filter()}(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -351,7 +358,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&{self._computer_filter()}(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -427,7 +434,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&{self._computer_filter()}(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -482,7 +489,7 @@ class ComputerTools(BaseTool):
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Search for all computers
-            search_filter = f"(objectClass={self.ldap.ad_config.computer_object_class})"
+            search_filter = self._computer_filter()
             attributes = ['sAMAccountName', 'dNSHostName', 'lastLogon', 'pwdLastSet', 'operatingSystem', 'description']
 
             results = self.ldap.search(
@@ -531,7 +538,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&{self._computer_filter()}(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
