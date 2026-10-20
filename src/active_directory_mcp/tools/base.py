@@ -258,11 +258,13 @@ class BaseTool(ABC):
             Escaped value
         """
         # Escape special LDAP filter characters
+        # Backslash must be escaped first, otherwise the backslashes introduced by the
+        # other escapes get escaped again (e.g. '*' -> '\5c2a').
         escape_chars = {
+            '\\': r'\5c',
             '*': r'\2a',
             '(': r'\28',
             ')': r'\29',
-            '\\': r'\5c',
             '\x00': r'\00'
         }
 
