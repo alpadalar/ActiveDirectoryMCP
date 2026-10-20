@@ -245,7 +245,7 @@ commits (compose files, README, LDIF fixtures and test scripts). It is in the pu
 - Treat the value as compromised. Rotate it everywhere it was or may have been used, and never reuse it.
 - The maintainer's checklist tracks as pending, owner-side actions: a decision on purging the history,
   enabling GitHub secret scanning with push protection, and enabling private vulnerability reporting.
-- Scan results (scan of 2026-10-20, re-run after the Phase 5 review fixes): the scripted full-history
+- Scan results (scan of 2026-10-20, re-run after the pre-release review fixes): the scripted full-history
   and tree scan (`scripts/secret_scan.py` with the custom rules in `.gitleaks.toml`) covers all refs,
   including merge-commit diffs, and the tracked tree. The gitleaks binary was not available, so the
   `useDefault` gitleaks rules were not exercised; only the custom rules ran. The allow-list accepts
