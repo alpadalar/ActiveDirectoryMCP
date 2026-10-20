@@ -62,6 +62,13 @@ and enforced by the golden snapshots in `tests/golden/`.
 
 ### Fixed
 
+- `LDAPManager.search` no longer raises "Search failed" when a search returns zero entries
+  (or an empty last page) with result code 0; it returns an empty list. This fixes lookups
+  of missing users and the create-user existing-user probe.
+- A BASE-scope search on a missing entry returns an empty list instead of raising
+  noSuchObject, so `create_ou` no longer fails its existence check.
+- Group and user-group tools no longer request the non-existent attributes `dn` and
+  `groupScope`, which failed against schema-checked servers.
 - Expired accounts are now detected when ldap3 returns a datetime for `accountExpires`
   (previously always reported as not expired).
 - Days since last logon and password age are computed correctly for the values real AD
