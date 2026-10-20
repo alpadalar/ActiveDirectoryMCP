@@ -28,15 +28,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 WORKDIR /app
 
-COPY --from=builder /app/.venv /app/.venv
+# venv and code stay root-owned and read-only for the runtime user
+COPY --from=builder --chown=root:root /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     AD_MCP_CONFIG=/app/ad-config/config.json
 
-# Non-root execution
-RUN useradd -m -u 1000 aduser && chown -R aduser:aduser /app
+# Non-root execution; aduser owns only the directories it must write to
+RUN useradd -m -u 1000 aduser \
+    && mkdir -p /app/logs \
+    && chown aduser:aduser /app/logs
 USER aduser
 
 # Expose HTTP port
