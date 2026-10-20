@@ -142,6 +142,9 @@ and enforced by the golden snapshots in `tests/golden/`.
 - bare `except:` handlers were removed and silent exception swallowing now logs a
   warning; `list_*` tools no longer hit an unbound variable when validation fails early.
 
+- `uvicorn` (`>=0.40,<1`) and `starlette` (`>=1.0,<2`) are now declared dependencies; the
+  HTTP server imports them directly and previously relied on `fastmcp`'s transitive pins.
+
 ### Output changes
 
 - `get_domain_info` `password_policy.*.raw` (`lockout_duration`, `max_password_age`,
