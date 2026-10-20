@@ -82,7 +82,8 @@ class TestNestedGroupMembers:
 
     def test_ambiguous_group_is_an_error(self, directory_tools, mock_ldap_manager):
         mock_ldap_manager.search.return_value = [
-            ldap_entry(GROUP_DN), ldap_entry("CN=Admins,OU=x,DC=test,DC=local")
+            ldap_entry(GROUP_DN),
+            ldap_entry("CN=Admins,OU=x,DC=test,DC=local"),
         ]
         data = parse_response(directory_tools.get_nested_group_members("Admins"))
         assert data["success"] is False and "ambiguous" in data["error"].lower()

@@ -186,7 +186,11 @@ class TestGetMembers:
         nested = "CN=Nested,CN=Groups,DC=test,DC=local"
         mock_ldap_manager.search.side_effect = [
             [ldap_entry(GROUP_DN, member=[nested])],
-            [ldap_entry(nested, objectClass=["top", "group"], sAMAccountName="Nested", member=[MEMBER])],
+            [
+                ldap_entry(
+                    nested, objectClass=["top", "group"], sAMAccountName="Nested", member=[MEMBER]
+                )
+            ],
             [ldap_entry(MEMBER, objectClass=["top", "user"], sAMAccountName="jdoe")],
         ]
         data = parse_response(group_tools.get_members("Sales", recursive=True))
@@ -201,7 +205,9 @@ class TestGetMembers:
             if "sAMAccountName=" in kwargs["search_filter"]:
                 return [ldap_entry(a, member=[b])]
             members = {a: [b], b: [a]}[search_base]
-            return [ldap_entry(search_base, objectClass=["group"], sAMAccountName="x", member=members)]
+            return [
+                ldap_entry(search_base, objectClass=["group"], sAMAccountName="x", member=members)
+            ]
 
         mock_ldap_manager.search.side_effect = fake_search
         data = parse_response(group_tools.get_members("A", recursive=True))
@@ -375,9 +381,16 @@ class TestPrivilegedTargetProtection:
     """WR-02: membership changes on privileged groups need an explicit opt-out."""
 
     PRIVILEGED = [
-        "Domain Admins", "Enterprise Admins", "Schema Admins", "Administrators",
-        "Account Operators", "Backup Operators", "Server Operators", "Print Operators",
-        "domain admins", "  Domain Admins ",
+        "Domain Admins",
+        "Enterprise Admins",
+        "Schema Admins",
+        "Administrators",
+        "Account Operators",
+        "Backup Operators",
+        "Server Operators",
+        "Print Operators",
+        "domain admins",
+        "  Domain Admins ",
     ]
 
     @pytest.mark.parametrize("name", PRIVILEGED)

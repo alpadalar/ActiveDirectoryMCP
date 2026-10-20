@@ -7,15 +7,12 @@ from unittest.mock import Mock
 import pytest
 from ldap3.core.exceptions import LDAPSocketOpenError
 
-from active_directory_mcp.redaction import clear_secrets, register_secret
 from active_directory_mcp.tools.directory import DirectoryTools
 from tests.support.helpers import parse_response
 
 
 def _connection(ssl=False, tls_started=False, sock=None):
-    return SimpleNamespace(
-        server=SimpleNamespace(ssl=ssl), tls_started=tls_started, socket=sock
-    )
+    return SimpleNamespace(server=SimpleNamespace(ssl=ssl), tls_started=tls_started, socket=sock)
 
 
 @pytest.fixture

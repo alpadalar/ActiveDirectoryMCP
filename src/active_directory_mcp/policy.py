@@ -31,27 +31,57 @@ class Risk(str, Enum):
 
 
 _READ = (
-    "list_users", "get_user", "get_user_groups",
-    "list_groups", "get_group", "get_group_members",
-    "list_computers", "get_computer", "get_stale_computers",
-    "list_organizational_units", "get_organizational_unit",
+    "list_users",
+    "get_user",
+    "get_user_groups",
+    "list_groups",
+    "get_group",
+    "get_group_members",
+    "list_computers",
+    "get_computer",
+    "get_stale_computers",
+    "list_organizational_units",
+    "get_organizational_unit",
     "get_organizational_unit_contents",
-    "get_domain_info", "get_privileged_groups", "get_user_permissions",
-    "get_inactive_users", "get_password_policy_violations", "audit_admin_accounts",
-    "test_connection", "health", "get_schema_info",
-    "get_nested_group_members", "get_rootdse_info", "get_tls_posture",
+    "get_domain_info",
+    "get_privileged_groups",
+    "get_user_permissions",
+    "get_inactive_users",
+    "get_password_policy_violations",
+    "audit_admin_accounts",
+    "test_connection",
+    "health",
+    "get_schema_info",
+    "get_nested_group_members",
+    "get_rootdse_info",
+    "get_tls_posture",
 )
 _WRITE = (
-    "create_user", "modify_user", "enable_user", "disable_user", "reset_user_password",
-    "create_group", "modify_group", "add_group_member", "remove_group_member",
-    "create_computer", "modify_computer", "enable_computer", "disable_computer",
+    "create_user",
+    "modify_user",
+    "enable_user",
+    "disable_user",
+    "reset_user_password",
+    "create_group",
+    "modify_group",
+    "add_group_member",
+    "remove_group_member",
+    "create_computer",
+    "modify_computer",
+    "enable_computer",
+    "disable_computer",
     "reset_computer_password",
-    "create_organizational_unit", "modify_organizational_unit", "move_organizational_unit",
+    "create_organizational_unit",
+    "modify_organizational_unit",
+    "move_organizational_unit",
 )
 # delete_organizational_unit is destructive for force=True and force=False alike:
 # even deleting an empty OU is irreversible.
 _DESTRUCTIVE = (
-    "delete_user", "delete_group", "delete_computer", "delete_organizational_unit",
+    "delete_user",
+    "delete_group",
+    "delete_computer",
+    "delete_organizational_unit",
 )
 
 RISK_CLASSIFICATION: Dict[str, Risk] = {
@@ -108,9 +138,7 @@ def blocked_response(tool_name: str, risk: Risk) -> Dict[str, Any]:
     }
 
 
-def _bound_args(
-    handler: Callable[..., Any], args: Any, kwargs: Dict[str, Any]
-) -> Dict[str, Any]:
+def _bound_args(handler: Callable[..., Any], args: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     try:
         bound = inspect.signature(handler).bind_partial(*args, **kwargs)
         return dict(bound.arguments)
@@ -138,13 +166,14 @@ def guard(
         if blocked is not None:
             # Tool name and risk only: arguments may carry passwords or DNs.
             logger.warning("policy blocked tool=%s risk=%s", name, blocked.get("risk"))
-            payload: List[Content] = [
-                Content(type="text", text=json.dumps(blocked, indent=2))
-            ]
+            payload: List[Content] = [Content(type="text", text=json.dumps(blocked, indent=2))]
             if audited and audit is not None:
                 audit.record(
-                    name, risk.value, _bound_args(handler, args, kwargs),
-                    "blocked", blocked.get("error_code"),
+                    name,
+                    risk.value,
+                    _bound_args(handler, args, kwargs),
+                    "blocked",
+                    blocked.get("error_code"),
                 )
             return payload
         if not audited or audit is None:

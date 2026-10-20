@@ -11,8 +11,8 @@ Audit I/O never changes a tool result: :meth:`AuditLogger.record` swallows and
 logs ``OSError`` without the arguments.
 """
 
-import json
 import contextvars
+import json
 import logging
 import os
 import stat
@@ -185,9 +185,7 @@ class AuditLogger:
             if not stat.S_ISREG(st.st_mode):
                 raise AuditConfigError(f"Audit log '{self.path}' must be a regular file")
             if st.st_uid != os.geteuid():
-                raise AuditConfigError(
-                    f"Audit log '{self.path}' must be owned by the server user"
-                )
+                raise AuditConfigError(f"Audit log '{self.path}' must be owned by the server user")
             if st.st_mode & 0o077:
                 os.fchmod(fd, 0o600)
             handle = os.fdopen(fd, "a", encoding="utf-8")

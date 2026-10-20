@@ -1,17 +1,17 @@
 """Base class for Active Directory tools."""
 
 import json
-from typing import List, Dict, Any, Mapping, Optional, Tuple
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from mcp.types import TextContent as Content
 from ldap3.core.exceptions import LDAPException
+from mcp.types import TextContent as Content
 
-from ..core.ldap_manager import LDAPManager
-from ..core.logging import get_logger, log_ldap_operation
 from .. import validation
 from ..attribute_policy import AttributeNotAllowedError, validate_modify_attributes
+from ..core.ldap_manager import LDAPManager
+from ..core.logging import get_logger, log_ldap_operation
 from ..redaction import redact
 from ..validation import ValidationError
 
@@ -27,26 +27,33 @@ FILETIME_NEVER = 9223372036854775807  # 0x7FFFFFFFFFFFFFFF, "never expires"
 PRIVILEGED_TARGET_NAMES = frozenset(
     name.lower()
     for name in (
-        "Domain Admins", "Enterprise Admins", "Schema Admins", "Administrators",
-        "Account Operators", "Backup Operators", "Server Operators", "Print Operators",
-        "krbtgt", "Administrator",
+        "Domain Admins",
+        "Enterprise Admins",
+        "Schema Admins",
+        "Administrators",
+        "Account Operators",
+        "Backup Operators",
+        "Server Operators",
+        "Print Operators",
+        "krbtgt",
+        "Administrator",
     )
 )
 
 
 class BaseTool(ABC):
     """Base class for all Active Directory tools."""
-    
+
     def __init__(self, ldap_manager: LDAPManager):
         """
         Initialize base tool.
-        
+
         Args:
             ldap_manager: LDAP manager instance
         """
         self.ldap = ldap_manager
         self.logger = get_logger(self.__class__.__name__)
-    
+
     def _serialize_datetime(self, obj):
         """Helper function to serialize datetime objects."""
         if isinstance(obj, datetime):
@@ -57,7 +64,7 @@ class BaseTool(ABC):
             return [self._serialize_datetime(item) for item in obj]
         else:
             return obj
-    
+
     # ------------------------------------------------------------------
     # Shared AD time helpers
     # ------------------------------------------------------------------
@@ -131,68 +138,68 @@ class BaseTool(ABC):
     def _format_response(self, data: Any, operation: str = "operation") -> List[Content]:
         """
         Format response data for MCP.
-        
+
         Args:
             data: Data to format
             operation: Operation name for logging
-            
+
         Returns:
             List of MCP content objects
         """
         try:
             # Serialize datetime objects before JSON conversion
             serialized_data = self._serialize_datetime(data)
-            
+
             if isinstance(serialized_data, dict):
                 formatted_data = json.dumps(serialized_data, indent=2, ensure_ascii=False)
             elif isinstance(serialized_data, list):
                 formatted_data = json.dumps(serialized_data, indent=2, ensure_ascii=False)
             else:
                 formatted_data = str(serialized_data)
-            
+
             return [Content(type="text", text=formatted_data)]
-            
+
         except Exception as e:
             self.logger.error(f"Error formatting response for {operation}: {e}")
             error_response = {
                 "error": f"Failed to format response: {redact(str(e))}",
-                "operation": operation
+                "operation": operation,
             }
             return [Content(type="text", text=json.dumps(error_response, indent=2))]
-    
+
     def _handle_ldap_error(self, e: Exception, operation: str, dn: str = "") -> List[Content]:
         """
         Handle LDAP errors and format error response.
-        
+
         Args:
             e: Exception that occurred
             operation: Operation that failed
             dn: Distinguished name (if applicable)
-            
+
         Returns:
             List of MCP content objects with error information
         """
         error_msg = redact(str(e))
-        
+
         if isinstance(e, LDAPException):
             self.logger.error(f"LDAP error during {operation}: {error_msg}")
         else:
             self.logger.error(f"Unexpected error during {operation}: {error_msg}")
-        
+
         # Log for audit
         if dn:
             log_ldap_operation(operation, dn, False, error_msg)
-        
+
         error_response = {
             "success": False,
             "error": error_msg,
             "operation": operation,
-            "type": type(e).__name__
+            "type": type(e).__name__,
         }
-        
+
         if dn:
             error_response["dn"] = dn
-        
+
         return [Content(type="text", text=json.dumps(error_response, indent=2))]
 
     def _get_first_value(self, attributes: Dict[str, Any], key: str, default: Any = None) -> Any:
@@ -244,27 +251,26 @@ class BaseTool(ABC):
         """Format a validation failure with the same JSON shape as _handle_ldap_error."""
         return self._handle_ldap_error(exc, operation, dn)
 
-    def _success_response(self, message: str, data: Optional[Dict[str, Any]] = None) -> List[Content]:
+    def _success_response(
+        self, message: str, data: Optional[Dict[str, Any]] = None
+    ) -> List[Content]:
         """
         Create success response.
-        
+
         Args:
             message: Success message
             data: Optional additional data
-            
+
         Returns:
             List of MCP content objects
         """
-        response = {
-            "success": True,
-            "message": message
-        }
-        
+        response = {"success": True, "message": message}
+
         if data:
             response.update(data)
-        
+
         return [Content(type="text", text=json.dumps(response, indent=2, ensure_ascii=False))]
-    
+
     def _escape_ldap_filter(self, value: str) -> str:
         """Escape a value for use in an LDAP filter (delegates to validation module)."""
         return validation.escape_filter_value(value)
@@ -279,7 +285,9 @@ class BaseTool(ABC):
         except (TypeError, ValueError):
             return default
 
-    def _get_attr_value(self, attributes: Dict[str, Any], attr_name: str, default: Any = None) -> Any:
+    def _get_attr_value(
+        self, attributes: Dict[str, Any], attr_name: str, default: Any = None
+    ) -> Any:
         """
         Safely get an attribute value from LDAP attributes dict.
 
@@ -310,7 +318,9 @@ class BaseTool(ABC):
         # Otherwise return the value directly
         return value
 
-    def _get_attr_list(self, attributes: Dict[str, Any], attr_name: str, default: Any = None) -> list:
+    def _get_attr_list(
+        self, attributes: Dict[str, Any], attr_name: str, default: Any = None
+    ) -> list:
         """
         Safely get an attribute value as a list from LDAP attributes dict.
 
@@ -404,7 +414,11 @@ class BaseTool(ABC):
         if not self.ldap.security_config.protect_privileged_targets:
             return None
         matched = next(
-            (n for n in names if isinstance(n, str) and n.strip().lower() in PRIVILEGED_TARGET_NAMES),
+            (
+                n
+                for n in names
+                if isinstance(n, str) and n.strip().lower() in PRIVILEGED_TARGET_NAMES
+            ),
             None,
         )
         marked = self._to_int(admin_count, 0) == 1
@@ -478,9 +492,7 @@ class BaseTool(ABC):
         """
         return self.ldap.search(**search_kwargs)
 
-    def _cap_findings(
-        self, findings: List[Any]
-    ) -> Tuple[List[Any], bool, int]:
+    def _cap_findings(self, findings: List[Any]) -> Tuple[List[Any], bool, int]:
         """Cap the findings an audit returns (after filtering) to security.max_list_results."""
         limit = int(self.ldap.security_config.max_list_results)
         if limit <= 0:
@@ -496,7 +508,7 @@ class BaseTool(ABC):
     def get_schema_info(self) -> Dict[str, Any]:
         """
         Get schema information for this tool's operations.
-        
+
         Returns:
             Dictionary with schema information
         """

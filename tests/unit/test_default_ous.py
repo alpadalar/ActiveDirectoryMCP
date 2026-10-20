@@ -31,11 +31,14 @@ AD = {
 
 
 def _real_manager(ous=None):
-    with patch("active_directory_mcp.core.ldap_manager.Server", MagicMock()), patch(
-        "active_directory_mcp.core.ldap_manager.Connection", MagicMock()
+    with (
+        patch("active_directory_mcp.core.ldap_manager.Server", MagicMock()),
+        patch("active_directory_mcp.core.ldap_manager.Connection", MagicMock()),
     ):
         manager = LDAPManager(
-            ActiveDirectoryConfig(**AD), SecurityConfig(enable_tls=False), PerformanceConfig(),
+            ActiveDirectoryConfig(**AD),
+            SecurityConfig(enable_tls=False),
+            PerformanceConfig(),
             organizational_units=ous,
         )
     manager.search = MagicMock(return_value=[])
@@ -115,7 +118,9 @@ def test_explicit_organizational_units_are_kept():
     assert config.organizational_units.computers_ou == "OU=C,DC=test,DC=local"
 
 
-@pytest.mark.parametrize("missing", ["users_ou", "groups_ou", "computers_ou", "service_accounts_ou"])
+@pytest.mark.parametrize(
+    "missing", ["users_ou", "groups_ou", "computers_ou", "service_accounts_ou"]
+)
 def test_partial_organizational_units_are_filled_from_defaults(missing):
     full = {
         "users_ou": "OU=U,DC=test,DC=local",

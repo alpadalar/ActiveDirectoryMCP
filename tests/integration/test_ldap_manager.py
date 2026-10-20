@@ -1,6 +1,6 @@
 """Gerçek LDAP ortamında LDAPManager entegrasyon testleri."""
 
-from ldap3 import MODIFY_REPLACE, SUBTREE, BASE
+from ldap3 import BASE, MODIFY_REPLACE, SUBTREE
 
 
 def test_connects_and_binds(ldap_manager):

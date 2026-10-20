@@ -164,9 +164,11 @@ class MockDirectory:
         names are not checked (and integer attributes come back stringified).
         """
         self._schema_less = schema_less
-        with patch(f"{_SEAM}.Server", side_effect=self._build_server), patch(
-            f"{_SEAM}.Connection", side_effect=self._build_connection
-        ), patch(f"{_SEAM}.SKIP_SCHEMA", schema_less):
+        with (
+            patch(f"{_SEAM}.Server", side_effect=self._build_server),
+            patch(f"{_SEAM}.Connection", side_effect=self._build_connection),
+            patch(f"{_SEAM}.SKIP_SCHEMA", schema_less),
+        ):
             yield self
 
     # ------------------------------------------------------------------ configs

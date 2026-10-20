@@ -36,6 +36,7 @@ UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
 # Canonicalization rules (pure functions)
 # --------------------------------------------------------------------------
 
+
 def test_canonical_optional_equals_plain_with_default():
     optional = {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
     assert canonical_property(optional) == {
@@ -94,7 +95,9 @@ def test_canonical_drops_noise_keys():
     assert canonical_property(schema) == {"type": "boolean", "default": True}
 
 
-@pytest.mark.parametrize("schema", [{"$ref": "#/$defs/X"}, {"type": "array", "items": {"$ref": "#/$defs/X"}}])
+@pytest.mark.parametrize(
+    "schema", [{"$ref": "#/$defs/X"}, {"type": "array", "items": {"$ref": "#/$defs/X"}}]
+)
 def test_canonical_ref_raises(schema):
     with pytest.raises(ValueError, match=r"\$ref"):
         canonical_property(schema)
@@ -133,6 +136,7 @@ def test_serialize_is_deterministic_bytes():
 # --------------------------------------------------------------------------
 # Real servers (no directory server needed)
 # --------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def stdio_bytes() -> bytes:

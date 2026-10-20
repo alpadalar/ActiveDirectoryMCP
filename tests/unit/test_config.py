@@ -1,13 +1,14 @@
 """Tests for configuration module."""
 
-import pytest
-import tempfile
 import json
 import os
+import tempfile
 from pathlib import Path
 
+import pytest
+
 from active_directory_mcp.config.loader import load_config, validate_config
-from active_directory_mcp.config.models import Config, ActiveDirectoryConfig
+from active_directory_mcp.config.models import ActiveDirectoryConfig, Config
 
 
 def test_load_config_from_file():
@@ -18,20 +19,20 @@ def test_load_config_from_file():
             "domain": "test.local",
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
-            "password": "password123"
+            "password": "password123",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=test,DC=local",
             "groups_ou": "OU=Groups,DC=test,DC=local",
             "computers_ou": "OU=Computers,DC=test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local",
+        },
     }
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(config_data, f)
         config_path = f.name
-    
+
     try:
         config = load_config(config_path)
         assert isinstance(config, Config)
@@ -49,14 +50,14 @@ def test_env_placeholder_resolution(tmp_path, monkeypatch):
             "domain": "secure.local",
             "base_dn": "DC=secure,DC=local",
             "bind_dn": "CN=service,DC=secure,DC=local",
-            "password": "${AD_BIND_PASSWORD}"
+            "password": "${AD_BIND_PASSWORD}",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=secure,DC=local",
             "groups_ou": "OU=Groups,DC=secure,DC=local",
             "computers_ou": "OU=Computers,DC=secure,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local",
+        },
     }
 
     config_path = tmp_path / "config.json"
@@ -76,14 +77,14 @@ def test_env_placeholder_with_default(tmp_path):
             "domain": "secure.local",
             "base_dn": "DC=secure,DC=local",
             "bind_dn": "CN=service,DC=secure,DC=local",
-            "password": "${AD_BIND_PASSWORD:default-pass}"
+            "password": "${AD_BIND_PASSWORD:default-pass}",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=secure,DC=local",
             "groups_ou": "OU=Groups,DC=secure,DC=local",
             "computers_ou": "OU=Computers,DC=secure,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local",
+        },
     }
 
     config_path = tmp_path / "config.json"
@@ -101,14 +102,14 @@ def test_env_placeholder_missing_env(tmp_path):
             "domain": "secure.local",
             "base_dn": "DC=secure,DC=local",
             "bind_dn": "CN=service,DC=secure,DC=local",
-            "password": "${AD_BIND_PASSWORD}"
+            "password": "${AD_BIND_PASSWORD}",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=secure,DC=local",
             "groups_ou": "OU=Groups,DC=secure,DC=local",
             "computers_ou": "OU=Computers,DC=secure,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=secure,DC=local",
+        },
     }
 
     config_path = tmp_path / "config.json"
@@ -126,31 +127,31 @@ def test_load_config_from_env():
             "domain": "env-test.local",
             "base_dn": "DC=env-test,DC=local",
             "bind_dn": "CN=admin,DC=env-test,DC=local",
-            "password": "envpassword123"
+            "password": "envpassword123",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=env-test,DC=local",
             "groups_ou": "OU=Groups,DC=env-test,DC=local",
             "computers_ou": "OU=Computers,DC=env-test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=env-test,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=env-test,DC=local",
+        },
     }
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(config_data, f)
         config_path = f.name
-    
+
     try:
         # Set environment variable
-        os.environ['AD_MCP_CONFIG'] = config_path
-        
+        os.environ["AD_MCP_CONFIG"] = config_path
+
         config = load_config()
         assert isinstance(config, Config)
         assert config.active_directory.domain == "env-test.local"
     finally:
         os.unlink(config_path)
-        if 'AD_MCP_CONFIG' in os.environ:
-            del os.environ['AD_MCP_CONFIG']
+        if "AD_MCP_CONFIG" in os.environ:
+            del os.environ["AD_MCP_CONFIG"]
 
 
 def test_config_validation():
@@ -158,19 +159,19 @@ def test_config_validation():
     config_data = {
         "active_directory": {
             "server": "ldaps://test.local:636",
-            "domain": "test.local", 
+            "domain": "test.local",
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
-            "password": "password123"
+            "password": "password123",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=test,DC=local",
             "groups_ou": "OU=Groups,DC=test,DC=local",
             "computers_ou": "OU=Computers,DC=test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local",
+        },
     }
-    
+
     config = Config(**config_data)
     # Should not raise exception
     validate_config(config)
@@ -185,17 +186,15 @@ def test_secure_connection_required_validation():
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
             "password": "password123",
-            "use_ssl": False
+            "use_ssl": False,
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=test,DC=local",
             "groups_ou": "OU=Groups,DC=test,DC=local",
             "computers_ou": "OU=Computers,DC=test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local",
         },
-        "security": {
-            "require_secure_connection": True
-        }
+        "security": {"require_secure_connection": True},
     }
 
     cfg = Config(**config_data)
@@ -229,7 +228,7 @@ def test_invalid_server_url():
             domain="test.local",
             base_dn="DC=test,DC=local",
             bind_dn="CN=admin,DC=test,DC=local",
-            password="password123"
+            password="password123",
         )
 
 
@@ -241,10 +240,10 @@ def test_missing_config_file():
 
 def test_invalid_json():
     """Test handling of invalid JSON."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         f.write("invalid json content")
         config_path = f.name
-    
+
     try:
         with pytest.raises(json.JSONDecodeError):
             load_config(config_path)
@@ -263,10 +262,10 @@ def test_missing_required_fields():
             "users_ou": "OU=Users,DC=test,DC=local",
             "groups_ou": "OU=Groups,DC=test,DC=local",
             "computers_ou": "OU=Computers,DC=test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local",
+        },
     }
-    
+
     with pytest.raises(ValueError):
         Config(**config_data)
 
@@ -279,18 +278,18 @@ def test_default_values():
             "domain": "test.local",
             "base_dn": "DC=test,DC=local",
             "bind_dn": "CN=admin,DC=test,DC=local",
-            "password": "password123"
+            "password": "password123",
         },
         "organizational_units": {
             "users_ou": "OU=Users,DC=test,DC=local",
             "groups_ou": "OU=Groups,DC=test,DC=local",
             "computers_ou": "OU=Computers,DC=test,DC=local",
-            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local"
-        }
+            "service_accounts_ou": "OU=Service Accounts,DC=test,DC=local",
+        },
     }
-    
+
     config = Config(**config_data)
-    
+
     # Test default values
     assert config.security.enable_tls == True
     assert config.logging.level == "INFO"
@@ -338,7 +337,6 @@ def test_env_placeholder_malformed_text_untouched():
     assert _resolve_env_placeholders(5) == 5
 
 
-
 # --- Strict models, SecretStr, object classes, deprecated pool size (02-02 task 1) ---
 
 _AD = {
@@ -366,7 +364,10 @@ def test_unknown_key_rejected_per_section(section):
 
     base = {
         "organizational_units": {
-            "users_ou": "a", "groups_ou": "b", "computers_ou": "c", "service_accounts_ou": "d",
+            "users_ou": "a",
+            "groups_ou": "b",
+            "computers_ou": "c",
+            "service_accounts_ou": "d",
         },
         "key_vault": {"vault_url": "https://v.vault.azure.net/"},
     }
@@ -417,7 +418,9 @@ def test_password_assignment_coerced_to_secretstr():
     assert "from-vault-or-env" not in repr(cfg)
 
 
-@pytest.mark.parametrize("field", ["user_object_class", "group_object_class", "computer_object_class"])
+@pytest.mark.parametrize(
+    "field", ["user_object_class", "group_object_class", "computer_object_class"]
+)
 def test_object_class_injection_rejected(field):
     data = dict(_AD)
     data[field] = "user)(|(objectClass=*"
@@ -428,7 +431,9 @@ def test_object_class_injection_rejected(field):
 def test_object_class_defaults_and_custom_accepted():
     ad = ActiveDirectoryConfig(**_AD, user_object_class="inetOrgPerson")
     assert (ad.user_object_class, ad.group_object_class, ad.computer_object_class) == (
-        "inetOrgPerson", "group", "computer",
+        "inetOrgPerson",
+        "group",
+        "computer",
     )
 
 
@@ -488,8 +493,11 @@ def _write(tmp_path, ad_overrides=None, **sections):
 @pytest.fixture
 def clean_env(monkeypatch):
     for var in (
-        "AD_PASSWORD", "AD_BIND_DN", "AZURE_KEYVAULT_URL",
-        "AZURE_KEYVAULT_SECRET_USERNAME", "AZURE_KEYVAULT_SECRET_PASSWORD",
+        "AD_PASSWORD",
+        "AD_BIND_DN",
+        "AZURE_KEYVAULT_URL",
+        "AZURE_KEYVAULT_SECRET_USERNAME",
+        "AZURE_KEYVAULT_SECRET_PASSWORD",
     ):
         monkeypatch.delenv(var, raising=False)
 

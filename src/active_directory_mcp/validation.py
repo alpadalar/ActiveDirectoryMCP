@@ -83,6 +83,7 @@ class ValidationError(ValueError):
 # Filter values and names
 # ---------------------------------------------------------------------------
 
+
 def escape_filter_value(value: Any) -> str:
     """Escape a value for use inside an LDAP filter (RFC 4515)."""
     return escape_filter_chars(value if isinstance(value, str) else str(value))
@@ -117,7 +118,7 @@ def validate_dns_hostname(hostname: Any, domain: str) -> str:
     if not isinstance(hostname, str) or len(hostname) > 253:
         raise ValidationError(f"Invalid DNS host name: {hostname!r}")
     suffix = "." + str(domain).strip(".").lower()
-    if len(hostname) <= len(suffix) or hostname[-len(suffix):].lower() != suffix:
+    if len(hostname) <= len(suffix) or hostname[-len(suffix) :].lower() != suffix:
         raise ValidationError(
             f"dns_hostname must be inside the configured domain ({str(domain).strip('.')})"
         )
@@ -135,6 +136,7 @@ def eq_filter(attribute: Any, value: Any) -> str:
 # ---------------------------------------------------------------------------
 # Distinguished names
 # ---------------------------------------------------------------------------
+
 
 def _parse(dn: Any) -> List[_RdnComponent]:
     if not isinstance(dn, str) or not dn.strip():
@@ -176,7 +178,7 @@ def _under(candidate: List[_RdnComponent], base: List[_RdnComponent]) -> bool:
     root = _rdns(base)
     if len(cand) < len(root):
         return False
-    return cand[len(cand) - len(root):] == root
+    return cand[len(cand) - len(root) :] == root
 
 
 def validate_dn(dn: Any, base_dn: Optional[str] = None, *, allow_base: bool = True) -> str:
@@ -252,16 +254,38 @@ def build_dn(rdn_type: str, value: Any, parent_dn: str, base_dn: Optional[str] =
 SENSITIVE_FILTER_ATTRIBUTES = frozenset(
     name.lower()
     for name in (
-        "userPassword", "unicodePwd", "dBCSPwd", "lmPwdHistory", "ntPwdHistory",
-        "pwdHistory", "supplementalCredentials", "unixUserPassword", "ntSecurityDescriptor",
-        "msDS-KeyCredentialLink", "msDS-ManagedPassword", "msDS-ManagedPasswordId",
-        "msDS-ManagedPasswordPreviousId", "ms-Mcs-AdmPwd", "msLAPS-Password",
-        "msLAPS-EncryptedPassword", "msLAPS-EncryptedPasswordHistory",
-        "msFVE-RecoveryPassword", "msFVE-KeyPackage", "msFVE-RecoveryGuid",
-        "msFVE-VolumeGuid", "priorValue", "currentValue", "initialAuthIncoming",
-        "initialAuthOutgoing", "trustAuthIncoming", "trustAuthOutgoing",
-        "msPKI-CredentialRoamingTokens", "msPKI-DPAPIMasterKeys", "securityIdentifier",
-        "sidHistory", "msDS-AllowedToActOnBehalfOfOtherIdentity",
+        "userPassword",
+        "unicodePwd",
+        "dBCSPwd",
+        "lmPwdHistory",
+        "ntPwdHistory",
+        "pwdHistory",
+        "supplementalCredentials",
+        "unixUserPassword",
+        "ntSecurityDescriptor",
+        "msDS-KeyCredentialLink",
+        "msDS-ManagedPassword",
+        "msDS-ManagedPasswordId",
+        "msDS-ManagedPasswordPreviousId",
+        "ms-Mcs-AdmPwd",
+        "msLAPS-Password",
+        "msLAPS-EncryptedPassword",
+        "msLAPS-EncryptedPasswordHistory",
+        "msFVE-RecoveryPassword",
+        "msFVE-KeyPackage",
+        "msFVE-RecoveryGuid",
+        "msFVE-VolumeGuid",
+        "priorValue",
+        "currentValue",
+        "initialAuthIncoming",
+        "initialAuthOutgoing",
+        "trustAuthIncoming",
+        "trustAuthOutgoing",
+        "msPKI-CredentialRoamingTokens",
+        "msPKI-DPAPIMasterKeys",
+        "securityIdentifier",
+        "sidHistory",
+        "msDS-AllowedToActOnBehalfOfOtherIdentity",
     )
 )
 
@@ -294,9 +318,7 @@ def validate_filter_criteria(fragment: Any) -> str:
     if not isinstance(fragment, str):
         raise ValidationError("filter_criteria must be a string")
     if len(fragment) > MAX_FILTER_CRITERIA_LENGTH:
-        raise ValidationError(
-            f"filter_criteria exceeds {MAX_FILTER_CRITERIA_LENGTH} characters"
-        )
+        raise ValidationError(f"filter_criteria exceeds {MAX_FILTER_CRITERIA_LENGTH} characters")
     if "\x00" in fragment:
         raise ValidationError("filter_criteria must not contain NUL")
     text = fragment.strip()

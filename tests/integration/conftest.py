@@ -5,7 +5,7 @@ import uuid
 from typing import Dict
 
 import pytest
-from ldap3 import Connection, MODIFY_ADD, MODIFY_DELETE, Server
+from ldap3 import MODIFY_ADD, MODIFY_DELETE, Connection, Server
 
 from active_directory_mcp.config.loader import load_config
 from active_directory_mcp.core.ldap_manager import LDAPManager
@@ -27,7 +27,9 @@ def ad_config():
 def ldap_manager(ad_config):
     """Gerçek LDAP bağlantısı için yöneticiyi hazırla."""
     manager = LDAPManager(
-        ad_config.active_directory, ad_config.security, ad_config.performance,
+        ad_config.active_directory,
+        ad_config.security,
+        ad_config.performance,
         ad_config.organizational_units,
     )
     yield manager
@@ -148,4 +150,3 @@ def group_tools(ldap_manager):
 @pytest.fixture
 def security_tools(ldap_manager):
     return SecurityTools(ldap_manager)
-

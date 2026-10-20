@@ -41,12 +41,20 @@ def _parents(tree: ast.AST) -> Dict[ast.AST, ast.AST]:
 
 # --- bare / silent exception handlers -------------------------------------------------
 
+
 def _is_logger_call(node: ast.AST) -> bool:
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         target = node.func.value
         text = ast.unparse(target)
         return "log" in text.lower() and node.func.attr in {
-            "debug", "info", "warning", "warn", "error", "exception", "critical"}
+            "debug",
+            "info",
+            "warning",
+            "warn",
+            "error",
+            "exception",
+            "critical",
+        }
     return False
 
 
@@ -61,8 +69,11 @@ def find_bad_handlers(source: str) -> List[Tuple[int, str]]:
             continue
         silent = all(
             isinstance(stmt, ast.Pass)
-            or (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
-                and stmt.value.value is Ellipsis)
+            or (
+                isinstance(stmt, ast.Expr)
+                and isinstance(stmt.value, ast.Constant)
+                and stmt.value.value is Ellipsis
+            )
             for stmt in node.body
         )
         has_log = any(_is_logger_call(n) for stmt in node.body for n in ast.walk(stmt))
@@ -76,7 +87,8 @@ def test_guard_detects_bare_and_silent_handlers():
     assert find_bad_handlers("try:\n    x()\nexcept Exception:\n    pass\n")
     assert find_bad_handlers("try:\n    x()\nexcept ValueError:\n    ...\n")
     assert not find_bad_handlers(
-        "try:\n    x()\nexcept Exception as e:\n    logger.warning('x %s', e)\n")
+        "try:\n    x()\nexcept Exception as e:\n    logger.warning('x %s', e)\n"
+    )
     assert not find_bad_handlers("try:\n    x()\nexcept ValueError:\n    return 1\n")
 
 
@@ -92,7 +104,8 @@ ESCAPE_LITERALS = ("\\5c", "\\2a", "\\28", "\\29", "\\00")
 
 
 @pytest.mark.parametrize(
-    "path", [p for p in _py_files(SRC) if p.name != "validation.py"],
+    "path",
+    [p for p in _py_files(SRC) if p.name != "validation.py"],
     ids=lambda p: str(p.relative_to(SRC)),
 )
 def test_no_hand_rolled_escape_chain(path):
@@ -101,33 +114,49 @@ def test_no_hand_rolled_escape_chain(path):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             lowered = node.value.lower()
             assert not any(lit in lowered for lit in ESCAPE_LITERALS), (
-                f"{path.name}:{node.lineno} hand-rolled LDAP escape sequence; use validation.py")
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "replace" and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and node.args[0].value in {"(", ")", "*", "\\"}):
+                f"{path.name}:{node.lineno} hand-rolled LDAP escape sequence; use validation.py"
+            )
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "replace"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value in {"(", ")", "*", "\\"}
+        ):
             pytest.fail(f"{path.name}:{node.lineno} str.replace on a filter metacharacter")
 
 
 # --- filters built only from escaped / validated pieces -----------------------------------
+
 
 def _safe_filter_expr(expr: ast.AST) -> bool:
     """True when an interpolated expression in a filter f-string is known-safe."""
     text = ast.unparse(expr)
     if isinstance(expr, ast.Call):
         callee = ast.unparse(expr.func)
-        if callee in {"self._escape_ldap_filter", "validation.escape_filter_value",
-                      "validation.eq_filter", "validation.combine_filters",
-                      "self._computer_filter", "validation.validate_object_class"}:
+        if callee in {
+            "self._escape_ldap_filter",
+            "validation.escape_filter_value",
+            "validation.eq_filter",
+            "validation.combine_filters",
+            "self._computer_filter",
+            "validation.validate_object_class",
+        }:
             return True
         if callee == "''.join" and expr.args:
             return all(_is_filter_parts(a) for a in expr.args)
-    if isinstance(expr, ast.Attribute) and text.startswith("self.ldap.ad_config.") \
-            and text.endswith("_object_class"):
+    if (
+        isinstance(expr, ast.Attribute)
+        and text.startswith("self.ldap.ad_config.")
+        and text.endswith("_object_class")
+    ):
         return True
     if isinstance(expr, ast.Name) and (
-            expr.id.startswith("escaped_") or expr.id.endswith("_object_class")
-            or expr.id in {"base_filter", "search_filter"}):
+        expr.id.startswith("escaped_")
+        or expr.id.endswith("_object_class")
+        or expr.id in {"base_filter", "search_filter"}
+    ):
         return True
     return False
 
@@ -140,8 +169,11 @@ def _filter_fstrings(tree: ast.AST) -> Iterator[ast.JoinedStr]:
     for node in ast.walk(tree):
         if isinstance(node, ast.JoinedStr):
             head = node.values[0] if node.values else None
-            if isinstance(head, ast.Constant) and isinstance(head.value, str) \
-                    and head.value.startswith("("):
+            if (
+                isinstance(head, ast.Constant)
+                and isinstance(head.value, str)
+                and head.value.startswith("(")
+            ):
                 yield node
 
 
@@ -153,7 +185,8 @@ def test_filter_fstrings_interpolate_only_escaped_values(path):
             if isinstance(part, ast.FormattedValue):
                 assert _safe_filter_expr(part.value), (
                     f"{path.name}:{fstr.lineno} unescaped interpolation "
-                    f"{{{ast.unparse(part.value)}}} in an LDAP filter")
+                    f"{{{ast.unparse(part.value)}}} in an LDAP filter"
+                )
 
 
 def test_filter_guard_rejects_raw_interpolation():
@@ -178,8 +211,11 @@ def unvalidated_filter_criteria_uses(source: str) -> List[int]:
     parents = _parents(tree)
     bad = []
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.Name) and node.id == "filter_criteria"
-                and isinstance(node.ctx, ast.Load)):
+        if not (
+            isinstance(node, ast.Name)
+            and node.id == "filter_criteria"
+            and isinstance(node.ctx, ast.Load)
+        ):
             continue
         ancestor = parents.get(node)
         call = None
@@ -192,7 +228,8 @@ def unvalidated_filter_criteria_uses(source: str) -> List[int]:
         if callee in FILTER_FUNCS:
             continue
         if _enclosing_function(node, parents) in ALIAS_WRAPPERS and callee in set(
-                ALIAS_WRAPPERS.values()):
+            ALIAS_WRAPPERS.values()
+        ):
             continue
         bad.append(node.lineno)
     return bad
@@ -208,12 +245,14 @@ def test_filter_criteria_guard_detects_raw_use():
     assert unvalidated_filter_criteria_uses(raw)
     raw = "def f(filter_criteria):\n    return f'(&(a=b){filter_criteria})'\n"
     assert unvalidated_filter_criteria_uses(raw)
-    ok = ("def f(filter_criteria):\n"
-          "    return validation.combine_filters('(a=b)', filter_criteria)\n")
+    ok = (
+        "def f(filter_criteria):\n    return validation.combine_filters('(a=b)', filter_criteria)\n"
+    )
     assert not unvalidated_filter_criteria_uses(ok)
 
 
 # --- DN parameters go through confinement ------------------------------------------------
+
 
 def _tool_functions(path: Path) -> Iterator[Tuple[ast.FunctionDef, str]]:
     source = path.read_text(encoding="utf-8")
@@ -239,13 +278,19 @@ def test_dn_parameters_are_confined(segment, used):
         # Cannot reach the directory itself; anything it delegates to is checked on its own.
         return
     assert any(token in segment for token in DN_VALIDATORS), (
-        f"DN parameter(s) {used} are used without base_dn confinement")
+        f"DN parameter(s) {used} are used without base_dn confinement"
+    )
 
 
 def test_dn_guard_covers_the_confined_tools():
     names = {p.id for p in _dn_cases()}
-    for expected in ("user.py::list_users", "user.py::create_user", "group.py::add_member",
-                     "computer.py::create_computer", "organizational_unit.py::move_ou"):
+    for expected in (
+        "user.py::list_users",
+        "user.py::create_user",
+        "group.py::add_member",
+        "computer.py::create_computer",
+        "organizational_unit.py::move_ou",
+    ):
         assert expected in names
 
 
@@ -258,10 +303,12 @@ def test_alias_wrappers_only_delegate():
             targets = {ast.unparse(c.func) for c in calls}
             assert f"self.{ALIAS_WRAPPERS[func.name]}" in targets, func.name
             assert not any("ldap" in t for t in targets), (
-                f"{func.name} must only delegate, not talk to LDAP itself")
+                f"{func.name} must only delegate, not talk to LDAP itself"
+            )
 
 
 # --- servers keep enforcing validate_config ----------------------------------------------
+
 
 @pytest.mark.parametrize("module", ["server.py", "server_http.py"])
 def test_servers_validate_config_right_after_load(module):

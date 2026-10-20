@@ -34,4 +34,3 @@ def test_get_inactive_users_runs(security_tools):
 
     assert "inactive_users" in data
     assert data["criteria_days"] == 0
-

@@ -28,9 +28,21 @@ def _load(name: str):
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=T", "-c", "user.email=t@example.com",
-         "-c", "commit.gpgsign=false", *args],
-        capture_output=True, text=True, check=True,
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=T",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
 
 
@@ -58,8 +70,18 @@ def _leak_line(value: str = LEAK) -> str:
 
 
 def _run_scan(repo: Path, baseline: Path, report: Path | None = None, *extra: str):
-    cmd = [sys.executable, str(SCRIPTS / "secret_scan.py"), "--history", "--repo", str(repo),
-           "--config", str(REPO_ROOT / ".gitleaks.toml"), "--baseline", str(baseline), *extra]
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "secret_scan.py"),
+        "--history",
+        "--repo",
+        str(repo),
+        "--config",
+        str(REPO_ROOT / ".gitleaks.toml"),
+        "--baseline",
+        str(baseline),
+        *extra,
+    ]
     if report:
         cmd += ["--report", str(report)]
     return subprocess.run(cmd, capture_output=True, text=True)
@@ -144,9 +166,23 @@ def test_secret_scan_sees_credentials_introduced_only_in_a_merge(repo, tmp_path_
     _git(repo, "checkout", "-q", default)
     _commit(repo, "cfg/app.json", json.dumps({"mode": "main"}) + "\n", "main")
     res = subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=T", "-c", "user.email=t@example.com",
-         "-c", "commit.gpgsign=false", "merge", "-q", "--no-commit", "side"],
-        capture_output=True, text=True,
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=T",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "merge",
+            "-q",
+            "--no-commit",
+            "side",
+        ],
+        capture_output=True,
+        text=True,
     )
     assert res.returncode != 0  # conflict, resolved by hand below
     (repo / "cfg" / "app.json").write_text(_leak_line(), encoding="utf-8")
@@ -252,7 +288,7 @@ def test_secret_scan_flags_widened_credential_shapes(path, line):
         ("c.yml", "password: ${AD_PASSWORD}"),
         ("c.yml", "AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:?set it (see README)}"),
         ("c.yml", "      - AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:-}"),
-        ("README.md", 'export AD_MCP_HTTP_API_KEY="$(python3 -c \'import x\')"'),
+        ("README.md", "export AD_MCP_HTTP_API_KEY=\"$(python3 -c 'import x')\""),
         ("c.json", json.dumps({"password": "${env:AD_PASSWORD}"})),
         ("app.py", "password: Optional[str] = None"),
     ],
@@ -268,9 +304,7 @@ def test_secret_scan_has_no_blanket_path_allowlist_except_the_digest_fixture():
     mod = _load("secret_scan")
     rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
     line = "user" + "Password: realvalue1"
-    assert list(mod.scan_line(rules, "ldap-init/01-structure.ldif", line)) == [
-        "ldif-user-password"
-    ]
+    assert list(mod.scan_line(rules, "ldap-init/01-structure.ldif", line)) == ["ldif-user-password"]
     assert [p.pattern for p in rules.allow_paths] == [
         r"^tests/golden/original_tools\.sha256\.json$"
     ]
@@ -301,9 +335,17 @@ TRAILER = "Co-authored-by: " + "Claude <noreply@" + "anthropic.com>"
 
 def _run_ai(repo: Path, allowlist: Path, *flags: str):
     return subprocess.run(
-        [sys.executable, str(SCRIPTS / "ai_residue_scan.py"), "--repo", str(repo),
-         "--allowlist", str(allowlist), *flags],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(SCRIPTS / "ai_residue_scan.py"),
+            "--repo",
+            str(repo),
+            "--allowlist",
+            str(allowlist),
+            *flags,
+        ],
+        capture_output=True,
+        text=True,
     )
 
 
@@ -352,9 +394,7 @@ def test_ai_scan_matches_session_trailers_links_and_agent_emails(text, rule):
     assert rule in mod._match(text)
 
 
-def test_ai_scan_flags_session_trailer_in_history_and_agent_author_email(
-    repo, tmp_path_factory
-):
+def test_ai_scan_flags_session_trailer_in_history_and_agent_author_email(repo, tmp_path_factory):
     allow = tmp_path_factory.mktemp("o") / "allow.txt"
     allow.write_text("", encoding="utf-8")
     sha = _commit(repo, "b.txt", "x\n", f"feat: thing\n\n{SESSION_TRAILER}")
@@ -365,9 +405,23 @@ def test_ai_scan_flags_session_trailer_in_history_and_agent_author_email(
     (other / "a.txt").write_text("x\n", encoding="utf-8")
     _git(other, "add", "a.txt")
     subprocess.run(
-        ["git", "-C", str(other), "-c", "user.name=Dev", "-c", "user.email=codex" + "@example.org",
-         "-c", "commit.gpgsign=false", "commit", "-q", "-m", "plain message"],
-        check=True, capture_output=True,
+        [
+            "git",
+            "-C",
+            str(other),
+            "-c",
+            "user.name=Dev",
+            "-c",
+            "user.email=codex" + "@example.org",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "plain message",
+        ],
+        check=True,
+        capture_output=True,
     )
     res = _run_ai(other, allow, "--history")
     assert res.returncode == 1 and "agent-email" in res.stdout
@@ -430,7 +484,9 @@ def _check_ignore(rel: str) -> bool:
 
 
 def test_only_example_configs_are_tracked_under_ad_config():
-    stray = [p for p in _tracked() if p.startswith("ad-config/") and not p.endswith(".example.json")]
+    stray = [
+        p for p in _tracked() if p.startswith("ad-config/") and not p.endswith(".example.json")
+    ]
     assert stray == []
 
 
@@ -457,13 +513,22 @@ def test_local_tooling_files_are_not_tracked_nor_named_in_ignore_files():
             assert not any(f in line for f in forbidden), (name, line)
 
 
-EXAMPLES = sorted(
-    p for p in (REPO_ROOT / "ad-config").glob("*.example.json")
-) if (REPO_ROOT / "ad-config").is_dir() else []
+EXAMPLES = (
+    sorted(p for p in (REPO_ROOT / "ad-config").glob("*.example.json"))
+    if (REPO_ROOT / "ad-config").is_dir()
+    else []
+)
 
 _PASSWORD_KEYS = {"password", "bind_password", "client_secret", "api_key"}
-_ALLOWED_HOSTS = ("example.com", "example", "localhost", "test.local", "yourdomain.com",
-                  "domain.com", "192.168.1.100")
+_ALLOWED_HOSTS = (
+    "example.com",
+    "example",
+    "localhost",
+    "test.local",
+    "yourdomain.com",
+    "domain.com",
+    "192.168.1.100",
+)
 
 
 def _host_allowed(host: str) -> bool:
@@ -579,8 +644,11 @@ def test_every_example_config_passes_startup_validation_as_shipped(example, monk
     monkeypatch.setenv("AD_BIND_DN", "CN=svc,DC=example,DC=com")
     monkeypatch.setenv("AD_PASSWORD", "placeholder-pw")
     monkeypatch.setenv("LAB_LDAP_PASSWORD", "placeholder-pw")
-    for name in ("AZURE_KEYVAULT_URL", "AZURE_KEYVAULT_SECRET_USERNAME",
-                 "AZURE_KEYVAULT_SECRET_PASSWORD"):
+    for name in (
+        "AZURE_KEYVAULT_URL",
+        "AZURE_KEYVAULT_SECRET_USERNAME",
+        "AZURE_KEYVAULT_SECRET_PASSWORD",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(loader, "get_secret", lambda _url, _name: "placeholder-pw")
     config = loader.load_config(str(example))

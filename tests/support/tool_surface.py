@@ -20,6 +20,7 @@ _DROPPED_KEYS = {"title", "description", "additionalProperties", "$schema", "exa
 # Canonicalization
 # --------------------------------------------------------------------------
 
+
 def _reject_refs(schema: Dict[str, Any]) -> None:
     for key in ("$ref", "$defs", "definitions"):
         if key in schema:
@@ -109,6 +110,7 @@ def serialize_surface(surface: Dict[str, Any]) -> bytes:
 # --------------------------------------------------------------------------
 # Server builders
 # --------------------------------------------------------------------------
+
 
 @contextmanager
 def _offline_env(module: str) -> Iterator[None]:

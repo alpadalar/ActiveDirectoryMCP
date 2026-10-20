@@ -245,9 +245,7 @@ def test_actor_is_recorded_when_set() -> None:
 
 
 def _ctx(path: Path, writes: bool = True, destructive: bool = False) -> Any:
-    return make_ctx(
-        policy=ToolPolicy(writes, destructive), audit=AuditLogger(str(path))
-    )
+    return make_ctx(policy=ToolPolicy(writes, destructive), audit=AuditLogger(str(path)))
 
 
 def test_stdio_outcomes_and_reads_silent(tmp_path: Path) -> None:

@@ -8,7 +8,6 @@ Bug regressions covered here: B-01b, B-01c (security parts), B-03, B-04 and the
 restore-discovered B-15a (check_password_policy / generate_security_report).
 """
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -447,12 +446,18 @@ def test_password_policy_violations_datetime_values(security_tools, mock_ldap_ma
     domain = [ldap_entry(BASE, maxPwdAge=timedelta(days=42), minPwdAge=timedelta(days=1))]
     users = [
         _user(
-            f"CN=stale,{BASE}", "stale", uac=512,
-            pwdLastSet=_ago(200), accountExpires=_ago(5),
+            f"CN=stale,{BASE}",
+            "stale",
+            uac=512,
+            pwdLastSet=_ago(200),
+            accountExpires=_ago(5),
         ),
         _user(
-            f"CN=fine,{BASE}", "fine", uac=512,
-            pwdLastSet=_ago(3), accountExpires=datetime(9999, 12, 31, tzinfo=timezone.utc),
+            f"CN=fine,{BASE}",
+            "fine",
+            uac=512,
+            pwdLastSet=_ago(3),
+            accountExpires=datetime(9999, 12, 31, tzinfo=timezone.utc),
         ),
         _user(f"CN=nopwd,{BASE}", "nopwd", uac=512 | 0x20, pwdLastSet=0, accountExpires=0),
     ]
@@ -476,7 +481,7 @@ def test_password_policy_violations_datetime_values(security_tools, mock_ldap_ma
         (str(-42 * 864000000000), True),
         (-42 * 864000000000, True),
         ("0", False),
-        (-(2 ** 63), False),
+        (-(2**63), False),
         ("-9223372036854775808", False),
         (None, False),
     ],
@@ -487,8 +492,11 @@ def test_password_policy_violations_normalises_max_pwd_age(
     domain = [ldap_entry(BASE, maxPwdAge=raw, minPwdAge=0)]
     users = [
         _user(
-            f"CN=noexp,{BASE}", "noexp", uac=512 | 0x10000,
-            pwdLastSet=_ago(200), accountExpires=0,
+            f"CN=noexp,{BASE}",
+            "noexp",
+            uac=512 | 0x10000,
+            pwdLastSet=_ago(200),
+            accountExpires=0,
         )
     ]
 
@@ -553,8 +561,11 @@ def test_generate_security_report_failure_is_structured(security_tools, monkeypa
 
 def test_generate_security_recommendations(security_tools):
     recs = security_tools._generate_security_recommendations(
-        {"high_risk_admin_accounts": 2, "password_policy_compliant": False,
-         "overall_security_score": 10}
+        {
+            "high_risk_admin_accounts": 2,
+            "password_policy_compliant": False,
+            "overall_security_score": 10,
+        }
     )
     assert len(recs) == 3
     assert security_tools._generate_security_recommendations({})[0].startswith("Security posture")
@@ -586,9 +597,7 @@ def test_security_module_has_no_private_filetime_converter():
 def test_get_user_permissions_logs_skipped_group(security_tools, mock_ldap_manager, caplog):
     user_dn = f"CN=Alice,CN=Users,{BASE}"
     bad_dn = f"CN=Broken,CN=Users,{BASE}"
-    user = ldap_entry(
-        user_dn, sAMAccountName="alice", memberOf=[bad_dn], userAccountControl=512
-    )
+    user = ldap_entry(user_dn, sAMAccountName="alice", memberOf=[bad_dn], userAccountControl=512)
 
     def search(search_base=None, **_kw):
         if search_base == bad_dn:
@@ -607,8 +616,13 @@ def test_get_user_permissions_logs_skipped_group(security_tools, mock_ldap_manag
 
 def _user_entries(n):
     return [
-        ldap_entry(f"CN=u{i},CN=Users,{BASE}", sAMAccountName=f"u{i}", userAccountControl=512,
-                   lastLogon=0, pwdLastSet=0)
+        ldap_entry(
+            f"CN=u{i},CN=Users,{BASE}",
+            sAMAccountName=f"u{i}",
+            userAccountControl=512,
+            lastLogon=0,
+            pwdLastSet=0,
+        )
         for i in range(n)
     ]
 
@@ -629,12 +643,22 @@ def test_get_inactive_users_audits_beyond_cap_before_filtering(security_tools, m
     mock_ldap_manager.security_config.max_list_results = 2
     recent = datetime.now(timezone.utc)
     active = [
-        ldap_entry(f"CN=a{i},CN=Users,{BASE}", sAMAccountName=f"a{i}", userAccountControl=512,
-                   lastLogon=recent, pwdLastSet=recent)
+        ldap_entry(
+            f"CN=a{i},CN=Users,{BASE}",
+            sAMAccountName=f"a{i}",
+            userAccountControl=512,
+            lastLogon=recent,
+            pwdLastSet=recent,
+        )
         for i in range(5)
     ]
-    offender = ldap_entry(f"CN=old,CN=Users,{BASE}", sAMAccountName="old",
-                          userAccountControl=512, lastLogon=0, pwdLastSet=0)
+    offender = ldap_entry(
+        f"CN=old,CN=Users,{BASE}",
+        sAMAccountName="old",
+        userAccountControl=512,
+        lastLogon=0,
+        pwdLastSet=0,
+    )
     mock_ldap_manager.search.return_value = active + [offender]
     data = parse_response(security_tools.get_inactive_users())
     assert data["count"] == 1 and data["truncated"] is False
@@ -649,12 +673,22 @@ def test_password_policy_violations_audits_beyond_cap_before_filtering(
     mock_ldap_manager.security_config.max_list_results = 2
     now = datetime.now(timezone.utc)
     healthy = [
-        ldap_entry(f"CN=h{i},CN=Users,{BASE}", sAMAccountName=f"h{i}", userAccountControl=512,
-                   pwdLastSet=now, accountExpires=0)
+        ldap_entry(
+            f"CN=h{i},CN=Users,{BASE}",
+            sAMAccountName=f"h{i}",
+            userAccountControl=512,
+            pwdLastSet=now,
+            accountExpires=0,
+        )
         for i in range(4)
     ]
-    bad = ldap_entry(f"CN=bad,CN=Users,{BASE}", sAMAccountName="bad",
-                     userAccountControl=512, pwdLastSet=0, accountExpires=0)
+    bad = ldap_entry(
+        f"CN=bad,CN=Users,{BASE}",
+        sAMAccountName="bad",
+        userAccountControl=512,
+        pwdLastSet=0,
+        accountExpires=0,
+    )
     domain = ldap_entry(BASE, maxPwdAge=0, minPwdAge=0)
     mock_ldap_manager.search.side_effect = [[domain], healthy + [bad]]
     data = parse_response(security_tools.get_password_policy_violations())

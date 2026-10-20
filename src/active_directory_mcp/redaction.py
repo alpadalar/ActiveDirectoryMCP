@@ -27,8 +27,12 @@ _runtime: "OrderedDict[str, Set[str]]" = OrderedDict()
 
 
 def _variants(secret: str) -> Set[str]:
-    out = {secret, urllib.parse.quote(secret), urllib.parse.quote(secret, safe=""),
-           urllib.parse.quote_plus(secret)}
+    out = {
+        secret,
+        urllib.parse.quote(secret),
+        urllib.parse.quote(secret, safe=""),
+        urllib.parse.quote_plus(secret),
+    }
     raw = secret.encode("utf-8")
     out.add(base64.b64encode(raw).decode("ascii"))
     out.add(base64.urlsafe_b64encode(raw).decode("ascii"))

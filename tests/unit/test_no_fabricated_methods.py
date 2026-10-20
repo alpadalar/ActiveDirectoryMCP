@@ -60,13 +60,16 @@ def test_no_hardcoded_sample_data(path):
     assert "fabricated" not in text.lower()
 
 
-@pytest.mark.parametrize(
-    "fixture", ["computer_tools", "ou_tools", "security_tools"]
-)
+@pytest.mark.parametrize("fixture", ["computer_tools", "ou_tools", "security_tools"])
 def test_schema_info_lists_only_real_operations(fixture, request):
     tools = request.getfixturevalue(fixture)
     registered = {
-        "list_ous", "get_ou", "create_ou", "modify_ou", "delete_ou", "move_ou",
+        "list_ous",
+        "get_ou",
+        "create_ou",
+        "modify_ou",
+        "delete_ou",
+        "move_ou",
         "get_ou_contents",
     }
     for op in tools.get_schema_info()["operations"]:

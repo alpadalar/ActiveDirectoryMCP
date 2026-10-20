@@ -23,9 +23,14 @@ from active_directory_mcp.tools.user import UserTools
 
 SENTINEL = "Zq9!leak-sentinel-7731"
 
-CREDENTIAL_ENV = ("AD_PASSWORD", "AD_BIND_DN", "AZURE_KEYVAULT_URL",
-                  "AZURE_KEYVAULT_SECRET_USERNAME", "AZURE_KEYVAULT_SECRET_PASSWORD",
-                  "AD_LEAK_VAR")
+CREDENTIAL_ENV = (
+    "AD_PASSWORD",
+    "AD_BIND_DN",
+    "AZURE_KEYVAULT_URL",
+    "AZURE_KEYVAULT_SECRET_USERNAME",
+    "AZURE_KEYVAULT_SECRET_PASSWORD",
+    "AD_LEAK_VAR",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -108,8 +113,13 @@ def test_password_never_leaves_process(source, tmp_path, monkeypatch, capsys, ca
     logger.debug("startup complete")
 
     # No representation of the config exposes the password
-    for rendered in (repr(config), str(config), config.model_dump_json(),
-                     repr(config.active_directory), str(config.active_directory)):
+    for rendered in (
+        repr(config),
+        str(config),
+        config.model_dump_json(),
+        repr(config.active_directory),
+        str(config.active_directory),
+    ):
         assert SENTINEL not in rendered
 
     # Connect failure whose message echoes the password
@@ -155,8 +165,7 @@ def _rewrite_with_logging(config_path, log_file):
 
 
 def test_typo_key_holding_password_does_not_leak(tmp_path):
-    path = _write_config(tmp_path, password="placeholder-pw",
-                         extra_ad={"passwrd": SENTINEL})
+    path = _write_config(tmp_path, password="placeholder-pw", extra_ad={"passwrd": SENTINEL})
     with pytest.raises(ValueError) as info:
         load_config(path)
     assert SENTINEL not in _all_text(info.value)
@@ -164,8 +173,7 @@ def test_typo_key_holding_password_does_not_leak(tmp_path):
 
 
 def test_unset_placeholder_error_names_only_the_variable(tmp_path):
-    path = _write_config(tmp_path, password=SENTINEL,
-                         extra_ad={"server": "${AD_LEAK_VAR}"})
+    path = _write_config(tmp_path, password=SENTINEL, extra_ad={"server": "${AD_LEAK_VAR}"})
     with pytest.raises(ValueError) as info:
         load_config(path)
     assert SENTINEL not in _all_text(info.value)

@@ -15,20 +15,19 @@ from typing import Any, Callable, List, Optional
 import uvicorn
 from fastmcp import FastMCP
 
-from .config.loader import load_config, validate_config
-from .core.logging import setup_logging
-from .core.ldap_manager import LDAPManager
-from .tools.user import UserTools
-from .tools.group import GroupTools
-from .tools.computer import ComputerTools
-from .tools.organizational_unit import OrganizationalUnitTools
-from .tools.security import SecurityTools
-from .auth import resolve_auth
-from .http_app import build_http_app
 from .audit import AuditLogger
+from .auth import resolve_auth
+from .config.loader import load_config, validate_config
+from .core.ldap_manager import LDAPManager
+from .core.logging import setup_logging
+from .http_app import build_http_app
 from .policy import ToolPolicy
 from .registry import FastMCPToolSink, ToolContext, register_tools
-
+from .tools.computer import ComputerTools
+from .tools.group import GroupTools
+from .tools.organizational_unit import OrganizationalUnitTools
+from .tools.security import SecurityTools
+from .tools.user import UserTools
 
 logger = logging.getLogger("active-directory-mcp.http")
 
@@ -63,7 +62,7 @@ class _ShutdownHookServer(uvicorn.Server):
 class ActiveDirectoryMCPHTTPServer:
     """
     HTTP-based MCP server for Active Directory management.
-    
+
     This server supports:
     - HTTP transport via FastMCP
     - All Active Directory management operations
@@ -71,15 +70,17 @@ class ActiveDirectoryMCPHTTPServer:
     - API-key authentication (required by default; /health is exempt)
     - Read-only-by-default tool policy
     """
-    
-    def __init__(self, 
-                 config_path: Optional[str] = None,
-                 host: str = "0.0.0.0",
-                 port: int = 8813,
-                 path: str = "/activedirectory-mcp"):
+
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        host: str = "0.0.0.0",
+        port: int = 8813,
+        path: str = "/activedirectory-mcp",
+    ):
         """
         Initialize the HTTP MCP server.
-        
+
         Args:
             config_path: Path to configuration file
             host: Server host address
@@ -92,35 +93,35 @@ class ActiveDirectoryMCPHTTPServer:
 
         # Fail fast (before any LDAP connection) when no credential is configured.
         self._verifier = resolve_auth(self.config.security, os.environ)
-        
+
         # Setup logging
         self.logger = setup_logging(self.config.logging)
-        
+
         self.host = host
         self.port = port
         self.path = path
-        
+
         # Initialize LDAP manager
         self.ldap_manager = LDAPManager(
             self.config.active_directory,
             self.config.security,
             self.config.performance,
-            self.config.organizational_units
+            self.config.organizational_units,
         )
-        
+
         # Test connection on startup
         self._test_initial_connection()
-        
+
         # Initialize tools
         self.user_tools = UserTools(self.ldap_manager)
         self.group_tools = GroupTools(self.ldap_manager)
         self.computer_tools = ComputerTools(self.ldap_manager)
         self.ou_tools = OrganizationalUnitTools(self.ldap_manager)
         self.security_tools = SecurityTools(self.ldap_manager)
-        
+
         # Initialize FastMCP
         self.mcp = FastMCP("ActiveDirectoryMCP-HTTP")
-        
+
         # Register tools (declared once in registry.py)
         ctx = ToolContext(
             user_tools=self.user_tools,
@@ -142,12 +143,14 @@ class ActiveDirectoryMCPHTTPServer:
         try:
             self.logger.info("Testing initial LDAP connection...")
             connection_info = self.ldap_manager.test_connection()
-            
-            if connection_info.get('connected'):
-                self.logger.info(f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}")
+
+            if connection_info.get("connected"):
+                self.logger.info(
+                    f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}"
+                )
             else:
                 self.logger.error(f"Initial connection failed: {connection_info.get('error')}")
-                
+
         except Exception as e:
             self.logger.error(f"Connection test error: {e}")
 
@@ -196,7 +199,9 @@ class ActiveDirectoryMCPHTTPServer:
         is a second, idempotent disconnect.
         """
         try:
-            self.logger.info(f"Starting Active Directory MCP HTTP server on {self.host}:{self.port}{self.path}")
+            self.logger.info(
+                f"Starting Active Directory MCP HTTP server on {self.host}:{self.port}{self.path}"
+            )
             self.logger.info(f"Connected to: {self.config.active_directory.server}")
             self.logger.info(f"Domain: {self.config.active_directory.domain}")
 
@@ -211,66 +216,54 @@ class ActiveDirectoryMCPHTTPServer:
 class ActiveDirectoryMCPCommand:
     """
     Command runner for Active Directory MCP HTTP server.
-    
+
     This class can be used as a standalone command runner.
     """
-    
+
     help = "Active Directory MCP HTTP Server"
-    
+
     def __init__(self):
         self.server = None
-    
+
     def add_arguments(self, parser):
         """Add command line arguments."""
         parser.add_argument(
-            '--host',
-            type=str,
-            default='0.0.0.0',
-            help='Server host (default: 0.0.0.0)'
+            "--host", type=str, default="0.0.0.0", help="Server host (default: 0.0.0.0)"
         )
+        parser.add_argument("--port", type=int, default=8813, help="Server port (default: 8813)")
         parser.add_argument(
-            '--port',
-            type=int,
-            default=8813,
-            help='Server port (default: 8813)'
-        )
-        parser.add_argument(
-            '--path',
+            "--path",
             type=str,
-            default='/activedirectory-mcp',
-            help='HTTP path (default: /activedirectory-mcp)'
+            default="/activedirectory-mcp",
+            help="HTTP path (default: /activedirectory-mcp)",
         )
-        parser.add_argument(
-            '--config',
-            type=str,
-            help='Configuration file path'
-        )
-    
+        parser.add_argument("--config", type=str, help="Configuration file path")
+
     def handle(self, *args, **options):
         """Handle the command execution."""
-        config_path = options.get('config') or os.getenv('AD_MCP_CONFIG')
-        
+        config_path = options.get("config") or os.getenv("AD_MCP_CONFIG")
+
         self.server = ActiveDirectoryMCPHTTPServer(
             config_path=config_path,
-            host=options.get('host', '0.0.0.0'),
-            port=options.get('port', 8813),
-            path=options.get('path', '/activedirectory-mcp')
+            host=options.get("host", "0.0.0.0"),
+            port=options.get("port", 8813),
+            path=options.get("path", "/activedirectory-mcp"),
         )
-        
+
         self.server.run()
 
 
 def main():
     """Main entry point for standalone execution."""
     import argparse
-    
-    parser = argparse.ArgumentParser(description='Active Directory MCP HTTP Server')
+
+    parser = argparse.ArgumentParser(description="Active Directory MCP HTTP Server")
     command = ActiveDirectoryMCPCommand()
     command.add_arguments(parser)
-    
+
     args = parser.parse_args()
     options = vars(args)
-    
+
     try:
         command.handle(**options)
     except KeyboardInterrupt:

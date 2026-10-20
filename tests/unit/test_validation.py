@@ -10,6 +10,7 @@ BASE = "DC=corp,DC=example,DC=com"
 
 # --- filter value escaping -------------------------------------------------
 
+
 def test_escape_filter_value_matches_ldap3():
     raw = "a*(b)\\c\x00"
     assert v.escape_filter_value(raw) == escape_filter_chars(raw)
@@ -42,6 +43,7 @@ def test_validate_attribute_name_ok():
 
 # --- object class ----------------------------------------------------------
 
+
 @pytest.mark.parametrize("oc", ["user", "inetOrgPerson", "msDS-GroupManagedServiceAccount"])
 def test_object_class_ok(oc):
     assert v.validate_object_class(oc) == oc
@@ -54,6 +56,7 @@ def test_object_class_rejected(oc):
 
 
 # --- DN confinement --------------------------------------------------------
+
 
 def test_validate_dn_under_base():
     dn = "CN=Bob,OU=Staff,DC=corp,DC=example,DC=com"
@@ -142,6 +145,7 @@ def test_build_dn_rejects_bad_rdn_type():
 
 # --- filter_criteria -------------------------------------------------------
 
+
 @pytest.mark.parametrize("frag", ["(department=IT)", "(&(a=1)(b=2))", "(a=1)(b=2)", "(!(a=*))"])
 def test_filter_criteria_ok(frag):
     assert v.validate_filter_criteria(frag) == frag
@@ -195,6 +199,7 @@ def test_module_has_no_internal_imports():
 
 
 # --- review fixes (CR-01, CR-02, WR-01, WR-02, WR-06b) -----------------------
+
 
 @pytest.mark.parametrize(
     "dn",

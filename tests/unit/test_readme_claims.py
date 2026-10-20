@@ -194,8 +194,7 @@ def test_compose_env_overrides_are_read_by_the_server() -> None:
 
 def test_env_example_names_are_read_by_the_server_or_launchers() -> None:
     corpus = _src_corpus() + "\n".join(
-        (ROOT / n).read_text(encoding="utf-8")
-        for n in ("start_server.sh", "start_http_server.sh")
+        (ROOT / n).read_text(encoding="utf-8") for n in ("start_server.sh", "start_http_server.sh")
     )
     named = _assigned_env_names((ROOT / ".env.example").read_text(encoding="utf-8"))
     missing = sorted(name for name in named if name not in corpus)

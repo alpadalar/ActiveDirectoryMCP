@@ -30,4 +30,3 @@ def test_get_members_lists_user(group_tools, seeded_group):
 
     assert data["member_count"] >= 1
     assert any(member["type"] == "user" for member in data["members"])
-

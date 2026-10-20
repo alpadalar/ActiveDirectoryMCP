@@ -12,7 +12,7 @@ class ActiveDirectoryConfig(BaseModel):
     """Active Directory connection configuration."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
-    
+
     server: str = Field(..., description="Primary LDAP server URL")
     server_pool: Optional[List[str]] = Field(
         default=None, description="Additional LDAP servers for redundancy"
@@ -34,30 +34,27 @@ class ActiveDirectoryConfig(BaseModel):
     auto_bind: bool = Field(default=True, description="Automatically bind on connection")
     receive_timeout: int = Field(default=10, description="Receive timeout in seconds")
     user_object_class: str = Field(
-        default="user",
-        description="Primary objectClass değeri (ör: user, inetOrgPerson)"
+        default="user", description="Primary objectClass değeri (ör: user, inetOrgPerson)"
     )
     group_object_class: str = Field(
-        default="group",
-        description="Grup aramalarında kullanılacak objectClass"
+        default="group", description="Grup aramalarında kullanılacak objectClass"
     )
     computer_object_class: str = Field(
-        default="computer",
-        description="Bilgisayar nesneleri için objectClass"
+        default="computer", description="Bilgisayar nesneleri için objectClass"
     )
-    
-    @field_validator('user_object_class', 'group_object_class', 'computer_object_class')
+
+    @field_validator("user_object_class", "group_object_class", "computer_object_class")
     @classmethod
     def validate_object_classes(cls, v):
         """Reject values that could break out of an LDAP filter (WR-05)."""
         return validate_object_class(v)
 
-    @field_validator('server')
+    @field_validator("server")
     @classmethod
     def validate_server(cls, v):
         """Validate server URL format."""
-        if not v.startswith(('ldap://', 'ldaps://')):
-            raise ValueError('Server must start with ldap:// or ldaps://')
+        if not v.startswith(("ldap://", "ldaps://")):
+            raise ValueError("Server must start with ldap:// or ldaps://")
         return v
 
 
@@ -65,7 +62,7 @@ class OrganizationalUnitsConfig(BaseModel):
     """Organizational Units configuration."""
 
     model_config = ConfigDict(extra="forbid")
-    
+
     users_ou: str = Field(..., description="Users organizational unit DN")
     groups_ou: str = Field(..., description="Groups organizational unit DN")
     computers_ou: str = Field(..., description="Computers organizational unit DN")
@@ -102,12 +99,12 @@ class KeyVaultConfig(BaseModel):
         description="Name of the Key Vault secret holding the AD service account password",
     )
 
-    @field_validator('vault_url')
+    @field_validator("vault_url")
     @classmethod
     def validate_vault_url(cls, v):
         """Validate Key Vault URL format."""
-        if not v.startswith('https://'):
-            raise ValueError('Key Vault URL must start with https://')
+        if not v.startswith("https://"):
+            raise ValueError("Key Vault URL must start with https://")
         return v
 
 
@@ -149,7 +146,7 @@ class SecurityConfig(BaseModel):
     """Security configuration for LDAP connections and tool-call enforcement."""
 
     model_config = ConfigDict(extra="forbid")
-    
+
     enable_tls: bool = Field(default=True, description="Enable TLS encryption")
     validate_certificate: bool = Field(default=True, description="Validate server certificate")
     ca_cert_file: Optional[str] = Field(default=None, description="CA certificate file path")
@@ -205,9 +202,7 @@ class SecurityConfig(BaseModel):
     @model_validator(mode="after")
     def _destructive_requires_writes(self) -> "SecurityConfig":
         if self.allow_destructive and not self.allow_writes:
-            raise ValueError(
-                "security.allow_destructive requires security.allow_writes to be true"
-            )
+            raise ValueError("security.allow_destructive requires security.allow_writes to be true")
         if self.audit_fail_closed and self.audit_log_path is None:
             raise ValueError("security.audit_fail_closed requires security.audit_log_path")
         return self
@@ -217,21 +212,21 @@ class LoggingConfig(BaseModel):
     """Logging configuration."""
 
     model_config = ConfigDict(extra="forbid")
-    
+
     level: str = Field(default="INFO", description="Logging level")
     format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        description="Log message format"
+        description="Log message format",
     )
     file: Optional[str] = Field(default=None, description="Log file path")
-    
-    @field_validator('level')
+
+    @field_validator("level")
     @classmethod
     def validate_level(cls, v):
         """Validate logging level."""
-        valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
-            raise ValueError(f'Level must be one of: {valid_levels}')
+            raise ValueError(f"Level must be one of: {valid_levels}")
         return v.upper()
 
 
@@ -239,7 +234,7 @@ class PerformanceConfig(BaseModel):
     """Performance configuration."""
 
     model_config = ConfigDict(extra="forbid")
-    
+
     connection_pool_size: Optional[int] = Field(
         default=None,
         description=(
@@ -250,21 +245,21 @@ class PerformanceConfig(BaseModel):
     max_retries: int = Field(default=3, description="Maximum connection retries")
     retry_delay: float = Field(default=1.0, description="Retry delay in seconds")
     page_size: int = Field(default=1000, description="LDAP search page size")
-    
-    @field_validator('connection_pool_size', 'max_retries', 'page_size')
+
+    @field_validator("connection_pool_size", "max_retries", "page_size")
     @classmethod
     def validate_positive_int(cls, v):
         """Validate positive integers."""
         if v is not None and v <= 0:
-            raise ValueError('Value must be positive')
+            raise ValueError("Value must be positive")
         return v
-    
-    @field_validator('retry_delay')
+
+    @field_validator("retry_delay")
     @classmethod
     def validate_positive_float(cls, v):
         """Validate positive float."""
         if v <= 0:
-            raise ValueError('Retry delay must be positive')
+            raise ValueError("Retry delay must be positive")
         return v
 
 
@@ -272,7 +267,7 @@ class Config(BaseModel):
     """Main configuration class."""
 
     model_config = ConfigDict(extra="forbid")
-    
+
     active_directory: ActiveDirectoryConfig
     organizational_units: OrganizationalUnitsConfig = Field(
         default=None,  # type: ignore[assignment]  # always filled by _fill_default_ous

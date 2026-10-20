@@ -111,8 +111,13 @@ def test_unclassified_tool_fails_build(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize("writes", [False, True])
 @pytest.mark.parametrize("destructive", [False, True])
 @pytest.mark.parametrize(
-    "tool,risk", [("get_user", "read"), ("create_user", "write"),
-                  ("delete_user", "destructive"), ("no_such_tool", "unknown")]
+    "tool,risk",
+    [
+        ("get_user", "read"),
+        ("create_user", "write"),
+        ("delete_user", "destructive"),
+        ("no_such_tool", "unknown"),
+    ],
 )
 def test_decide_matrix(writes: bool, destructive: bool, tool: str, risk: str) -> None:
     result = ToolPolicy(writes, destructive).decide(tool)

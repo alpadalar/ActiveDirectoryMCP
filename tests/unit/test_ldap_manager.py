@@ -57,7 +57,11 @@ class TestServerPool:
     def test_pool_extras(self, make_manager, ad_settings):
         ad = ad_settings.model_copy(update={"server_pool": ["ldaps://dc2", "ldaps://dc3"]})
         m = make_manager(ad=ad)
-        assert [s.url for s in m._server_pool] == ["ldaps://dc.test.local", "ldaps://dc2", "ldaps://dc3"]
+        assert [s.url for s in m._server_pool] == [
+            "ldaps://dc.test.local",
+            "ldaps://dc2",
+            "ldaps://dc3",
+        ]
 
     def test_no_tls_object_when_disabled(self, manager):
         assert manager._server_pool[0].kw["tls"] is None
@@ -269,7 +273,15 @@ class TestWriteOperations:
         manager.move("CN=a,OU=x", "OU=y")
         conn_cls.return_value.modify_dn.assert_called_once_with("CN=a,OU=x", new_superior="OU=y")
 
-    @pytest.mark.parametrize("method,args", [("add", ("CN=a", {})), ("modify", ("CN=a", {})), ("delete", ("CN=a",)), ("move", ("CN=a", "OU=b"))])
+    @pytest.mark.parametrize(
+        "method,args",
+        [
+            ("add", ("CN=a", {})),
+            ("modify", ("CN=a", {})),
+            ("delete", ("CN=a",)),
+            ("move", ("CN=a", "OU=b")),
+        ],
+    )
     def test_connection_exception_propagates(self, manager, ldap3_seam, method, args):
         _, conn_cls = ldap3_seam
         conn = conn_cls.return_value
@@ -309,8 +321,13 @@ class TestLifecycle:
         conn.bound, conn.user = True, "CN=svc"
         info = manager.test_connection()
         assert info == {
-            "connected": True, "server": "dc", "port": 636, "ssl": True,
-            "bound": True, "user": "CN=svc", "search_test": True,
+            "connected": True,
+            "server": "dc",
+            "port": 636,
+            "ssl": True,
+            "bound": True,
+            "user": "CN=svc",
+            "search_test": True,
         }
 
     def test_test_connection_search_failure_is_reported(self, manager, ldap3_seam):

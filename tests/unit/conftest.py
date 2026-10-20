@@ -74,7 +74,8 @@ def security_tools(mock_ldap_manager):
 @pytest.fixture
 def ldap3_seam():
     """Patch ldap3 Server/Connection as imported by core.ldap_manager; yield (Server, Connection)."""
-    with patch("active_directory_mcp.core.ldap_manager.Server", MagicMock()) as server, patch(
-        "active_directory_mcp.core.ldap_manager.Connection", MagicMock()
-    ) as connection:
+    with (
+        patch("active_directory_mcp.core.ldap_manager.Server", MagicMock()) as server,
+        patch("active_directory_mcp.core.ldap_manager.Connection", MagicMock()) as connection,
+    ):
         yield server, connection

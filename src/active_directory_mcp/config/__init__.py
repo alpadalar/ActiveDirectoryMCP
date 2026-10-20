@@ -13,7 +13,7 @@ from .models import (
 __all__ = [
     "load_config",
     "ActiveDirectoryConfig",
-    "OrganizationalUnitsConfig", 
+    "OrganizationalUnitsConfig",
     "SecurityConfig",
     "LoggingConfig",
     "PerformanceConfig",

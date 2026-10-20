@@ -120,6 +120,7 @@ def test_setup_logging_redacts_stderr_and_file(tmp_path, capsys):
 
 # --- review fixes (WR-03, WR-04, WR-05, WR-06a) ------------------------------
 
+
 def test_json_and_repr_escaped_forms_redacted():
     import json
 

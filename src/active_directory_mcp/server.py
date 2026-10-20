@@ -16,30 +16,30 @@ The server exposes a comprehensive set of tools for managing Active Directory re
 - Security operations (audit, permissions analysis, policy compliance)
 """
 
-import logging
-import json
-import os
-import sys
-import signal
 import asyncio
-from typing import Optional, List, Any, Dict
+import json
+import logging
+import os
+import signal
+import sys
+from typing import Any, Dict, List, Optional
 
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
-from .config.loader import load_config, validate_config
-from .core.logging import setup_logging
-from .core.ldap_manager import LDAPManager
-from .tools.user import UserTools
-from .tools.group import GroupTools
-from .tools.computer import ComputerTools
-from .tools.organizational_unit import OrganizationalUnitTools
-from .tools.security import SecurityTools
 from .audit import AuditLogger
+from .config.loader import load_config, validate_config
+from .core.ldap_manager import LDAPManager
+from .core.logging import setup_logging
 from .policy import ToolPolicy
 from .registry import StdioToolSink, ToolContext, register_tools
+from .tools.computer import ComputerTools
+from .tools.group import GroupTools
+from .tools.organizational_unit import OrganizationalUnitTools
+from .tools.security import SecurityTools
+from .tools.user import UserTools
 
 
 class ActiveDirectoryMCPServer:
@@ -55,9 +55,7 @@ class ActiveDirectoryMCPServer:
         # Configure root logger to use stderr before any logging happens
         # This prevents stdout pollution which interferes with MCP stdio protocol
         logging.basicConfig(
-            level=logging.WARNING,
-            format='%(levelname)s - %(message)s',
-            stream=sys.stderr
+            level=logging.WARNING, format="%(levelname)s - %(message)s", stream=sys.stderr
         )
 
         # Load and validate configuration
@@ -72,7 +70,7 @@ class ActiveDirectoryMCPServer:
             self.config.active_directory,
             self.config.security,
             self.config.performance,
-            self.config.organizational_units
+            self.config.organizational_units,
         )
 
         # Test connection on startup
@@ -97,16 +95,18 @@ class ActiveDirectoryMCPServer:
         try:
             self.logger.info("Testing initial LDAP connection...")
             connection_info = self.ldap_manager.test_connection()
-            
-            if connection_info.get('connected'):
-                self.logger.info(f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}")
-                if connection_info.get('search_test'):
+
+            if connection_info.get("connected"):
+                self.logger.info(
+                    f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}"
+                )
+                if connection_info.get("search_test"):
                     self.logger.info("LDAP search test passed")
                 else:
                     self.logger.warning("LDAP search test failed")
             else:
                 self.logger.error(f"Initial connection failed: {connection_info.get('error')}")
-                
+
         except Exception as e:
             self.logger.error(f"Connection test error: {e}")
 
@@ -151,7 +151,9 @@ class ActiveDirectoryMCPServer:
                 return sink.dispatch(name, arguments)
             except Exception as e:
                 self.logger.error(f"Tool {name} error: {e}")
-                return [types.TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    types.TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))
+                ]
 
     def _health_extras(self) -> Dict[str, Any]:
         """Stdio-specific fields merged into the shared ``health`` tool response."""
@@ -193,6 +195,7 @@ class ActiveDirectoryMCPServer:
 
         The server runs until terminated by a signal or fatal error.
         """
+
         def signal_handler(signum, frame):
             self.logger.info("Received signal to shutdown...")
             self.ldap_manager.disconnect()
@@ -207,14 +210,25 @@ class ActiveDirectoryMCPServer:
             run_tests = os.getenv("RUN_TESTS_ON_START", "0").lower() in ("1", "true", "yes", "on")
             if run_tests:
                 import subprocess
+
                 self.logger.info("Running startup tests (pytest)...")
                 env = os.environ.copy()
                 # Ensure src on PYTHONPATH for tests
-                env["PYTHONPATH"] = f"{os.getcwd()}/src" + (":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-                result = subprocess.run([sys.executable, "-m", "pytest", "-q"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
-                self._tests_passed = (result.returncode == 0)
+                env["PYTHONPATH"] = f"{os.getcwd()}/src" + (
+                    ":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+                )
+                result = subprocess.run(
+                    [sys.executable, "-m", "pytest", "-q"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                )
+                self._tests_passed = result.returncode == 0
                 if not self._tests_passed:
-                    self.logger.error("Startup tests failed. Health will be 'degraded'. Output:\n" + result.stdout.decode())
+                    self.logger.error(
+                        "Startup tests failed. Health will be 'degraded'. Output:\n"
+                        + result.stdout.decode()
+                    )
                 else:
                     self.logger.info("Startup tests passed.")
 
@@ -237,7 +251,7 @@ def main():
     if not config_path:
         print("AD_MCP_CONFIG environment variable must be set")
         sys.exit(1)
-    
+
     try:
         server = ActiveDirectoryMCPServer(config_path)
         server.start()

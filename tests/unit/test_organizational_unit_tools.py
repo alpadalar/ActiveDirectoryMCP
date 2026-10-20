@@ -97,7 +97,9 @@ def test_get_ou_failure(ou_tools, mock_ldap_manager):
 
 
 def test_create_ou_success(ou_tools, mock_ldap_manager):
-    data = parse_response(ou_tools.create_ou("Ops", description="d", managed_by="CN=m,DC=test,DC=local"))
+    data = parse_response(
+        ou_tools.create_ou("Ops", description="d", managed_by="CN=m,DC=test,DC=local")
+    )
     assert data["success"] is True
     assert data["dn"] == "OU=Ops,DC=test,DC=local"
     dn, attrs = mock_ldap_manager.add.call_args.args
@@ -272,9 +274,12 @@ def test_move_ou_invalid_missing_parent_failure(ou_tools, mock_ldap_manager):
 def test_move_organizational_unit_alias_param_names(ou_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = [_ou()]
     target = "OU=Archive,DC=test,DC=local"
-    assert parse_response(
-        ou_tools.move_organizational_unit(source_dn=OU, destination_parent_dn=target)
-    )["success"] is True
+    assert (
+        parse_response(
+            ou_tools.move_organizational_unit(source_dn=OU, destination_parent_dn=target)
+        )["success"]
+        is True
+    )
 
 
 # ----------------------------------------------------------- get_ou_contents
@@ -291,7 +296,11 @@ def test_get_ou_contents_types_and_counts(ou_tools, mock_ldap_manager):
     data = parse_response(ou_tools.get_ou_contents(OU))
     assert data["total_count"] == 5
     assert data["type_counts"] == {
-        "computer": 1, "group": 1, "organizationalUnit": 1, "unknown": 1, "user": 1,
+        "computer": 1,
+        "group": 1,
+        "organizationalUnit": 1,
+        "unknown": 1,
+        "user": 1,
     }
 
 
@@ -415,8 +424,17 @@ OUTSIDE = "OU=X,DC=evil,DC=com"
         lambda t: t.get_ou_contents(OUTSIDE),
     ],
     ids=[
-        "list-parent", "list-unbalanced", "list-breakout", "get", "create-parent", "modify",
-        "delete", "delete-force", "move-src", "move-dest", "contents",
+        "list-parent",
+        "list-unbalanced",
+        "list-breakout",
+        "get",
+        "create-parent",
+        "modify",
+        "delete",
+        "delete-force",
+        "move-src",
+        "move-dest",
+        "contents",
     ],
 )
 def test_ou_tools_reject_unconfined_or_hostile_input_without_ldap(
@@ -527,8 +545,12 @@ def test_create_ou_rejects_disallowed_additional_attributes(ou_tools, mock_ldap_
 
 def test_create_ou_first_class_params_unaffected(ou_tools, mock_ldap_manager):
     data = parse_response(
-        ou_tools.create_ou("Eng", description="d", managed_by="CN=a,DC=test,DC=local",
-                           additional_attributes={"l": "x"})
+        ou_tools.create_ou(
+            "Eng",
+            description="d",
+            managed_by="CN=a,DC=test,DC=local",
+            additional_attributes={"l": "x"},
+        )
     )
     assert data["success"] is True
 

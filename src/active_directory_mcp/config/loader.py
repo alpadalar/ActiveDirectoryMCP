@@ -35,6 +35,7 @@ def _resolve_env_placeholders(value: Any) -> Any:
     if isinstance(value, list):
         return [_resolve_env_placeholders(item) for item in value]
     if isinstance(value, str):
+
         def _replace(match: "re.Match[str]") -> str:
             env_key, default = match.groups()
             env_value = os.getenv(env_key)
@@ -54,14 +55,14 @@ def _resolve_env_placeholders(value: Any) -> Any:
 def load_config(config_path: Optional[str] = None) -> Config:
     """
     Load configuration from JSON file.
-    
+
     Args:
         config_path: Path to configuration file. If None, uses AD_MCP_CONFIG
                     environment variable.
-    
+
     Returns:
         Config: Loaded and validated configuration
-        
+
     Raises:
         FileNotFoundError: If config file doesn't exist
         ValueError: If config is invalid
@@ -75,19 +76,19 @@ def load_config(config_path: Optional[str] = None) -> Config:
                 "No configuration file specified. Either provide config_path or set "
                 "AD_MCP_CONFIG environment variable."
             )
-    
+
     config_file = Path(config_path)
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    
+
     logger.info(f"Loading configuration from: {config_path}")
-    
+
     try:
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             config_data = json.load(f)
 
         config_data = _resolve_env_placeholders(config_data)
-        
+
         # Validate and create config object
         try:
             config = Config(**config_data)
@@ -102,15 +103,15 @@ def load_config(config_path: Optional[str] = None) -> Config:
             register_secret(config.active_directory.password.get_secret_value())
 
         logger.info("Configuration loaded successfully")
-        
+
         # Log configuration summary (without sensitive data)
         logger.debug(f"AD Server: {config.active_directory.server}")
         logger.debug(f"Domain: {config.active_directory.domain}")
         logger.debug(f"Base DN: {config.active_directory.base_dn}")
         logger.debug(f"SSL Enabled: {config.active_directory.use_ssl}")
-        
+
         return config
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in configuration file: {e}")
         raise
@@ -217,40 +218,40 @@ def _resolve_credentials(config: Config) -> None:
 def validate_config(config: Config) -> None:
     """
     Perform additional validation on configuration.
-    
+
     Args:
         config: Configuration to validate
-        
+
     Raises:
         ValueError: If configuration is invalid
     """
     # Check if required OUs are under base DN
     base_dn = config.active_directory.base_dn.lower()
-    
+
     ous = [
         config.organizational_units.users_ou,
         config.organizational_units.groups_ou,
         config.organizational_units.computers_ou,
         config.organizational_units.service_accounts_ou,
     ]
-    
+
     for ou in ous:
         if not ou.lower().endswith(base_dn):
             logger.warning(f"OU {ou} is not under base DN {config.active_directory.base_dn}")
-    
+
     # Validate bind DN
     if not config.active_directory.bind_dn.lower().endswith(base_dn):
         logger.warning(f"Bind DN {config.active_directory.bind_dn} is not under base DN")
-    
+
     # Check SSL configuration
     if config.active_directory.use_ssl and config.security.enable_tls:
-        if not config.active_directory.server.startswith('ldaps://'):
+        if not config.active_directory.server.startswith("ldaps://"):
             logger.warning("SSL enabled but server URL doesn't use ldaps://")
 
     if config.security.require_secure_connection:
         if not config.active_directory.use_ssl:
             raise ValueError("Secure connection required but 'use_ssl' is disabled")
-        if not config.active_directory.server.startswith('ldaps://'):
+        if not config.active_directory.server.startswith("ldaps://"):
             raise ValueError("Secure connection required but server URL is not ldaps://")
         if not config.security.enable_tls:
             raise ValueError("Secure connection required but TLS disabled ('security.enable_tls')")
@@ -262,7 +263,7 @@ def validate_config(config: Config) -> None:
     elif (
         not config.active_directory.use_ssl
         or not config.security.enable_tls
-        or not config.active_directory.server.startswith('ldaps://')
+        or not config.active_directory.server.startswith("ldaps://")
     ):
         logger.warning(
             "require_secure_connection is false and the connection is not secured: "
@@ -275,5 +276,5 @@ def validate_config(config: Config) -> None:
             "performance.connection_pool_size is ignored: a single serialized LDAP "
             "connection is used. Remove it from the configuration."
         )
-    
+
     logger.info("Configuration validation completed")

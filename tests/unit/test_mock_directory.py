@@ -16,7 +16,6 @@ from ldap3 import MODIFY_REPLACE
 from ldap3.core.exceptions import (
     LDAPAttributeError,
     LDAPEntryAlreadyExistsResult,
-    LDAPException,
 )
 
 from active_directory_mcp.core import ldap_manager as ldap_manager_module
@@ -94,10 +93,10 @@ def test_harness_opens_no_sockets(seeded, monkeypatch):
 def test_configs_and_env(directory, tmp_path):
     env = directory.env(tmp_path)
     assert set(env) == {"AD_MCP_CONFIG", "AD_PASSWORD"}
-    from active_directory_mcp.config.loader import load_config
-
     import os
     from unittest.mock import patch
+
+    from active_directory_mcp.config.loader import load_config
 
     with patch.dict(os.environ, env):
         config = load_config()
@@ -344,7 +343,9 @@ def test_fidelity_paged_search_cookie_behaviour(seeded):
     with seeded.patch():
         # page_size smaller than the result set: every entry is returned over several pages
         # and the last page carries an empty cookie. Non-empty cookies are opaque random bytes.
-        results, pages = _spy_pages(seeded.make_manager(page_size=2), seeded.base_dn, "(objectClass=user)")
+        results, pages = _spy_pages(
+            seeded.make_manager(page_size=2), seeded.base_dn, "(objectClass=user)"
+        )
         assert len(results) == 7
         assert [(size, count) for size, count, _ in pages] == [(2, 2), (2, 2), (2, 2), (2, 1)]
         assert all(cookie for _, _, cookie in pages[:-1])
@@ -358,7 +359,9 @@ def test_fidelity_paged_search_cookie_behaviour(seeded):
         assert [(size, count) for size, count, _ in pages] == [(3, 3)]
 
         # page_size larger than the result set: single page, empty cookie.
-        results, pages = _spy_pages(seeded.make_manager(page_size=50), seeded.base_dn, "(objectClass=user)")
+        results, pages = _spy_pages(
+            seeded.make_manager(page_size=50), seeded.base_dn, "(objectClass=user)"
+        )
         assert len(results) == 7 and [(s, c) for s, c, _ in pages] == [(50, 7)]
         assert pages[0][2] == b""
 
@@ -460,9 +463,9 @@ def test_fidelity_state_is_per_connection(seeded):
         first.delete("CN=alice,CN=Users,DC=test,DC=local")
         assert seeded.search("(sAMAccountName=alice)") == []
         second = seeded.make_manager()
-        assert [e["dn"] for e in second.search(seeded.base_dn, "(sAMAccountName=alice)", ["cn"])] == [
-            "CN=alice,CN=Users,DC=test,DC=local"
-        ]
+        assert [
+            e["dn"] for e in second.search(seeded.base_dn, "(sAMAccountName=alice)", ["cn"])
+        ] == ["CN=alice,CN=Users,DC=test,DC=local"]
         assert len(seeded.connections) == 2
         # The first manager still sees its own delete.
         assert first.search(seeded.base_dn, "(sAMAccountName=alice)", ["cn"]) == []
@@ -473,7 +476,9 @@ def test_fidelity_case_handling(seeded):
     # case-insensitive; returned attribute keys use the schema's canonical case (schema mode).
     with seeded.patch():
         connection = seeded.make_manager().connect()
-        assert connection.search(seeded.base_dn.lower(), "(sAMAccountName=ALICE)", attributes=["samaccountname"])
+        assert connection.search(
+            seeded.base_dn.lower(), "(sAMAccountName=ALICE)", attributes=["samaccountname"]
+        )
         assert connection.entries[0].entry_dn == "CN=alice,CN=Users,DC=test,DC=local"
         assert connection.entries[0].entry_attributes_as_dict == {"sAMAccountName": ["alice"]}
 

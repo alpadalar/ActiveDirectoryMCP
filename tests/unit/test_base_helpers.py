@@ -51,7 +51,17 @@ def test_ad_datetime_filetime_forms(tool, value):
 @pytest.mark.parametrize(
     "value",
     [
-        None, "", 0, "0", NEVER, str(NEVER), -5, True, False, "abc", b"123",
+        None,
+        "",
+        0,
+        "0",
+        NEVER,
+        str(NEVER),
+        -5,
+        True,
+        False,
+        "abc",
+        b"123",
         datetime(1601, 1, 1, tzinfo=timezone.utc),
         datetime(1601, 1, 1),
         datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
@@ -121,7 +131,9 @@ def test_is_past(tool):
     assert tool._is_past(datetime(2020, 1, 1), now=NOW) is True
 
 
-@pytest.mark.parametrize("value", [None, 0, "0", NEVER, datetime(9999, 12, 31), datetime(1601, 1, 1), "x"])
+@pytest.mark.parametrize(
+    "value", [None, 0, "0", NEVER, datetime(9999, 12, 31), datetime(1601, 1, 1), "x"]
+)
 def test_is_past_unset_false(tool, value):
     assert tool._is_past(value, now=NOW) is False
 
@@ -187,6 +199,7 @@ def test_base_has_no_handrolled_escape_chain():
 # ---------------------------------------------------------------------------
 # Security enforcement helpers (SEC-03 / SEC-05 / SEC-06)
 # ---------------------------------------------------------------------------
+
 
 def _payload(result):
     return json.loads(result[0].text)

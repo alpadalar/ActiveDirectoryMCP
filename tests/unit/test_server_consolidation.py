@@ -32,9 +32,7 @@ def _called_attr_names(tree: ast.AST) -> List[str]:
 
 def _defined_names(tree: ast.AST) -> List[str]:
     return [
-        n.name
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
 
 
@@ -54,9 +52,9 @@ def test_no_per_tool_registration_code(path: Path) -> None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
                 target = dec.func if isinstance(dec, ast.Call) else dec
-                assert not (
-                    isinstance(target, ast.Attribute) and target.attr == "tool"
-                ), f"{path.name}:{node.lineno} uses a .tool decorator"
+                assert not (isinstance(target, ast.Attribute) and target.attr == "tool"), (
+                    f"{path.name}:{node.lineno} uses a .tool decorator"
+                )
     assert "register_tools" in _called_attr_names(tree) or any(
         isinstance(n, ast.Call) and getattr(n.func, "id", None) == "register_tools"
         for n in ast.walk(tree)
@@ -138,8 +136,9 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
 
     with _offline_env(HTTP_MOD):
         server = _http_server()
-        with patch.object(mod, "build_http_app", spy), patch.object(
-            mod, "_ShutdownHookServer", FakeServer
+        with (
+            patch.object(mod, "build_http_app", spy),
+            patch.object(mod, "_ShutdownHookServer", FakeServer),
         ):
             asyncio.run(server.serve())
             server.stop()

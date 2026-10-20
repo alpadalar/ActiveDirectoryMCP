@@ -91,7 +91,9 @@ class TestGetUser:
 class TestCreateUser:
     def test_success(self, user_tools, mock_ldap_manager):
         mock_ldap_manager.search.return_value = []
-        data = parse_response(user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe", email="j@x"))
+        data = parse_response(
+            user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe", email="j@x")
+        )
         assert data["success"] is True
         assert data["dn"] == USER_DN
         assert data["upn"] == "jdoe@test.local"
@@ -367,7 +369,9 @@ class TestUserInputHardening:
     def test_list_users_valid_filter_text_unchanged(self, user_tools, mock_ldap_manager):
         user_tools.list_users(filter_criteria="(department=IT)")
         sent = mock_ldap_manager.search.call_args.kwargs["search_filter"]
-        assert sent == f"(&(objectClass={user_tools.ldap.ad_config.user_object_class})(department=IT))"
+        assert (
+            sent == f"(&(objectClass={user_tools.ldap.ad_config.user_object_class})(department=IT))"
+        )
 
     def test_list_users_no_ou_uses_base_dn(self, user_tools, mock_ldap_manager):
         user_tools.list_users()
@@ -495,7 +499,10 @@ class TestCreateUserEnforcement:
     def test_additional_attributes_rejected_before_add(self, user_tools, mock_ldap_manager):
         data = parse_response(
             user_tools.create_user(
-                "jdoe", "Pw-1234!x", "John", "Doe",
+                "jdoe",
+                "Pw-1234!x",
+                "John",
+                "Doe",
                 additional_attributes={"memberOf": ["CN=Admins"], "title": "x"},
             )
         )
@@ -576,9 +583,7 @@ class TestResetPasswordEnforcement:
 
 class TestListUsersCap:
     def _entries(self, n):
-        return [
-            ldap_entry(f"CN=U{i},DC=test,DC=local", sAMAccountName=f"u{i}") for i in range(n)
-        ]
+        return [ldap_entry(f"CN=U{i},DC=test,DC=local", sAMAccountName=f"u{i}") for i in range(n)]
 
     def test_cap_truncates(self, user_tools, mock_ldap_manager):
         limit = mock_ldap_manager.security_config.max_list_results

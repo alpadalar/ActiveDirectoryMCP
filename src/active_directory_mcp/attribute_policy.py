@@ -48,18 +48,43 @@ HARD_DENY: FrozenSet[str] = frozenset(
 MODIFY_ALLOWLIST: Dict[str, FrozenSet[str]] = {
     USER: frozenset(
         {
-            "displayName", "givenName", "sn", "initials", "mail", "telephoneNumber",
-            "mobile", "homePhone", "department", "title", "company", "division",
-            "description", "physicalDeliveryOfficeName", "streetAddress", "l", "st",
-            "postalCode", "c", "co", "employeeID", "employeeNumber", "manager", "info",
+            "displayName",
+            "givenName",
+            "sn",
+            "initials",
+            "mail",
+            "telephoneNumber",
+            "mobile",
+            "homePhone",
+            "department",
+            "title",
+            "company",
+            "division",
+            "description",
+            "physicalDeliveryOfficeName",
+            "streetAddress",
+            "l",
+            "st",
+            "postalCode",
+            "c",
+            "co",
+            "employeeID",
+            "employeeNumber",
+            "manager",
+            "info",
             "wWWHomePage",
         }
     ),
     GROUP: frozenset({"description", "displayName", "info", "managedBy", "mail"}),
     COMPUTER: frozenset(
         {
-            "description", "location", "managedBy", "displayName", "operatingSystem",
-            "operatingSystemVersion", "operatingSystemServicePack",
+            "description",
+            "location",
+            "managedBy",
+            "displayName",
+            "operatingSystem",
+            "operatingSystemVersion",
+            "operatingSystemServicePack",
         }
     ),
     OU: frozenset(
@@ -73,6 +98,7 @@ def _lower(names: Iterable[str]) -> FrozenSet[str]:
 
 
 _HARD_DENY_LOWER = _lower(HARD_DENY)
+
 
 def _check_allowlists_disjoint(
     allowlists: Mapping[str, Iterable[str]], hard_deny_lower: FrozenSet[str]

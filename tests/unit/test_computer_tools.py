@@ -232,7 +232,9 @@ def test_create_computer_ldap_exception(computer_tools, mock_ldap_manager):
 
 def test_modify_computer_success(computer_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
-    data = parse_response(computer_tools.modify_computer("WS01", {"description": "x", "location": ["a"]}))
+    data = parse_response(
+        computer_tools.modify_computer("WS01", {"description": "x", "location": ["a"]})
+    )
     assert data["success"] is True
     assert data["modified_attributes"] == ["description", "location"]
     dn, mods = mock_ldap_manager.modify.call_args.args
@@ -313,9 +315,7 @@ def test_reset_computer_password_not_found(computer_tools, mock_ldap_manager):
 
 
 @pytest.mark.parametrize("failure", ["exception", "false"])
-def test_reset_computer_password_failure_is_not_success(
-    computer_tools, mock_ldap_manager, failure
-):
+def test_reset_computer_password_failure_is_not_success(computer_tools, mock_ldap_manager, failure):
     mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
     if failure == "exception":
         mock_ldap_manager.modify.side_effect = Exception("x")
@@ -488,8 +488,13 @@ def test_create_computer_rejects_out_of_base_ou(computer_tools, mock_ldap_manage
 
 # ------------------------------------------- allow-lists, caps, notes (SEC-03/06)
 
-BAD_ATTRS = ["userAccountControl", "servicePrincipalName", "unicodePwd",
-             "msDS-AllowedToActOnBehalfOfOtherIdentity", "description_unknown"]
+BAD_ATTRS = [
+    "userAccountControl",
+    "servicePrincipalName",
+    "unicodePwd",
+    "msDS-AllowedToActOnBehalfOfOtherIdentity",
+    "description_unknown",
+]
 
 
 @pytest.mark.parametrize("attr", BAD_ATTRS)
@@ -524,8 +529,14 @@ def test_create_computer_accepts_allowed_additional_attributes(computer_tools, m
 
 
 def _computers(n):
-    return [ldap_entry(f"CN=PC{i},CN=Computers,DC=test,DC=local", sAMAccountName=f"PC{i}$",
-                       userAccountControl=4096) for i in range(n)]
+    return [
+        ldap_entry(
+            f"CN=PC{i},CN=Computers,DC=test,DC=local",
+            sAMAccountName=f"PC{i}$",
+            userAccountControl=4096,
+        )
+        for i in range(n)
+    ]
 
 
 def test_list_computers_capped_and_truncated(computer_tools, mock_ldap_manager):
@@ -555,12 +566,20 @@ def test_get_stale_computers_capped_with_accuracy_note(computer_tools, mock_ldap
 def test_get_stale_computers_audits_beyond_cap_before_filtering(computer_tools, mock_ldap_manager):
     mock_ldap_manager.security_config.max_list_results = 2
     fresh = [
-        ldap_entry(f"CN=F{i},CN=Computers,DC=test,DC=local", sAMAccountName=f"F{i}$",
-                   userAccountControl=4096, lastLogon=_ago(1))
+        ldap_entry(
+            f"CN=F{i},CN=Computers,DC=test,DC=local",
+            sAMAccountName=f"F{i}$",
+            userAccountControl=4096,
+            lastLogon=_ago(1),
+        )
         for i in range(4)
     ]
-    stale = ldap_entry("CN=OLD,CN=Computers,DC=test,DC=local", sAMAccountName="OLD$",
-                       userAccountControl=4096, lastLogon=_ago(400))
+    stale = ldap_entry(
+        "CN=OLD,CN=Computers,DC=test,DC=local",
+        sAMAccountName="OLD$",
+        userAccountControl=4096,
+        lastLogon=_ago(400),
+    )
     mock_ldap_manager.search.return_value = fresh + [stale]
     data = parse_response(computer_tools.get_stale_computers(30))
     assert data["count"] == 1 and data["truncated"] is False
@@ -598,9 +617,7 @@ def test_create_computer_rejects_unsafe_computer_name_for_spn(computer_tools, mo
 
 def test_create_computer_spn_derived_from_validated_hostname(computer_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = []
-    data = parse_response(
-        computer_tools.create_computer("NEWPC", dns_hostname="NewPC.Test.Local")
-    )
+    data = parse_response(computer_tools.create_computer("NEWPC", dns_hostname="NewPC.Test.Local"))
     assert data["success"] is True
     attrs = mock_ldap_manager.add.call_args.args[1]
     assert attrs["servicePrincipalName"] == ["HOST/NEWPC", "HOST/NewPC.Test.Local"]

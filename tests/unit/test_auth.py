@@ -163,7 +163,7 @@ def test_resolve_env_digests_comma_separated() -> None:
 def test_resolve_env_plaintext_hashed_not_retained() -> None:
     verifier = resolve_auth(_sec(), {auth.ENV_API_KEY: KEY})
     assert verifier is not None and verifier.verify(KEY)
-    assert KEY.encode() not in b''.join(verifier._digests)
+    assert KEY.encode() not in b"".join(verifier._digests)
 
 
 def test_resolve_short_plaintext_rejected_without_echo() -> None:

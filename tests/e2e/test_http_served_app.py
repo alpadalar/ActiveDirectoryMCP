@@ -219,8 +219,9 @@ def test_served_object_is_factory_output(tmp_path: Path, mock_directory: MockDir
         configs.append(app)
         return real_config(app, *args, **kwargs)
 
-    with patch.object(server_http, "build_http_app", build_spy), patch.object(
-        server_http.uvicorn, "Config", config_spy
+    with (
+        patch.object(server_http, "build_http_app", build_spy),
+        patch.object(server_http.uvicorn, "Config", config_spy),
     ):
         with serve_ad_http(tmp_path, mock_directory, path="/mcp"):
             pass

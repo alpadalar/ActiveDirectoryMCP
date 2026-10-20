@@ -2,7 +2,7 @@
 ActiveDirectoryMCP - Model Context Protocol server for Active Directory management.
 
 This package provides a comprehensive MCP server for interacting with Active Directory
-through LDAP protocol, offering tools for user management, group operations, 
+through LDAP protocol, offering tools for user management, group operations,
 organizational unit management, and security operations.
 """
 
