@@ -1,0 +1,13 @@
+.git
+.planning
+.venv*
+tests
+ad-config
+.env
+*.log
+graphify-out
+__pycache__
+.pytest_cache
+.impeccable
+CLAUDE.md
+REVIZYON-BRIEF.md

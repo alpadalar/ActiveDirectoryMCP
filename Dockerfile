@@ -1,37 +1,39 @@
-FROM python:3.11-slim AS builder
+# Base image: python:3.13-slim pinned by digest.
+# Re-verify with: docker buildx imagetools inspect python:3.13-slim
+# uv 0.12.6 pinned by digest. Re-verify with: docker buildx imagetools inspect ghcr.io/astral-sh/uv:0.12.6
+FROM ghcr.io/astral-sh/uv:0.12.6@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d AS uv
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libldap2-dev \
-    libsasl2-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS builder
 
-WORKDIR /src
+COPY --from=uv /uv /usr/local/bin/uv
 
-COPY pyproject.toml requirements.in setup.py ./
-COPY src/ ./src/
-
-RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.in \
-    && /opt/venv/bin/pip install --no-cache-dir .
-
-FROM python:3.11-slim AS runtime
-
-RUN apt-get update && apt-get install -y \
-    libldap-2.5-0 \
-    libsasl2-2 \
-    libssl3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
 
 WORKDIR /app
 
-COPY --from=builder /opt/venv /opt/venv
+# Install strictly from uv.lock; fails if the lock is stale.
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
 
-ENV PATH="/opt/venv/bin:$PATH"
-ENV AD_MCP_CONFIG=/app/ad-config/config.json
+RUN uv sync --locked --no-dev --no-editable --no-cache --extra azure
+
+FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS runtime
+
+# curl is used by the docker-compose healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip setuptools wheel
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AD_MCP_CONFIG=/app/ad-config/config.json
 
 # Non-root execution
 RUN useradd -m -u 1000 aduser && chown -R aduser:aduser /app
