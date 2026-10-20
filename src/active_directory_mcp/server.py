@@ -212,7 +212,8 @@ class ActiveDirectoryMCPServer:
             # Optionally run tests before serving
             run_tests = os.getenv("RUN_TESTS_ON_START", "0").lower() in ("1", "true", "yes", "on")
             if run_tests:
-                import subprocess
+                # B404: fixed argv, opt-in via RUN_TESTS_ON_START
+                import subprocess  # nosec B404
 
                 self.logger.info("Running startup tests (pytest)...")
                 env = os.environ.copy()
@@ -220,7 +221,8 @@ class ActiveDirectoryMCPServer:
                 env["PYTHONPATH"] = f"{os.getcwd()}/src" + (
                     ":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
                 )
-                result = subprocess.run(
+                # B603: argv is [sys.executable, -m, pytest]; no input
+                result = subprocess.run(  # nosec B603
                     [sys.executable, "-m", "pytest", "-q"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

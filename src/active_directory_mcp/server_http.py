@@ -75,7 +75,8 @@ class ActiveDirectoryMCPHTTPServer:
     def __init__(
         self,
         config_path: Optional[str] = None,
-        host: str = "0.0.0.0",
+        # B104: deliberate container bind; HTTP auth is required by default (Phase 4)
+        host: str = "0.0.0.0",  # nosec B104
         port: int = 8813,
         path: str = "/activedirectory-mcp",
     ):
@@ -230,7 +231,11 @@ class ActiveDirectoryMCPCommand:
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         """Add command line arguments."""
         parser.add_argument(
-            "--host", type=str, default="0.0.0.0", help="Server host (default: 0.0.0.0)"
+            "--host",
+            type=str,
+            # B104: deliberate container bind; HTTP auth is required by default (Phase 4)
+            default="0.0.0.0",  # nosec B104
+            help="Server host (default: 0.0.0.0)",
         )
         parser.add_argument("--port", type=int, default=8813, help="Server port (default: 8813)")
         parser.add_argument(
@@ -247,7 +252,8 @@ class ActiveDirectoryMCPCommand:
 
         self.server = ActiveDirectoryMCPHTTPServer(
             config_path=config_path,
-            host=options.get("host", "0.0.0.0"),
+            # B104: deliberate container bind; HTTP auth is required by default (Phase 4)
+            host=options.get("host", "0.0.0.0"),  # nosec B104
             port=options.get("port", 8813),
             path=options.get("path", "/activedirectory-mcp"),
         )

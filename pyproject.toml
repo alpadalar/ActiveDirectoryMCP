@@ -104,6 +104,12 @@ warn_no_return = true
 warn_unreachable = true
 
 
+[tool.bandit]
+# Tests are excluded: asserts and mock credentials are noise there. CI runs
+# `bandit -c pyproject.toml -r src -ll` (fails on MEDIUM and HIGH). No rules are skipped
+# globally; every suppression is a line-level `# nosec Bxxx - reason` in the source.
+exclude_dirs = ["tests"]
+
 [tool.coverage.run]
 source = ["src/active_directory_mcp"]
 branch = true
