@@ -211,6 +211,12 @@ class ComputerTools(BaseTool):
             # Normalize computer name
             sam_account_name = computer_name if computer_name.endswith('$') else f"{computer_name}$"
             computer_cn = computer_name.rstrip('$')
+
+            # The SPNs below are derived from these values; a Kerberos identity must never
+            # come from unvalidated input (servicePrincipalName is hard-denied elsewhere).
+            validation.validate_host_label(computer_cn)
+            if dns_hostname:
+                validation.validate_dns_hostname(dns_hostname, self.ldap.ad_config.domain)
             
             # Determine OU
             if ou is None:

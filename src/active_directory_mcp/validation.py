@@ -63,9 +63,12 @@ __all__ = [
     "build_dn",
     "validate_filter_criteria",
     "combine_filters",
+    "validate_host_label",
+    "validate_dns_hostname",
 ]
 
 OBJECT_CLASS_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
+HOST_LABEL_RE = re.compile(r"[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?")
 ATTRIBUTE_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
 MAX_FILTER_CRITERIA_LENGTH = 1024
 
@@ -97,6 +100,31 @@ def validate_object_class(name: Any) -> str:
     if not isinstance(name, str) or not OBJECT_CLASS_RE.fullmatch(name):
         raise ValidationError(f"Invalid LDAP object class: {name!r}")
     return name
+
+
+def validate_host_label(label: Any) -> str:
+    """Return ``label`` if it is a single DNS/NetBIOS host label, else raise."""
+    if not isinstance(label, str) or not HOST_LABEL_RE.fullmatch(label):
+        raise ValidationError(f"Invalid host name label: {label!r}")
+    return label
+
+
+def validate_dns_hostname(hostname: Any, domain: str) -> str:
+    """Return ``hostname`` if it is a valid FQDN strictly inside ``domain``, else raise.
+
+    Used wherever a caller-supplied host name feeds a Kerberos identity (SPN).
+    """
+    if not isinstance(hostname, str) or len(hostname) > 253:
+        raise ValidationError(f"Invalid DNS host name: {hostname!r}")
+    suffix = "." + str(domain).strip(".").lower()
+    if len(hostname) <= len(suffix) or hostname[-len(suffix):].lower() != suffix:
+        raise ValidationError(
+            f"dns_hostname must be inside the configured domain ({str(domain).strip('.')})"
+        )
+    for label in hostname.split("."):
+        if not HOST_LABEL_RE.fullmatch(label) or label.startswith("-"):
+            raise ValidationError(f"Invalid DNS host name: {hostname!r}")
+    return hostname
 
 
 def eq_filter(attribute: Any, value: Any) -> str:

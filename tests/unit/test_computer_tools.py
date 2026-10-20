@@ -468,12 +468,15 @@ def test_filters_use_configured_computer_object_class(
     assert "objectClass=computer" not in flt
 
 
-def test_create_computer_escapes_rdn(computer_tools, mock_ldap_manager):
+def test_create_computer_rdn_injection_refused_before_any_ldap_call(
+    computer_tools, mock_ldap_manager
+):
+    # RDN escaping itself is covered by test_validation (build_dn); a name carrying DN
+    # metacharacters is also unusable as an SPN host, so it is refused up front.
     data = parse_response(computer_tools.create_computer("pc,OU=Admins"))
-    assert data["success"] is True
-    dn = mock_ldap_manager.add.call_args.args[0]
-    assert dn.startswith("CN=pc\\,OU\\=Admins,")
-    assert dn.endswith("CN=Computers,DC=test,DC=local")
+    assert data["success"] is False
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.add.assert_not_called()
 
 
 def test_create_computer_rejects_out_of_base_ou(computer_tools, mock_ldap_manager):
@@ -547,3 +550,42 @@ def test_get_stale_computers_capped_with_accuracy_note(computer_tools, mock_ldap
     data = parse_response(computer_tools.get_stale_computers(30))
     assert data["truncated"] is True and data["result_limit"] == 2
     assert "lastLogonTimestamp" in data["accuracy_note"]
+
+
+# ------------------------------------------- create_computer SPN source validation
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "evil/host.test.local",
+        "a,b.test.local",
+        "host.other.example",
+        "test.local",
+        "-bad.test.local",
+        "pc..test.local",
+        "pc .test.local",
+    ],
+)
+def test_create_computer_rejects_unvalidated_dns_hostname(computer_tools, mock_ldap_manager, bad):
+    mock_ldap_manager.search.return_value = []
+    data = parse_response(computer_tools.create_computer("NEWPC", dns_hostname=bad))
+    assert data["success"] is False
+    mock_ldap_manager.add.assert_not_called()
+
+
+def test_create_computer_rejects_unsafe_computer_name_for_spn(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = []
+    data = parse_response(computer_tools.create_computer("PC/evil"))
+    assert data["success"] is False
+    mock_ldap_manager.add.assert_not_called()
+
+
+def test_create_computer_spn_derived_from_validated_hostname(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = []
+    data = parse_response(
+        computer_tools.create_computer("NEWPC", dns_hostname="NewPC.Test.Local")
+    )
+    assert data["success"] is True
+    attrs = mock_ldap_manager.add.call_args.args[1]
+    assert attrs["servicePrincipalName"] == ["HOST/NEWPC", "HOST/NewPC.Test.Local"]
