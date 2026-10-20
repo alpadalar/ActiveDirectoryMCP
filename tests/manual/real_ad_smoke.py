@@ -33,7 +33,8 @@ def run_real_ad_connection():
         ldap_manager = LDAPManager(
             config.active_directory,
             config.security,
-            config.performance
+            config.performance,
+            config.organizational_units
         )
         print("✅ LDAP Manager initialized")
         

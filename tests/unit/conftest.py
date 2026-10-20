@@ -16,27 +16,14 @@ from active_directory_mcp.tools.security import SecurityTools
 from active_directory_mcp.tools.user import UserTools
 
 
-class _TestADSettings(ActiveDirectoryConfig):
-    """ActiveDirectoryConfig plus the `organizational_units` attribute that some tools
-    (computer/group create default OU) dereference via `ldap.ad_config`."""
-
-    organizational_units: OrganizationalUnitsConfig
-
-
 @pytest.fixture
 def ad_settings() -> ActiveDirectoryConfig:
-    return _TestADSettings(
+    return ActiveDirectoryConfig(
         server="ldaps://dc.test.local",
         domain="test.local",
         base_dn="DC=test,DC=local",
         bind_dn="CN=svc,DC=test,DC=local",
         password="dummy-password",
-        organizational_units=OrganizationalUnitsConfig(
-            users_ou="CN=Users,DC=test,DC=local",
-            groups_ou="CN=Groups,DC=test,DC=local",
-            computers_ou="CN=Computers,DC=test,DC=local",
-            service_accounts_ou="CN=Service,DC=test,DC=local",
-        ),
     )
 
 
@@ -44,6 +31,12 @@ def ad_settings() -> ActiveDirectoryConfig:
 def mock_ldap_manager(ad_settings) -> Mock:
     manager = Mock(spec=LDAPManager)
     manager.ad_config = ad_settings
+    manager.organizational_units = OrganizationalUnitsConfig(
+        users_ou="CN=Users,DC=test,DC=local",
+        groups_ou="CN=Groups,DC=test,DC=local",
+        computers_ou="CN=Computers,DC=test,DC=local",
+        service_accounts_ou="CN=Service,DC=test,DC=local",
+    )
     manager.search.return_value = []
     for name in ("add", "modify", "delete", "move"):
         getattr(manager, name).return_value = True

@@ -110,6 +110,11 @@ A comprehensive Python-based Model Context Protocol (MCP) server for managing Ac
    }
    ```
 
+   > The `organizational_units` section sets the default location for
+   > `create_computer` / `create_group` when no `ou` is passed. It is optional:
+   > any missing entry defaults to the built-in container under `base_dn`
+   > (`CN=Computers,<base_dn>` for computers, `CN=Users,<base_dn>` otherwise).
+
    > **🔐 Never store the service account password in plaintext.** The
    > `password` field is optional and only intended as a last-resort local
    > fallback. See [Credential Storage with Azure Key Vault](#-credential-storage-with-azure-key-vault)

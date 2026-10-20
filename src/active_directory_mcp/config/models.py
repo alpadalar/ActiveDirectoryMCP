@@ -1,7 +1,7 @@
 """Configuration models for Active Directory MCP."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ActiveDirectoryConfig(BaseModel):
@@ -54,6 +54,16 @@ class OrganizationalUnitsConfig(BaseModel):
     groups_ou: str = Field(..., description="Groups organizational unit DN")
     computers_ou: str = Field(..., description="Computers organizational unit DN")
     service_accounts_ou: str = Field(..., description="Service accounts organizational unit DN")
+
+    @classmethod
+    def defaults_for(cls, base_dn: str) -> "OrganizationalUnitsConfig":
+        """Default OUs derived from the base DN (the built-in Active Directory containers)."""
+        return cls(
+            users_ou=f"CN=Users,{base_dn}",
+            groups_ou=f"CN=Users,{base_dn}",
+            computers_ou=f"CN=Computers,{base_dn}",
+            service_accounts_ou=f"CN=Users,{base_dn}",
+        )
 
 
 class KeyVaultConfig(BaseModel):
@@ -141,7 +151,13 @@ class Config(BaseModel):
     """Main configuration class."""
     
     active_directory: ActiveDirectoryConfig
-    organizational_units: OrganizationalUnitsConfig
+    organizational_units: OrganizationalUnitsConfig = Field(
+        default=None,  # type: ignore[assignment]  # always filled by _fill_default_ous
+        description=(
+            "Default OUs used when a tool call omits the target OU. Optional: any missing "
+            "entry (or the whole section) defaults to the built-in containers under base_dn."
+        ),
+    )
     key_vault: Optional[KeyVaultConfig] = Field(
         default=None,
         description="Azure Key Vault settings used to retrieve secrets such as the bind password",
@@ -149,3 +165,24 @@ class Config(BaseModel):
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_default_ous(cls, data):
+        """Fill missing organizational_units entries from base_dn-derived defaults."""
+        if not isinstance(data, dict):
+            return data
+        ad = data.get("active_directory")
+        base_dn = ad.get("base_dn") if isinstance(ad, dict) else getattr(ad, "base_dn", None)
+        if not isinstance(base_dn, str):
+            return data  # let normal validation report the missing/invalid base_dn
+        given = data.get("organizational_units")
+        if given is None:
+            given = {}
+        elif isinstance(given, OrganizationalUnitsConfig):
+            return data
+        elif not isinstance(given, dict):
+            return data
+        merged = OrganizationalUnitsConfig.defaults_for(base_dn).model_dump()
+        merged.update({k: v for k, v in given.items() if v is not None})
+        return {**data, "organizational_units": merged}

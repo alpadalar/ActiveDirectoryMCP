@@ -193,7 +193,7 @@ class ComputerTools(BaseTool):
             
             # Determine OU
             if ou is None:
-                ou = self.ldap.ad_config.organizational_units.computers_ou
+                ou = self.ldap.organizational_units.computers_ou
             
             # Build DN
             computer_dn = f"CN={computer_cn},{ou}"

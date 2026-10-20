@@ -26,7 +26,10 @@ def ad_config():
 @pytest.fixture(scope="session")
 def ldap_manager(ad_config):
     """Gerçek LDAP bağlantısı için yöneticiyi hazırla."""
-    manager = LDAPManager(ad_config.active_directory, ad_config.security, ad_config.performance)
+    manager = LDAPManager(
+        ad_config.active_directory, ad_config.security, ad_config.performance,
+        ad_config.organizational_units,
+    )
     yield manager
     manager.disconnect()
 

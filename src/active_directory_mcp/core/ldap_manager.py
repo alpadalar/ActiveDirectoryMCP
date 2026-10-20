@@ -11,7 +11,12 @@ import ldap3
 from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
 from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPSocketOpenError
 
-from ..config.models import ActiveDirectoryConfig, SecurityConfig, PerformanceConfig
+from ..config.models import (
+    ActiveDirectoryConfig,
+    OrganizationalUnitsConfig,
+    PerformanceConfig,
+    SecurityConfig,
+)
 import os
 SKIP_SCHEMA = os.environ.get("AD_MCP_SKIP_SCHEMA", "").lower() in ("1", "true", "yes")
 
@@ -46,7 +51,8 @@ class LDAPManager:
     def __init__(self, 
                  ad_config: ActiveDirectoryConfig,
                  security_config: SecurityConfig,
-                 performance_config: PerformanceConfig):
+                 performance_config: PerformanceConfig,
+                 organizational_units: Optional[OrganizationalUnitsConfig] = None):
         """
         Initialize LDAP manager.
         
@@ -54,10 +60,15 @@ class LDAPManager:
             ad_config: Active Directory configuration
             security_config: Security configuration
             performance_config: Performance configuration
+            organizational_units: Default OUs for create operations; derived from the
+                base DN when not given
         """
         self.ad_config = ad_config
         self.security_config = security_config
         self.performance_config = performance_config
+        self.organizational_units = (
+            organizational_units or OrganizationalUnitsConfig.defaults_for(ad_config.base_dn)
+        )
         
         self._connection: Optional[Connection] = None
         self._server_pool: Optional[List[Server]] = None

@@ -68,7 +68,8 @@ class ActiveDirectoryMCPServer:
         self.ldap_manager = LDAPManager(
             self.config.active_directory,
             self.config.security,
-            self.config.performance
+            self.config.performance,
+            self.config.organizational_units
         )
 
         # Test connection on startup
