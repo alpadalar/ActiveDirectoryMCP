@@ -137,6 +137,8 @@ and enforced by the golden snapshots in `tests/golden/`.
   in the intended container instead of a malformed or misplaced DN (review finding WR-04).
 - `create_user` honours `organizational_units.users_ou` (WR-03) and computer
   operations honour `computer_object_class` with validated object-class values (WR-05).
+- the `health` tool no longer reports `status: "ok"` on stdio when the LDAP probe fails;
+  a probe failure keeps `status: "degraded"` regardless of the stdio test status.
 - the environment placeholder resolver expands in-string placeholders and
   colon-containing defaults (WR-06).
 - bare `except:` handlers were removed and silent exception swallowing now logs a

@@ -112,7 +112,11 @@ def _health(ctx: ToolContext) -> List[Content]:
         info["ldap_connection"] = "error"
         info["ldap_error"] = str(exc)
         info["status"] = "degraded"
-    info.update(ctx.health_extras())
+    extras = dict(ctx.health_extras())
+    if info["status"] == "degraded":
+        # A failed LDAP probe is never masked by a transport-specific status.
+        extras.pop("status", None)
+    info.update(extras)
     return format_json_response(info, "health")
 
 

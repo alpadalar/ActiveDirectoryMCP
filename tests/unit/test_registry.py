@@ -346,6 +346,18 @@ def test_health_degraded_when_probe_raises() -> None:
     assert data["ldap_error"] == "down"
 
 
+def test_health_probe_failure_is_not_masked_by_extras_status() -> None:
+    manager = Mock()
+    manager.test_connection.side_effect = RuntimeError("down")
+    ctx = make_ctx(
+        ldap_manager=manager, health_extras=lambda: {"tests_passed": True, "status": "ok"}
+    )
+    data = _json(_handler(ctx, "health")())
+    assert data["status"] == "degraded"
+    assert data["ldap_connection"] == "error"
+    assert data["tests_passed"] is True
+
+
 def test_health_disconnected() -> None:
     manager = Mock()
     manager.test_connection.return_value = {"connected": False}
