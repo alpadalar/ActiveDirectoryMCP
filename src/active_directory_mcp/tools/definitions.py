@@ -246,7 +246,9 @@ Useful for temporary computer isolation."""
 
 RESET_COMPUTER_PASSWORD_DESC = """Reset computer account password.
 
-Sets pwdLastSet to 0 on the computer account and returns a generated password value.
+Sets a new random 120-character machine password on the computer account (unicodePwd) and
+returns it once in the response (sensitive; do not log it). Requires an LDAPS/StartTLS connection;
+refused otherwise. The machine's secure channel breaks, so it must be rejoined or re-synced.
 
 Example:
 - reset_computer_password(computer_name="DESKTOP-ABC123")

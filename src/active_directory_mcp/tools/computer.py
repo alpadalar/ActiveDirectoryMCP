@@ -1,5 +1,7 @@
 """Computer management tools for Active Directory."""
 
+import secrets
+import string
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -10,6 +12,7 @@ from .base import BaseTool
 from .. import validation
 from ..validation import ValidationError
 from ..core.logging import log_ldap_operation
+from ..redaction import register_secret
 
 
 class ComputerTools(BaseTool):
@@ -418,15 +421,23 @@ class ComputerTools(BaseTool):
     
     def reset_computer_password(self, computer_name: str) -> List[Dict[str, Any]]:
         """
-        Reset computer account password.
-        
+        Set a new random machine-account password (TLS required).
+
+        The generated password is applied via unicodePwd and returned once in the
+        response (sensitive; never logged). The machine's secure channel breaks and
+        it must be rejoined or re-synced afterwards.
+
         Args:
             computer_name: Computer name to reset password for
-            
+
         Returns:
             List of MCP content objects with result
         """
         try:
+            refusal = self._require_secure_channel("reset_computer_password")
+            if refusal is not None:
+                return refusal
+
             # Normalize computer name
             if not computer_name.endswith('$'):
                 computer_name += '$'
@@ -452,9 +463,11 @@ class ComputerTools(BaseTool):
             # Generate new computer password (computers use complex passwords)
             new_password = self._generate_computer_password()
             
-            # Reset password (set pwdLastSet to 0 to force password change)
+            register_secret(new_password, persistent=False)
+
+            # Apply the password (unicodePwd: quoted UTF-16-LE)
             success = self.ldap.modify(computer_dn, {
-                'pwdLastSet': [(MODIFY_REPLACE, [0])]
+                'unicodePwd': [(MODIFY_REPLACE, [f'"{new_password}"'.encode('utf-16-le')])]
             })
             
             if success:
@@ -465,7 +478,8 @@ class ComputerTools(BaseTool):
                     {
                         "computer_name": computer_name,
                         "dn": computer_dn,
-                        "new_password": new_password
+                        "new_password": new_password,
+                        "sensitive": True
                     }
                 )
             else:
@@ -593,122 +607,12 @@ class ComputerTools(BaseTool):
         """Days since the machine password was set; None when unset."""
         return self._days_since(self._get_attr_value(attributes, 'pwdLastSet'))
 
-    # Legacy helper tools (fabricated data; scheduled for removal in Phase 4, SEC-04)
-    def get_computer_status(self, computer_name: str) -> Dict[str, Any]:
-        """Get detailed status information about a computer."""
-        try:
-            # get_computer returns List[Content], parse the JSON response 
-            computer_response = self.get_computer(computer_name)
-            if not computer_response or len(computer_response) == 0:
-                return {'success': False, 'error': 'Computer not found', 'computer_name': computer_name}
-                
-            import json
-            computer_info = json.loads(computer_response[0].text)
-            
-            if not computer_info.get('success', True):
-                return {'success': False, 'error': computer_info.get('error', 'Unknown error'), 'computer_name': computer_name}
-                
-            # Extract computer data from response
-            if 'attributes' in computer_info:
-                data = computer_info['attributes']
-            elif 'computed' in computer_info:
-                data = computer_info['computed']
-            else:
-                data = computer_info
-                
-            status = {
-                'computer_name': computer_name,
-                'enabled': data.get('enabled', False),
-                'online': True,  # Mock - would need actual ping/connectivity check
-                'last_logon_days': self._get_days_since_last_logon(data) if 'lastLogon' in data else 0,
-                'password_age_days': self._get_password_age_days(data) if 'pwdLastSet' in data else 0,
-                'operating_system': self._get_attr_value(data, 'operatingSystem', 'Unknown') if isinstance(data, dict) else 'Unknown',
-                'domain_trust_ok': True  # Mock - would need actual trust verification
-            }
-            
-            return status
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'get_computer_status', computer_name)
-    
-    def search_stale_computers(self, days_inactive: int = 90) -> Dict[str, Any]:
-        """Search for stale/inactive computer accounts."""
-        try:
-            # list_computers returns List[Content], parse the JSON response
-            computers_response = self.list_computers()
-            if not computers_response or len(computers_response) == 0:
-                return {'success': False, 'error': 'No computers found', 'threshold_days': days_inactive}
-                
-            import json
-            computers_info = json.loads(computers_response[0].text)
-            
-            if not computers_info.get('success', True):
-                return {'success': False, 'error': computers_info.get('error', 'Unknown error'), 'threshold_days': days_inactive}
-                
-            stale_computers = []
-            computers_list = computers_info if isinstance(computers_info, list) else computers_info.get('computers', [])
-            
-            for computer in computers_list:
-                if self._is_computer_stale(computer, days_inactive):
-                    stale_computers.append({
-                        'computer_name': self._get_attr_value(computer, 'sAMAccountName', ''),
-                        'dn': computer['dn'],
-                        'days_inactive': self._get_days_since_last_logon(computer) or 0,
-                        'operating_system': self._get_attr_value(computer, 'operatingSystem', 'Unknown')
-                    })
-            
-            return {
-                'stale_computers': stale_computers,
-                'total_found': len(stale_computers),
-                'days_threshold': days_inactive
-            }
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'search_stale_computers', f'days_inactive={days_inactive}')
-    
-    def get_computer_groups(self, computer_name: str) -> Dict[str, Any]:
-        """Get groups that a computer is a member of."""
-        try:
-            # get_computer returns List[Content], parse the JSON response
-            computer_response = self.get_computer(computer_name, attributes=['memberOf', 'sAMAccountName'])
-            if not computer_response or len(computer_response) == 0:
-                return {'success': False, 'error': 'Computer not found', 'computer_name': computer_name}
-                
-            import json
-            computer_info = json.loads(computer_response[0].text)
-            
-            if not computer_info.get('success', True):
-                return {'success': False, 'error': computer_info.get('error', 'Unknown error'), 'computer_name': computer_name}
-                
-            # Extract attributes
-            attributes = computer_info.get('attributes', {})
-            member_of = attributes.get('memberOf', [])
-            
-            groups = []
-            for group_dn in member_of:
-                # Extract group name from DN
-                if group_dn.upper().startswith('CN='):
-                    group_name = group_dn.split(',')[0][3:]  # Remove 'CN=' prefix
-                    groups.append({
-                        'group_name': group_name,
-                        'group_dn': group_dn
-                    })
-            
-            return {
-                'computer_name': computer_name,
-                'groups': groups,
-                'group_count': len(groups)
-            }
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'get_computer_groups', computer_name)
-    
     def _get_computer_type(self, uac_value: int) -> str:
         """Determine computer type from userAccountControl value."""
         value = self._to_int(uac_value, 0)
         if value & 0x1000:  # WORKSTATION_TRUST_ACCOUNT (4096)
             return 'workstation'
-        elif value == 8192:  # Specific value for domain controller test
+        elif value == 8192:  # Domain controller (exact value)
             return 'domain_controller'
         elif value & 0x2000:  # SERVER_TRUST_ACCOUNT
             return 'server'
@@ -717,21 +621,11 @@ class ComputerTools(BaseTool):
         else:
             return 'unknown'
     
-    def _is_computer_stale(self, computer_data: Dict[str, Any], days_threshold: int) -> bool:
-        """Check if a computer is considered stale based on last logon."""
-        days_since_logon = self._get_days_since_last_logon(computer_data)
-        if days_since_logon is None:
-            return True  # Never logged on is considered stale
-        return days_since_logon > days_threshold
-    
     def _generate_computer_password(self) -> str:
         """Generate a secure password for computer accounts."""
-        import random
-        import string
-        
-        # Generate 120 character random password (standard for computer accounts)
+        # 120 characters from a CSPRNG (standard length for computer accounts)
         chars = string.ascii_letters + string.digits + "!@#$%^&*"
-        return ''.join(random.choice(chars) for _ in range(120))
+        return ''.join(secrets.choice(chars) for _ in range(120))
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Get schema information for computer operations."""
@@ -739,7 +633,7 @@ class ComputerTools(BaseTool):
             "operations": [
                 "list_computers", "get_computer", "create_computer", "modify_computer",
                 "delete_computer", "enable_computer", "disable_computer", 
-                "reset_computer_password", "search_stale_computers"
+                "reset_computer_password", "get_stale_computers"
             ],
             "computer_attributes": [
                 "sAMAccountName", "dNSHostName", "operatingSystem", "operatingSystemVersion",

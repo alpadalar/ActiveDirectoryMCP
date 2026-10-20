@@ -277,7 +277,7 @@ def test_assess_user_security_levels(security_tools):
 
 
 # ---------------------------------------------------------------------------
-# _get_days_since_last_logon / _calculate_password_age (B-01b)
+# _get_days_since_last_logon (B-01b)
 # ---------------------------------------------------------------------------
 
 
@@ -311,20 +311,6 @@ def test_days_since_last_logon_numeric_string(security_tools):
 )
 def test_days_since_last_logon_unset_is_none(security_tools, attrs):
     assert security_tools._get_days_since_last_logon(attrs) is None
-
-
-@pytest.mark.parametrize("kind", ["datetime", "int", "str"])
-def test_calculate_password_age_set_values(security_tools, kind):
-    dt = _ago(100)
-    ft = security_tools._convert_datetime_to_filetime(dt)
-    value = {"datetime": dt, "int": ft, "str": str(ft)}[kind]
-    age = security_tools._calculate_password_age({"pwdLastSet": value})
-    assert isinstance(age, int) and age in (100, 99)
-
-
-@pytest.mark.parametrize("attrs", [{"pwdLastSet": 0}, {"pwdLastSet": None}, {}])
-def test_calculate_password_age_never_set(security_tools, attrs):
-    assert security_tools._calculate_password_age(attrs) == -1
 
 
 # ---------------------------------------------------------------------------

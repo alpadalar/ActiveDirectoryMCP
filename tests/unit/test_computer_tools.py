@@ -291,19 +291,67 @@ def test_enable_disable_computer_not_found_and_failure(computer_tools, mock_ldap
 # ------------------------------------------------------ reset_computer_password
 
 
+def _unicode_pwd(password: str) -> bytes:
+    return f'"{password}"'.encode("utf-16-le")
+
+
 def test_reset_computer_password_success(computer_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
     data = parse_response(computer_tools.reset_computer_password("WS01"))
     assert data["success"] is True
+    assert data["sensitive"] is True
     assert len(data["new_password"]) == 120
-    assert mock_ldap_manager.modify.call_args.args[1]["pwdLastSet"][0][1] == [0]
+    mods = mock_ldap_manager.modify.call_args.args[1]
+    assert "pwdLastSet" not in mods
+    assert mods["unicodePwd"][0][1] == [_unicode_pwd(data["new_password"])]
 
 
-def test_reset_computer_password_not_found_and_failure(computer_tools, mock_ldap_manager):
-    assert parse_response(computer_tools.reset_computer_password("ghost"))["success"] is False
+def test_reset_computer_password_not_found(computer_tools, mock_ldap_manager):
+    data = parse_response(computer_tools.reset_computer_password("ghost"))
+    assert data["success"] is False
+    mock_ldap_manager.modify.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["exception", "false"])
+def test_reset_computer_password_failure_is_not_success(
+    computer_tools, mock_ldap_manager, failure
+):
     mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
-    mock_ldap_manager.modify.side_effect = Exception("x")
-    assert parse_response(computer_tools.reset_computer_password("WS01"))["success"] is False
+    if failure == "exception":
+        mock_ldap_manager.modify.side_effect = Exception("x")
+    else:
+        mock_ldap_manager.modify.return_value = False
+    data = parse_response(computer_tools.reset_computer_password("WS01"))
+    assert data["success"] is False
+    assert "new_password" not in data
+
+
+@pytest.mark.parametrize("mode", ["insecure", "raises"])
+def test_reset_computer_password_refuses_without_tls(computer_tools, mock_ldap_manager, mode):
+    if mode == "insecure":
+        mock_ldap_manager.is_secure_channel.return_value = False
+    else:
+        mock_ldap_manager.is_secure_channel.side_effect = RuntimeError("boom")
+    data = parse_response(computer_tools.reset_computer_password("WS01"))
+    assert data["success"] is False
+    assert data["error_code"] == "unicodePwd_requires_tls"
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.modify.assert_not_called()
+
+
+def test_generate_computer_password_uses_secrets(computer_tools):
+    from unittest.mock import patch
+
+    with patch("active_directory_mcp.tools.computer.secrets.choice", return_value="x") as choice:
+        assert computer_tools._generate_computer_password() == "x" * 120
+    assert choice.call_count == 120
+
+
+def test_reset_computer_password_not_logged(computer_tools, mock_ldap_manager, caplog):
+    mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
+    with caplog.at_level("DEBUG"):
+        data = parse_response(computer_tools.reset_computer_password("WS01"))
+    assert all(data["new_password"] not in r.getMessage() for r in caplog.records)
 
 
 # --------------------------------------------------------- get_stale_computers

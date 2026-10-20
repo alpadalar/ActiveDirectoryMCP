@@ -668,7 +668,7 @@ class SecurityTools(BaseTool):
         """Whole days since last logon; None when unset/never. Accepts datetime, int, numeric str."""
         return self._days_since(self._get_attr_value(attributes, 'lastLogon', 0))
 
-    # Additional methods for security testing
+    # Additional policy checks
     def check_password_policy(self) -> List[Dict[str, Any]]:
         """Check password policy compliance."""
         try:
@@ -702,137 +702,6 @@ class SecurityTools(BaseTool):
 
         except Exception as e:
             return self._handle_ldap_error(e, 'check_password_policy', 'domain')
-
-    def find_weak_passwords(self) -> List[Dict[str, Any]]:
-        """Find users with weak passwords (mock implementation)."""
-        try:
-            # This is a mock since we can't actually check password strength
-            weak_accounts = [
-                {
-                    'username': 'testuser1',
-                    'dn': 'CN=Test User 1,OU=Users,DC=test,DC=local',
-                    'risk_level': 'high',
-                    'issues': ['Password never changed', 'Account has admin privileges']
-                },
-                {
-                    'username': 'service_account',
-                    'dn': 'CN=Service Account,OU=Service Accounts,DC=test,DC=local',
-                    'risk_level': 'medium',
-                    'issues': ['Password older than 90 days']
-                }
-            ]
-            
-            return self._format_response({
-                'weak_accounts': weak_accounts,
-                'total_found': len(weak_accounts),
-                'scan_method': 'policy_analysis'  # Cannot scan actual passwords
-            }, "find_weak_passwords")
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'find_weak_passwords', 'domain')
-    
-    def analyze_permissions(self, target_dn: str) -> List[Dict[str, Any]]:
-        """Analyze permissions for a specific object."""
-        try:
-            # Mock permission analysis
-            permissions_analysis = {
-                'target_dn': target_dn,
-                'permissions': [
-                    {'principal': 'Domain Admins', 'access': 'Full Control', 'inherited': True},
-                    {'principal': 'Authenticated Users', 'access': 'Read', 'inherited': True}
-                ],
-                'security_issues': [],
-                'recommendations': ['Review inherited permissions', 'Consider explicit deny rules']
-            }
-            
-            return self._format_response(permissions_analysis, "analyze_permissions")
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'analyze_permissions', target_dn)
-    
-    def detect_privilege_escalation(self, hours_back: int = 24) -> List[Dict[str, Any]]:
-        """Detect potential privilege escalation events."""
-        try:
-            # Mock detection - in real implementation would check event logs
-            escalation_events = [
-                {
-                    'event_time': datetime.now() - timedelta(hours=2),
-                    'user': 'testuser',
-                    'action': 'Added to privileged group',
-                    'group': 'Account Operators',
-                    'risk_level': 'medium'
-                }
-            ]
-            
-            return self._format_response({
-                'escalation_events': escalation_events,
-                'total_events': len(escalation_events),
-                'time_range_hours': hours_back
-            }, "detect_privilege_escalation")
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'detect_privilege_escalation', 'domain')
-    
-    def check_service_accounts(self) -> List[Dict[str, Any]]:
-        """Check service accounts for security issues."""
-        try:
-            # Mock service account analysis
-            service_accounts = [
-                {
-                    'username': 'svc_backup',
-                    'dn': 'CN=Backup Service,OU=Service Accounts,DC=test,DC=local',
-                    'issues': ['Password never expires', 'Member of privileged groups'],
-                    'last_logon': '30+ days ago',
-                    'risk_level': 'high'
-                }
-            ]
-            
-            return self._format_response({
-                'service_accounts': service_accounts,
-                'total_accounts': len(service_accounts),
-                'high_risk_count': 1
-            }, "check_service_accounts")
-            
-        except Exception as e:
-            return self._handle_ldap_error(e, 'check_service_accounts', 'domain')
-    
-    def _assess_account_risk(self, account_data: Dict[str, Any]) -> str:
-        """Assess risk level of an account."""
-        risk_score = 0
-        
-        # Check for admin privileges
-        member_of = account_data.get('memberOf', [])
-        admin_groups = ['Domain Admins', 'Enterprise Admins', 'Administrators']
-        for group in member_of:
-            if any(admin_group in group for admin_group in admin_groups):
-                risk_score += 30
-        
-        # Check last logon
-        last_logon_days = self._get_days_since_last_logon(account_data)
-        if last_logon_days and last_logon_days > 90:
-            risk_score += 20
-        elif last_logon_days and last_logon_days > 30:
-            risk_score += 10
-            
-        # Check password age
-        pwd_age = self._calculate_password_age(account_data)
-        if pwd_age and pwd_age > 365:
-            risk_score += 25
-        elif pwd_age and pwd_age > 180:
-            risk_score += 15
-            
-        # Determine risk level
-        if risk_score >= 50:
-            return 'high'
-        elif risk_score >= 25:
-            return 'medium'
-        else:
-            return 'low'
-    
-    def _calculate_password_age(self, account_data: Dict[str, Any]) -> Optional[int]:
-        """Password age in days; -1 means never set (or an unusable value)."""
-        age = self._days_since(self._get_attr_value(account_data, 'pwdLastSet', 0))
-        return -1 if age is None else age
 
     def generate_security_report(self) -> List[Dict[str, Any]]:
         """Generate comprehensive security report."""

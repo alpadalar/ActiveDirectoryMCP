@@ -724,31 +724,10 @@ class OrganizationalUnitTools(BaseTool):
             new_parent_dn = target_parent_dn
         return self.move_ou(ou_dn, new_parent_dn)
         
-    # Additional methods that tests expect
+    # Convenience accessors
     def get_ou_children(self, ou_dn: str) -> Dict[str, Any]:
         """Get child objects of an OU."""
         return self.get_ou_contents(ou_dn)
-    
-    def get_ou_permissions(self, ou_dn: str) -> List[Dict[str, Any]]:
-        """Mock method for OU permissions - not implemented in real tool."""
-        return self._format_response({
-            'ou_dn': ou_dn,
-            'permissions': ['Read', 'Write', 'Create Child Objects'],
-            'inherited': True
-        }, "get_ou_permissions")
-    
-    def delegate_ou_control(self, ou_dn: str = None, principal: str = None, delegate_dn: str = None,
-                          permissions: List[str] = None, **kwargs) -> List[Dict[str, Any]]:
-        """Mock method for OU delegation - not implemented in real tool."""
-        # Handle both parameter names for backward compatibility
-        if delegate_dn is not None:
-            principal = delegate_dn
-        return self._format_response({
-            'ou_dn': ou_dn,
-            'principal': principal,
-            'delegated_permissions': permissions or [],
-            'success': True
-        }, "delegate_ou_control")
     
     def get_ou_statistics(self, ou_dn: str) -> Dict[str, Any]:
         """Get statistics for an OU."""
