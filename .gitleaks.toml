@@ -70,6 +70,9 @@ regexes = [
   '''^\$\{(?:env:)?[A-Z_][A-Z0-9_]*(?::?-|:?\?[^}]*)?\}$''',
   '''^\$\([^"`]*\)$''',
   '''^\$[A-Z_][A-Z0-9_]*$''',
+  # GitHub Actions expression, e.g. ${{ secrets.X }}: a reference, never a literal. The
+  # unquoted rule stops its capture at the first "}", hence the optional second brace.
+  '''^\$\{\{ (?:secrets|github|env|vars|inputs|matrix)\.[A-Za-z0-9_.-]+ \}\}?$''',
   '''^<[^<>"' ]+>$''',
   '''^(?i:change_?me)$''',
   '''^YourSecurePassword$''',

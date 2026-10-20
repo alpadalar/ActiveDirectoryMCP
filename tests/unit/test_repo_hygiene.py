@@ -216,12 +216,41 @@ def test_secret_scan_does_not_mistake_added_plus_lines_for_file_headers(repo, tm
         "AD_PASSWORD=${LAB_LDAP_PASSWORD}",
         "# AD_PASSWORD=YourSecurePassword",
         "AD_PASSWORD=",
+        json.dumps({"password": "${{ secrets.AD_PASSWORD }}"}),
     ],
 )
 def test_secret_scan_ignores_placeholders(line):
     mod = _load("secret_scan")
     rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
     assert list(mod.scan_line(rules, "x/config.json", line)) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "          token: ${{ secrets.CODECOV_TOKEN }}",
+        "          password: ${{ secrets.GITHUB_TOKEN }}",
+    ],
+)
+def test_secret_scan_ignores_github_actions_expressions(line):
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    assert list(mod.scan_line(rules, ".github/workflows/x.yml", line)) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '          token: "${{ secrets.X }}' + 'realsecret"',
+        "          token: x${{ secrets.X }}",
+        "          token: ${{ secrets.X || 'hunter2hunter2' }}",
+        "          token: ${{ hunter2hunter2 }}",
+    ],
+)
+def test_secret_scan_github_expression_rule_is_exact_shape(line):
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    assert list(mod.scan_line(rules, ".github/workflows/x.yml", line)) != []
 
 
 def test_secret_scan_flags_env_and_ldif_literals():
