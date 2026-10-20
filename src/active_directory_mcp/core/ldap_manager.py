@@ -142,7 +142,11 @@ class LDAPManager:
                             connection = Connection(
                                 server,
                                 user=self.ad_config.bind_dn,
-                                password=self.ad_config.password,
+                                password=(
+                                    self.ad_config.password.get_secret_value()
+                                    if self.ad_config.password is not None
+                                    else None
+                                ),
                                 auto_bind=self.ad_config.auto_bind,
                                 receive_timeout=self.ad_config.receive_timeout,
                                 authentication=ldap3.SIMPLE,

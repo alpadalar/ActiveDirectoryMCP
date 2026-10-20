@@ -1,11 +1,15 @@
 """Configuration models for Active Directory MCP."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+
+from ..validation import validate_object_class
 
 
 class ActiveDirectoryConfig(BaseModel):
     """Active Directory connection configuration."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
     
     server: str = Field(..., description="Primary LDAP server URL")
     server_pool: Optional[List[str]] = Field(default=None, description="Additional LDAP servers for redundancy")
@@ -14,7 +18,7 @@ class ActiveDirectoryConfig(BaseModel):
     domain: str = Field(..., description="Active Directory domain")
     base_dn: str = Field(..., description="Base Distinguished Name")
     bind_dn: str = Field(..., description="Service account DN for binding")
-    password: Optional[str] = Field(
+    password: Optional[SecretStr] = Field(
         default=None,
         description=(
             "Service account password. Leave unset and configure 'key_vault' "
@@ -38,6 +42,12 @@ class ActiveDirectoryConfig(BaseModel):
         description="Bilgisayar nesneleri için objectClass"
     )
     
+    @field_validator('user_object_class', 'group_object_class', 'computer_object_class')
+    @classmethod
+    def validate_object_classes(cls, v):
+        """Reject values that could break out of an LDAP filter (WR-05)."""
+        return validate_object_class(v)
+
     @field_validator('server')
     @classmethod
     def validate_server(cls, v):
@@ -49,6 +59,8 @@ class ActiveDirectoryConfig(BaseModel):
 
 class OrganizationalUnitsConfig(BaseModel):
     """Organizational Units configuration."""
+
+    model_config = ConfigDict(extra="forbid")
     
     users_ou: str = Field(..., description="Users organizational unit DN")
     groups_ou: str = Field(..., description="Groups organizational unit DN")
@@ -68,6 +80,8 @@ class OrganizationalUnitsConfig(BaseModel):
 
 class KeyVaultConfig(BaseModel):
     """Azure Key Vault configuration for secure credential retrieval."""
+
+    model_config = ConfigDict(extra="forbid")
 
     vault_url: str = Field(
         ..., description="Azure Key Vault URL, e.g. https://your-vault.vault.azure.net/"
@@ -95,6 +109,8 @@ class KeyVaultConfig(BaseModel):
 
 class SecurityConfig(BaseModel):
     """Security configuration for LDAP connections."""
+
+    model_config = ConfigDict(extra="forbid")
     
     enable_tls: bool = Field(default=True, description="Enable TLS encryption")
     validate_certificate: bool = Field(default=True, description="Validate server certificate")
@@ -104,6 +120,8 @@ class SecurityConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
+
+    model_config = ConfigDict(extra="forbid")
     
     level: str = Field(default="INFO", description="Logging level")
     format: str = Field(
@@ -124,8 +142,16 @@ class LoggingConfig(BaseModel):
 
 class PerformanceConfig(BaseModel):
     """Performance configuration."""
+
+    model_config = ConfigDict(extra="forbid")
     
-    connection_pool_size: int = Field(default=10, description="Connection pool size")
+    connection_pool_size: Optional[int] = Field(
+        default=None,
+        description=(
+            "Deprecated and ignored: LDAPManager uses a single serialized connection. "
+            "Still accepted so existing configurations keep loading."
+        ),
+    )
     max_retries: int = Field(default=3, description="Maximum connection retries")
     retry_delay: float = Field(default=1.0, description="Retry delay in seconds")
     page_size: int = Field(default=1000, description="LDAP search page size")
@@ -134,7 +160,7 @@ class PerformanceConfig(BaseModel):
     @classmethod
     def validate_positive_int(cls, v):
         """Validate positive integers."""
-        if v <= 0:
+        if v is not None and v <= 0:
             raise ValueError('Value must be positive')
         return v
     
@@ -149,6 +175,8 @@ class PerformanceConfig(BaseModel):
 
 class Config(BaseModel):
     """Main configuration class."""
+
+    model_config = ConfigDict(extra="forbid")
     
     active_directory: ActiveDirectoryConfig
     organizational_units: OrganizationalUnitsConfig = Field(

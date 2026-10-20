@@ -65,7 +65,7 @@ def test_env_placeholder_resolution(tmp_path, monkeypatch):
     monkeypatch.setenv("AD_BIND_PASSWORD", "super-secret")
 
     config = load_config(str(config_path))
-    assert config.active_directory.password == "super-secret"
+    assert config.active_directory.password.get_secret_value() == "super-secret"
 
 
 def test_env_placeholder_with_default(tmp_path):
@@ -90,7 +90,7 @@ def test_env_placeholder_with_default(tmp_path):
     config_path.write_text(json.dumps(config_data), encoding="utf-8")
 
     config = load_config(str(config_path))
-    assert config.active_directory.password == "default-pass"
+    assert config.active_directory.password.get_secret_value() == "default-pass"
 
 
 def test_env_placeholder_missing_env(tmp_path):
@@ -294,7 +294,7 @@ def test_default_values():
     # Test default values
     assert config.security.enable_tls == True
     assert config.logging.level == "INFO"
-    assert config.performance.connection_pool_size == 10
+    assert config.performance.connection_pool_size is None
     assert config.active_directory.use_ssl == True
     assert config.active_directory.ssl_port == 636
 
@@ -336,3 +336,124 @@ def test_env_placeholder_malformed_text_untouched():
     assert _resolve_env_placeholders("${not closed") == "${not closed"
     assert _resolve_env_placeholders("pa$$word${") == "pa$$word${"
     assert _resolve_env_placeholders(5) == 5
+
+
+
+# --- Strict models, SecretStr, object classes, deprecated pool size (02-02 task 1) ---
+
+_AD = {
+    "server": "ldaps://dc.test.local",
+    "domain": "test.local",
+    "base_dn": "DC=test,DC=local",
+    "bind_dn": "CN=svc,DC=test,DC=local",
+    "password": "s3cr3t-value-xyz",
+}
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _full(**overrides):
+    data = {"active_directory": dict(_AD)}
+    data.update(overrides)
+    return data
+
+
+@pytest.mark.parametrize(
+    "section",
+    ["active_directory", "organizational_units", "key_vault", "security", "logging", "performance"],
+)
+def test_unknown_key_rejected_per_section(section):
+    from pydantic import ValidationError
+
+    base = {
+        "organizational_units": {
+            "users_ou": "a", "groups_ou": "b", "computers_ou": "c", "service_accounts_ou": "d",
+        },
+        "key_vault": {"vault_url": "https://v.vault.azure.net/"},
+    }
+    data = _full(**{k: dict(v) for k, v in base.items()})
+    data.setdefault(section, {})
+    data[section] = dict(data[section])
+    data[section]["bogus_key"] = 1
+    with pytest.raises(ValidationError):
+        Config(**data)
+
+
+def test_unknown_top_level_key_rejected():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Config(**_full(bogus=1))
+
+
+def test_security_check_names_now_rejected():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Config(**_full(security={"check_names": True}))
+
+
+def test_password_is_secretstr_and_masked():
+    cfg = Config(**_full())
+    secret = _AD["password"]
+    assert cfg.active_directory.password.get_secret_value() == secret
+    for text in (
+        str(cfg),
+        repr(cfg),
+        str(cfg.active_directory),
+        repr(cfg.active_directory),
+        str(cfg.model_dump()),
+        cfg.model_dump_json(),
+        cfg.active_directory.model_dump_json(),
+    ):
+        assert secret not in text
+
+
+def test_password_assignment_coerced_to_secretstr():
+    from pydantic import SecretStr
+
+    cfg = Config(**_full())
+    cfg.active_directory.password = "from-vault-or-env"
+    assert isinstance(cfg.active_directory.password, SecretStr)
+    assert "from-vault-or-env" not in repr(cfg)
+
+
+@pytest.mark.parametrize("field", ["user_object_class", "group_object_class", "computer_object_class"])
+def test_object_class_injection_rejected(field):
+    data = dict(_AD)
+    data[field] = "user)(|(objectClass=*"
+    with pytest.raises(ValueError):
+        ActiveDirectoryConfig(**data)
+
+
+def test_object_class_defaults_and_custom_accepted():
+    ad = ActiveDirectoryConfig(**_AD, user_object_class="inetOrgPerson")
+    assert (ad.user_object_class, ad.group_object_class, ad.computer_object_class) == (
+        "inetOrgPerson", "group", "computer",
+    )
+
+
+def test_connection_pool_size_deprecated_but_accepted():
+    from active_directory_mcp.config.models import PerformanceConfig
+
+    assert PerformanceConfig().connection_pool_size is None
+    assert PerformanceConfig(connection_pool_size=5).connection_pool_size == 5
+    with pytest.raises(ValueError):
+        PerformanceConfig(connection_pool_size=0)
+    with pytest.raises(ValueError):
+        PerformanceConfig(connection_pool_size=-1)
+
+
+@pytest.mark.parametrize(
+    "rel", ["ad-config/config.example.json", "ad-config/production-config.example.json"]
+)
+def test_example_configs_parse(rel):
+    data = json.loads((REPO_ROOT / rel).read_text(encoding="utf-8"))
+    assert Config(**data)
+    assert "connection_pool_size" not in data.get("performance", {})
+
+
+def test_local_ad_config_parses():
+    path = REPO_ROOT / "ad-config" / "ad-config.json"
+    if not path.exists():
+        pytest.skip("ad-config/ad-config.json not present")
+    assert Config(**json.loads(path.read_text(encoding="utf-8")))

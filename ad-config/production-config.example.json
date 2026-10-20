@@ -33,7 +33,6 @@
         "file": "/var/log/activedirectory_mcp.log"
     },
     "performance": {
-        "connection_pool_size": 10,
         "max_retries": 3,
         "retry_delay": 1.0,
         "page_size": 1000

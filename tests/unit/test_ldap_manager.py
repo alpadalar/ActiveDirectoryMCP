@@ -78,6 +78,12 @@ class TestConnect:
         assert manager.connect() is first
         assert conn_cls.call_count == 1
 
+    def test_password_unwrapped_only_at_connection(self, manager, ldap3_seam, ad_settings):
+        _, conn_cls = ldap3_seam
+        manager.connect()
+        assert conn_cls.call_args.kwargs["password"] == "dummy-password"
+        assert "dummy-password" not in repr(manager.ad_config)
+
     def test_failover_to_second_server(self, make_manager, ldap3_seam, ad_settings):
         _, conn_cls = ldap3_seam
         good = MagicMock()
