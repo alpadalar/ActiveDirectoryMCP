@@ -166,6 +166,13 @@ class TestRootDse:
         assert info["serverName"] == "CN=DC,CN=Servers"
         assert "schemaNamingContext" not in info and "unlisted" not in info
 
+    def test_attribute_names_matched_case_insensitively(self, directory_tools, mock_ldap_manager):
+        mock_ldap_manager.search.return_value = [
+            {"dn": "", "attributes": {"DNSHOSTNAME": ["dc1.test.local"]}}
+        ]
+        data = parse_response(directory_tools.get_rootdse_info())
+        assert data["rootdse"] == {"dnsHostName": "dc1.test.local"}
+
     def test_empty_result_is_structured_failure(self, directory_tools, mock_ldap_manager):
         mock_ldap_manager.search.return_value = []
         assert parse_response(directory_tools.get_rootdse_info())["success"] is False

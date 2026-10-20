@@ -178,9 +178,10 @@ class DirectoryTools(BaseTool):
                     "get_rootdse_info",
                 )
             attrs = entries[0].get("attributes", {})
+            folded = {str(key).lower(): val for key, val in attrs.items()}
             info: Dict[str, Any] = {}
             for attr in ROOTDSE_ATTRIBUTES:
-                value = attrs.get(attr)
+                value = folded.get(attr.lower())
                 if value is None or value == [] or value == "":
                     continue
                 if isinstance(value, (list, tuple)) and len(value) == 1:

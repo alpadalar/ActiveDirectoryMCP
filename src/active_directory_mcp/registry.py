@@ -139,6 +139,7 @@ def _get_schema_info(ctx: ToolContext) -> List[Content]:
         "computer_tools": ctx.computer_tools.get_schema_info(),
         "ou_tools": ctx.ou_tools.get_schema_info(),
         "security_tools": ctx.security_tools.get_schema_info(),
+        "directory_tools": DirectoryTools(ctx.ldap_manager).get_schema_info(),
     }
     return format_json_response(info, "get_schema_info")
 

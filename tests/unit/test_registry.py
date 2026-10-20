@@ -412,7 +412,9 @@ def test_get_schema_info_endpoint_only_when_set() -> None:
         "computer_tools",
         "ou_tools",
         "security_tools",
+        "directory_tools",
     }
+    assert data["tools"]["directory_tools"]["operations"] == sorted(DIRECTORY_TOOLS)
 
     with_endpoint = make_ctx(
         user_tools=ctx.user_tools,
