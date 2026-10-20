@@ -9,11 +9,14 @@ from typing import Any, Optional
 
 from pydantic import SecretStr, ValidationError
 
-from ..redaction import register_secret
+from ..redaction import install_record_factory, register_secret
 from .keyvault import KeyVaultError, get_secret
 from .models import Config
 
 logger = logging.getLogger("active-directory-mcp.config")
+
+# Redaction must be active before any config/Key Vault message can be logged
+install_record_factory()
 
 
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")

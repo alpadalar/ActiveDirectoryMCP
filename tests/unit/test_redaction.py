@@ -116,3 +116,77 @@ def test_setup_logging_redacts_stderr_and_file(tmp_path, capsys):
     for h in list(logger.handlers):
         h.close()
         logger.removeHandler(h)
+
+
+# --- review fixes (WR-03, WR-04, WR-05, WR-06a) ------------------------------
+
+def test_json_and_repr_escaped_forms_redacted():
+    import json
+
+    secret = 'pa\\ss"word'
+    redaction.register_secret(secret)
+    assert secret not in redaction.redact(secret)
+    assert "ss" not in redaction.redact(json.dumps({"p": secret})).replace("***REDACTED***", "")
+    assert "ss" not in redaction.redact(repr(secret)).replace("***REDACTED***", "")
+    assert "ss" not in redaction.redact(repr(ValueError(secret))).replace("***REDACTED***", "")
+
+
+def test_unicodepwd_wire_form_redacted():
+    redaction.register_secret(SECRET)
+    wire = base64.b64encode(f'"{SECRET}"'.encode("utf-16-le")).decode()
+    assert wire not in redaction.redact(wire)
+
+
+def test_record_factory_redacts_foreign_loggers_and_late_handlers():
+    redaction.install_record_factory()
+    redaction.install_record_factory()  # idempotent
+    redaction.register_secret(SECRET)
+    stream = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            stream.append(self.format(record))
+
+    handler = Collect()  # no RedactingFilter on purpose
+    other = logging.getLogger("some.third.party")
+    other.addHandler(handler)
+    other.setLevel(logging.DEBUG)
+    try:
+        other.error("pw %s", SECRET)
+        try:
+            raise ValueError(f"boom {SECRET}")
+        except ValueError:
+            other.exception("failed")
+    finally:
+        other.removeHandler(handler)
+    assert stream and all(SECRET not in line for line in stream)
+
+
+def test_secret_split_between_msg_and_args_is_redacted():
+    redaction.register_secret("ab12cd")
+    rec = _record("prefix ab%s", ("12cd",))
+    redaction.RedactingFilter().filter(rec)
+    assert "ab12cd" not in rec.getMessage()
+
+
+def test_filter_fails_closed(monkeypatch):
+    redaction.register_secret(SECRET)
+    rec = _record(f"x {SECRET}")
+
+    def boom(_):
+        raise RuntimeError("nope")
+
+    monkeypatch.setattr(redaction, "redact", boom)
+    assert redaction.RedactingFilter().filter(rec) is True
+    assert rec.getMessage() == redaction.SUPPRESSED
+    assert rec.exc_info is None and rec.exc_text is None
+
+
+def test_runtime_secrets_are_bounded_and_persistent_ones_kept():
+    redaction.register_secret("bind-pw-0001", persistent=True)
+    for i in range(redaction.MAX_RUNTIME_SECRETS + 10):
+        redaction.register_secret(f"runtime-secret-{i:04d}", persistent=False)
+    assert len(redaction._runtime) == redaction.MAX_RUNTIME_SECRETS
+    assert redaction.redact("bind-pw-0001") == redaction.REDACTED
+    assert redaction.redact("runtime-secret-0000") == "runtime-secret-0000"
+    assert redaction.redact("runtime-secret-0073") == redaction.REDACTED

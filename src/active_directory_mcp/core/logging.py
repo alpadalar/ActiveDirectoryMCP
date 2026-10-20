@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config.models import LoggingConfig
-from ..redaction import RedactingFilter
+from ..redaction import RedactingFilter, install_record_factory
 
 
 def setup_logging(config: LoggingConfig) -> logging.Logger:
@@ -20,6 +20,9 @@ def setup_logging(config: LoggingConfig) -> logging.Logger:
     Returns:
         Logger instance
     """
+    # Redact at record creation so no logger or handler can bypass the filter
+    install_record_factory()
+
     # Create logger
     logger = logging.getLogger("active-directory-mcp")
     logger.setLevel(getattr(logging, config.level))

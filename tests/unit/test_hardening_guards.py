@@ -83,12 +83,6 @@ def test_guard_detects_bare_and_silent_handlers():
 @pytest.mark.parametrize("path", _py_files(SRC), ids=lambda p: str(p.relative_to(SRC)))
 def test_no_bare_or_silent_except(path):
     problems = find_bad_handlers(path.read_text(encoding="utf-8"))
-    if path.name == "redaction.py":
-        # RedactingFilter.filter must never raise into the logging machinery, and it cannot
-        # log its own failure (that would recurse into the same filter). Exactly one allowed.
-        assert [reason for _, reason in problems] == [
-            "handler swallows the exception without logging"]
-        return
     assert problems == []
 
 
