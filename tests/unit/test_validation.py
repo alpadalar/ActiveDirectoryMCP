@@ -192,3 +192,73 @@ def test_module_has_no_internal_imports():
     code = "\n".join(l for l in src.splitlines() if l.lstrip().startswith(("import ", "from ")))
     assert "active_directory_mcp" not in code
     assert "endswith" not in src
+
+
+# --- review fixes (CR-01, CR-02, WR-01, WR-02, WR-06b) -----------------------
+
+@pytest.mark.parametrize(
+    "dn",
+    [
+        "CN=a+DC=corp,DC=example,DC=com",
+        "CN=x,OU=y+DC=corp,DC=example,DC=com",
+    ],
+)
+def test_multivalued_rdn_cannot_escape_base(dn):
+    with pytest.raises(v.ValidationError):
+        v.validate_dn(dn, BASE)
+    assert v.is_dn_under(dn, BASE) is False
+
+
+def test_multivalued_rdn_beneath_base_is_accepted():
+    assert v.is_dn_under("CN=a+SN=b,OU=y," + BASE, BASE)
+
+
+def test_allow_base_false_rejects_base_but_accepts_descendant():
+    assert v.validate_dn(BASE, BASE) == BASE
+    with pytest.raises(v.ValidationError):
+        v.validate_dn(BASE, BASE, allow_base=False)
+    with pytest.raises(v.ValidationError):
+        v.validate_dn(BASE.lower().replace(",", ", "), BASE, allow_base=False)
+    assert v.validate_dn("OU=a," + BASE, BASE, allow_base=False)
+
+
+@pytest.mark.parametrize("fn", [v.validate_object_class, v.validate_attribute_name])
+def test_names_reject_trailing_newline(fn):
+    with pytest.raises(v.ValidationError):
+        fn("user\n")
+
+
+def test_eq_filter_rejects_attribute_with_newline():
+    with pytest.raises(v.ValidationError):
+        v.eq_filter("cn\n", "x")
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        "(userPassword=a*)",
+        "(UnicodePwd=*)",
+        "(unicodePwd;binary=x)",
+        "(ms-Mcs-AdmPwd=*)",
+        "(msDS-KeyCredentialLink=*)",
+        "(ntSecurityDescriptor=*)",
+        "(|(cn=a)(!(msLAPS-Password=*)))",
+        "(2.5.4.35=a*)",
+        "(memberOf:1.2.840.113556.1.4.1941:=CN=x,DC=a)",
+        "(cn:dn:=x)",
+    ],
+)
+def test_filter_criteria_rejects_sensitive_and_extensible(fragment):
+    with pytest.raises(v.ValidationError):
+        v.validate_filter_criteria(fragment)
+
+
+def test_filter_criteria_ordinary_terms_still_pass():
+    assert v.validate_filter_criteria("(department=IT)(|(a=1)(!(b=2)))")
+    assert v.validate_filter_criteria("(pwdLastSet=0)")
+
+
+def test_build_dn_trailing_space_is_escaped_and_parses():
+    dn = v.build_dn("CN", "a ", BASE, BASE)
+    assert dn == "CN=a\\20," + BASE
+    assert v.is_dn_under(dn, BASE)

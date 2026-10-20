@@ -288,7 +288,7 @@ class OrganizationalUnitTools(BaseTool):
         try:
             # Validate DN (well formed and confined to base_dn) before any LDAP call
             try:
-                ou_dn = self._confined_dn(ou_dn)
+                ou_dn = self._confined_dn(ou_dn, allow_base=False)
             except ValidationError as exc:
                 return self._dn_error("modify_ou", exc, ou_dn=ou_dn)
             
@@ -350,7 +350,7 @@ class OrganizationalUnitTools(BaseTool):
         try:
             # Validate DN (well formed and confined to base_dn) before any LDAP call
             try:
-                ou_dn = self._confined_dn(ou_dn)
+                ou_dn = self._confined_dn(ou_dn, allow_base=False)
             except ValidationError as exc:
                 return self._dn_error("delete_ou", exc, ou_dn=ou_dn)
             
@@ -419,8 +419,10 @@ class OrganizationalUnitTools(BaseTool):
         try:
             # Validate DNs (well formed and confined to base_dn) before any LDAP call
             try:
-                ou_dn = self._confined_dn(ou_dn)
+                ou_dn = self._confined_dn(ou_dn, allow_base=False)
                 new_parent_dn = self._confined_dn(new_parent_dn)
+                if validation.is_dn_under(new_parent_dn, ou_dn):
+                    raise ValidationError("new_parent_dn must not be the OU itself or beneath it")
             except ValidationError as exc:
                 return self._dn_error("move_ou", exc, ou_dn=ou_dn, new_parent_dn=new_parent_dn)
             
@@ -462,7 +464,10 @@ class OrganizationalUnitTools(BaseTool):
             if success:
                 # Calculate new DN
                 ou_name = existing_ou[0]['attributes']['name'][0]
-                new_dn = f"OU={ou_name},{new_parent_dn}"
+                try:
+                    new_dn = validation.build_dn("OU", ou_name, new_parent_dn, self._base_dn())
+                except ValidationError:
+                    new_dn = f"OU={ou_name},{new_parent_dn}"  # move already done; report best effort
                 
                 log_ldap_operation("move_ou", ou_dn, True, f"Moved OU to: {new_dn}")
                 

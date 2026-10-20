@@ -20,6 +20,14 @@ caller. It is *constrained*, not *sanitized*. A fragment must:
   parsing); and
 * parse as a valid LDAP filter when wrapped as ``(&`` + fragment + ``)``.
 
+* not reference a sensitive attribute (``SENSITIVE_FILTER_ATTRIBUTES``: password
+  hashes, ``unicodePwd``, LAPS, gMSA, key credentials, security descriptors, BitLocker
+  recovery data, ...) and not use an OID instead of an attribute name. Rationale: a
+  filter is a blind oracle, since result counts reveal secret attributes one prefix
+  at a time even when output is filtered; and
+* not use extensible-match terms (``attr:rule:=value``), which blocks expensive
+  matching-rule-in-chain queries such as ``memberOf:1.2.840.113556.1.4.1941:=``.
+
 Attribute values inside the fragment remain the caller's responsibility.
 Operators who expose this server to untrusted prompts should front it with a
 proxy or simply not allow ``filter_criteria``.
@@ -33,7 +41,7 @@ allow-list is introduced; it can be added later without an API change.
 """
 
 import re
-from typing import Any, List, Optional, Tuple
+from typing import Any, FrozenSet, List, Optional, Tuple
 
 from ldap3.core.exceptions import LDAPException
 from ldap3.operation.search import parse_filter
@@ -57,8 +65,8 @@ __all__ = [
     "combine_filters",
 ]
 
-OBJECT_CLASS_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]*$")
-ATTRIBUTE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]*$")
+OBJECT_CLASS_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
+ATTRIBUTE_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]*")
 MAX_FILTER_CRITERIA_LENGTH = 1024
 
 _RdnComponent = Tuple[str, str, str]
@@ -79,14 +87,14 @@ def escape_filter_value(value: Any) -> str:
 
 def validate_attribute_name(name: Any) -> str:
     """Return ``name`` if it is a plain attribute description, else raise."""
-    if not isinstance(name, str) or not ATTRIBUTE_NAME_RE.match(name):
+    if not isinstance(name, str) or not ATTRIBUTE_NAME_RE.fullmatch(name):
         raise ValidationError(f"Invalid LDAP attribute name: {name!r}")
     return name
 
 
 def validate_object_class(name: Any) -> str:
     """Return ``name`` if it is a plausible objectClass name, else raise."""
-    if not isinstance(name, str) or not OBJECT_CLASS_RE.match(name):
+    if not isinstance(name, str) or not OBJECT_CLASS_RE.fullmatch(name):
         raise ValidationError(f"Invalid LDAP object class: {name!r}")
     return name
 
@@ -117,33 +125,51 @@ def _parse(dn: Any) -> List[_RdnComponent]:
     return parts
 
 
-def _normalize(parts: List[_RdnComponent]) -> List[Tuple[str, str, str]]:
-    return [(a.strip().lower(), v.strip().lower(), s.strip()) for a, v, s in parts]
+def _rdns(parts: List[_RdnComponent]) -> List[FrozenSet[Tuple[str, str]]]:
+    """Group parsed components into RDNs (a ``+`` separator joins a component to the next).
+
+    Each RDN becomes a frozenset of lower-cased ``(type, value)`` pairs so a
+    multi-valued RDN is compared as one unit, never as separate DN levels.
+    """
+    groups: List[FrozenSet[Tuple[str, str]]] = []
+    current: List[Tuple[str, str]] = []
+    for attr, value, sep in parts:
+        current.append((attr.strip().lower(), value.strip().lower()))
+        if sep.strip() != "+":
+            groups.append(frozenset(current))
+            current = []
+    if current:  # dangling "+" at the end: keep it as its own (unmatchable) group
+        groups.append(frozenset(current))
+    return groups
 
 
 def _under(candidate: List[_RdnComponent], base: List[_RdnComponent]) -> bool:
-    cand = _normalize(candidate)
-    root = _normalize(base)
+    cand = _rdns(candidate)
+    root = _rdns(base)
     if len(cand) < len(root):
         return False
-    tail = cand[len(cand) - len(root):]
-    # The separator of the final component is always empty; compare type/value
-    # for every component and separators for all but the last.
-    return [(a, v) for a, v, _ in tail] == [(a, v) for a, v, _ in root]
+    return cand[len(cand) - len(root):] == root
 
 
-def validate_dn(dn: Any, base_dn: Optional[str] = None) -> str:
+def validate_dn(dn: Any, base_dn: Optional[str] = None, *, allow_base: bool = True) -> str:
     """Validate ``dn`` and return it (stripped).
 
-    With ``base_dn`` the DN must equal or sit beneath it, compared component by
-    component (case-insensitive, whitespace-tolerant, escape-aware). Without
+    With ``base_dn`` the DN must equal or sit beneath it, compared RDN by RDN
+    (case-insensitive, whitespace-tolerant; multi-valued RDNs are compared as a
+    unit). Hex escapes such as ``\\63`` are *not* canonicalised, so an escaped
+    spelling of the base is rejected (fails closed). With ``allow_base=False``
+    the DN must be a strict descendant: equal to ``base_dn`` is rejected, which
+    destructive operations use to protect the whole managed tree. Without
     ``base_dn`` only the *shape* is checked (it parses, no empty values); that
     mode gives no confinement and is for callers that have no base available.
     """
     parts = _parse(dn)
     if base_dn is not None:
-        if not _under(parts, _parse(base_dn)):
+        base_parts = _parse(base_dn)
+        if not _under(parts, base_parts):
             raise ValidationError("DN is outside the configured base DN")
+        if not allow_base and _rdns(parts) == _rdns(base_parts):
+            raise ValidationError("DN must be beneath the base DN, not equal to it")
     return dn.strip()
 
 
@@ -157,8 +183,16 @@ def is_dn_under(dn: Any, base_dn: str) -> bool:
 
 
 def escape_rdn_value(value: str) -> str:
-    """Escape a value for use as an RDN attribute value (RFC 4514)."""
-    return escape_rdn(value)
+    """Escape a value for use as an RDN attribute value (RFC 4514).
+
+    Trailing spaces are written as the hex escape ``\\20``: ldap3's parser
+    rejects the ``\\ `` form as a "final character", which would make such names
+    unusable even though they are legal.
+    """
+    text = value if isinstance(value, str) else str(value)
+    stripped = text.rstrip(" ")
+    trailing = len(text) - len(stripped)
+    return escape_rdn(stripped) + "\\20" * trailing
 
 
 def build_dn(rdn_type: str, value: Any, parent_dn: str, base_dn: Optional[str] = None) -> str:
@@ -183,6 +217,49 @@ def build_dn(rdn_type: str, value: Any, parent_dn: str, base_dn: Optional[str] =
 # ---------------------------------------------------------------------------
 # Raw filter fragments
 # ---------------------------------------------------------------------------
+
+# Attributes that hold or protect secrets. A filter on them is a blind oracle
+# (presence / prefix matching through result counts), which output filtering
+# cannot prevent, so they are rejected inside ``filter_criteria``.
+SENSITIVE_FILTER_ATTRIBUTES = frozenset(
+    name.lower()
+    for name in (
+        "userPassword", "unicodePwd", "dBCSPwd", "lmPwdHistory", "ntPwdHistory",
+        "pwdHistory", "supplementalCredentials", "unixUserPassword", "ntSecurityDescriptor",
+        "msDS-KeyCredentialLink", "msDS-ManagedPassword", "msDS-ManagedPasswordId",
+        "msDS-ManagedPasswordPreviousId", "ms-Mcs-AdmPwd", "msLAPS-Password",
+        "msLAPS-EncryptedPassword", "msLAPS-EncryptedPasswordHistory",
+        "msFVE-RecoveryPassword", "msFVE-KeyPackage", "msFVE-RecoveryGuid",
+        "msFVE-VolumeGuid", "priorValue", "currentValue", "initialAuthIncoming",
+        "initialAuthOutgoing", "trustAuthIncoming", "trustAuthOutgoing",
+        "msPKI-CredentialRoamingTokens", "msPKI-DPAPIMasterKeys", "securityIdentifier",
+        "sidHistory", "msDS-AllowedToActOnBehalfOfOtherIdentity",
+    )
+)
+
+_EXTENSIBLE_MATCH_TAG = 7
+
+
+def _check_filter_node(node: Any) -> None:
+    if node.tag == _EXTENSIBLE_MATCH_TAG:
+        raise ValidationError(
+            "filter_criteria must not use extensible match (':rule:=' / ':dn:=') "
+            "terms such as memberOf matching-rule-in-chain"
+        )
+    assertion = node.assertion if isinstance(node.assertion, dict) else {}
+    attr = assertion.get("attr")
+    if isinstance(attr, str):
+        # Strip options (";binary") and compare case-insensitively.
+        base = attr.split(";", 1)[0].strip().lower()
+        if base[:1].isdigit():
+            raise ValidationError("filter_criteria must use attribute names, not OIDs")
+        if base in SENSITIVE_FILTER_ATTRIBUTES:
+            raise ValidationError(
+                f"filter_criteria must not reference sensitive attribute {attr!r}"
+            )
+    for child in node.elements or []:
+        _check_filter_node(child)
+
 
 def validate_filter_criteria(fragment: Any) -> str:
     """Validate a raw filter fragment (see TRUSTED-INPUT POLICY) and return it."""
@@ -214,9 +291,10 @@ def validate_filter_criteria(fragment: Any) -> str:
         raise ValidationError("filter_criteria has unbalanced parentheses")
 
     try:
-        parse_filter("(&" + text + ")", None, False, False, None, False)
+        tree = parse_filter("(&" + text + ")", None, False, False, None, False)
     except (LDAPException, ValueError, IndexError, KeyError) as exc:
         raise ValidationError(f"filter_criteria is not a valid LDAP filter: {exc}") from exc
+    _check_filter_node(tree)
     return text
 
 

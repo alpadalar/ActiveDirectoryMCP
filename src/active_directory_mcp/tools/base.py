@@ -207,9 +207,13 @@ class BaseTool(ABC):
             return False
         return True
 
-    def _confined_dn(self, dn: str) -> str:
-        """Return the validated DN (confined to base_dn) or raise ValidationError."""
-        return validation.validate_dn(dn, self._base_dn())
+    def _confined_dn(self, dn: str, allow_base: bool = True) -> str:
+        """Return the validated DN (confined to base_dn) or raise ValidationError.
+
+        With ``allow_base=False`` the DN must be a strict descendant of base_dn
+        (used by destructive/modifying operations).
+        """
+        return validation.validate_dn(dn, self._base_dn(), allow_base=allow_base)
 
     def _build_dn(self, name: str, ou: str) -> str:
         """

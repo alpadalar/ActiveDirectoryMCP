@@ -455,3 +455,42 @@ def test_get_ou_contents_computer_branch_uses_configured_class(
 def test_ou_level_and_gplink_fallbacks_are_preserved(ou_tools):
     assert ou_tools._calculate_ou_level(None, "DC=test,DC=local") == 0
     assert ou_tools._parse_gp_link(None) == []
+
+
+# ------------------------------------------- base_dn protection (review CR-02)
+
+BASE = "DC=test,DC=local"
+
+
+def test_delete_ou_rejects_base_dn_itself(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.side_effect = _tree({})
+    data = parse_response(ou_tools.delete_ou(BASE, force=True))
+    assert data["success"] is False
+    mock_ldap_manager.delete.assert_not_called()
+    mock_ldap_manager.search.assert_not_called()
+
+
+def test_modify_ou_rejects_base_dn_itself(ou_tools, mock_ldap_manager):
+    data = parse_response(ou_tools.modify_ou(BASE, {"description": "x"}))
+    assert data["success"] is False
+    mock_ldap_manager.modify.assert_not_called()
+
+
+def test_move_ou_rejects_base_dn_as_source(ou_tools, mock_ldap_manager):
+    data = parse_response(ou_tools.move_ou(BASE, "OU=Archive,DC=test,DC=local"))
+    assert data["success"] is False
+    mock_ldap_manager.move.assert_not_called()
+
+
+def test_move_ou_rejects_parent_beneath_itself(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = [_ou()]
+    for target in (OU, "OU=Child," + OU):
+        data = parse_response(ou_tools.move_ou(OU, target))
+        assert data["success"] is False
+    mock_ldap_manager.move.assert_not_called()
+
+
+def test_move_ou_new_dn_escapes_special_characters(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = [ldap_entry(OU, objectClass=OU_CLASSES, name="A,B")]
+    data = parse_response(ou_tools.move_ou(OU, "OU=Archive,DC=test,DC=local"))
+    assert data["new_dn"] == "OU=A\\,B,OU=Archive,DC=test,DC=local"
