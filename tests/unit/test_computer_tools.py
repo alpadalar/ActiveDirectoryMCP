@@ -424,7 +424,7 @@ def test_create_computer_escapes_rdn(computer_tools, mock_ldap_manager):
     data = parse_response(computer_tools.create_computer("pc,OU=Admins"))
     assert data["success"] is True
     dn = mock_ldap_manager.add.call_args.args[0]
-    assert dn.startswith("CN=pc\\,OU=Admins,")
+    assert dn.startswith("CN=pc\\,OU\\=Admins,")
     assert dn.endswith("CN=Computers,DC=test,DC=local")
 
 
