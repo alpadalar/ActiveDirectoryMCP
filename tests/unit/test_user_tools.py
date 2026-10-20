@@ -353,3 +353,58 @@ class TestPasswordExpired:
 
     def test_missing_pwd_last_set_is_expired(self, user_tools):
         assert user_tools._is_password_expired({}) is True
+
+
+class TestUserInputHardening:
+    def test_list_users_rejects_out_of_base_ou(self, user_tools, mock_ldap_manager):
+        data = parse_response(user_tools.list_users(ou="OU=X,DC=evil,DC=com"))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.search.assert_not_called()
+
+    @pytest.mark.parametrize("bad", ["(a=1))(|(objectClass=*)", "dept=IT", "(a=1"])
+    def test_list_users_rejects_malformed_filter(self, user_tools, mock_ldap_manager, bad):
+        data = parse_response(user_tools.list_users(filter_criteria=bad))
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.search.assert_not_called()
+
+    def test_list_users_valid_filter_text_unchanged(self, user_tools, mock_ldap_manager):
+        user_tools.list_users(filter_criteria="(department=IT)")
+        sent = mock_ldap_manager.search.call_args.kwargs["search_filter"]
+        assert sent == f"(&(objectClass={user_tools.ldap.ad_config.user_object_class})(department=IT))"
+
+    def test_list_users_no_ou_uses_base_dn(self, user_tools, mock_ldap_manager):
+        user_tools.list_users()
+        assert mock_ldap_manager.search.call_args.kwargs["search_base"] == "DC=test,DC=local"
+
+    def test_create_user_escapes_rdn(self, user_tools, mock_ldap_manager):
+        data = parse_response(user_tools.create_user("jdoe", "Pw-1234!x", "x,OU=Admins", "y"))
+        assert data["success"] is True
+        dn = mock_ldap_manager.add.call_args.args[0]
+        assert dn == "CN=x\\,OU\\=Admins y,CN=Users,DC=test,DC=local"
+
+    def test_create_user_default_uses_users_ou(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.organizational_units.users_ou = "OU=Staff,DC=test,DC=local"
+        user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe")
+        assert mock_ldap_manager.add.call_args.args[0] == "CN=John Doe,OU=Staff,DC=test,DC=local"
+
+    def test_create_user_rejects_out_of_base_ou(self, user_tools, mock_ldap_manager):
+        data = parse_response(
+            user_tools.create_user("jdoe", "Pw-1234!x", "John", "Doe", ou="OU=X,DC=evil,DC=com")
+        )
+        assert data["success"] is False
+        assert data["type"] == "ValidationError"
+        mock_ldap_manager.add.assert_not_called()
+        mock_ldap_manager.search.assert_not_called()
+
+    def test_rollback_failure_is_logged_without_password(
+        self, user_tools, mock_ldap_manager, caplog
+    ):
+        mock_ldap_manager.modify.side_effect = LDAPException("password policy")
+        mock_ldap_manager.delete.side_effect = LDAPException("cannot delete")
+        with caplog.at_level("WARNING"):
+            data = parse_response(user_tools.create_user("jdoe", "Secret-Pw-9!", "John", "Doe"))
+        assert data["success"] is False
+        assert "password setting failed" in data["error"]
+        assert "Secret-Pw-9!" not in caplog.text

@@ -12,7 +12,11 @@ import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
 
 from .base import BaseTool
+from ldap3.core.exceptions import LDAPException
+
 from ..core.logging import log_ldap_operation
+from .. import validation
+from ..validation import ValidationError
 
 
 class UserTools(BaseTool):
@@ -31,20 +35,18 @@ class UserTools(BaseTool):
         Returns:
             List of MCP content objects with user information
         """
+        search_base = ou or ""
         try:
-            # Determine search base
+            # Determine search base (confined to base_dn)
             if ou:
-                search_base = ou
+                search_base = self._confined_dn(ou)
             else:
                 search_base = self.ldap.ad_config.base_dn
-            
+
             user_object_class = self.ldap.ad_config.user_object_class
             base_filter = f"(objectClass={user_object_class})"
-            if filter_criteria:
-                search_filter = f"(&{base_filter}{filter_criteria})"
-            else:
-                search_filter = base_filter
-            
+            search_filter = validation.combine_filters(base_filter, filter_criteria)
+
             # Determine attributes to retrieve
             if attributes is None:
                 attributes = [
@@ -97,6 +99,8 @@ class UserTools(BaseTool):
             
             return self._format_response(response_data, "list_users")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "list_users", search_base)
         except Exception as e:
             return self._handle_ldap_error(e, "list_users", search_base)
     
@@ -186,12 +190,12 @@ class UserTools(BaseTool):
             List of MCP content objects with creation result
         """
         try:
-            # Determine OU
+            # Determine OU (default from configuration, explicit value confined to base_dn)
             if ou is None:
                 ou = self.ldap.organizational_units.users_ou
-            
-            # Build DN
-            user_dn = f"CN={first_name} {last_name},{ou}"
+
+            # Build DN with an escaped RDN value under the confined container
+            user_dn = self._build_dn(f"{first_name} {last_name}", ou)
             
             # Check if user already exists
             existing_user = self.ldap.search(
@@ -261,13 +265,17 @@ class UserTools(BaseTool):
                     # If password setting fails, delete the created user
                     try:
                         self.ldap.delete(user_dn)
-                    except:
-                        pass
+                    except Exception as rollback_error:
+                        self.logger.warning(
+                            f"Rollback delete of {user_dn} failed: {type(rollback_error).__name__}"
+                        )
                     
                     raise Exception(f"User created but password setting failed: {pwd_error}")
             else:
                 raise Exception("Failed to create user account")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "create_user", ou or username)
         except Exception as e:
             return self._handle_ldap_error(e, "create_user", user_dn if 'user_dn' in locals() else username)
     
@@ -520,8 +528,12 @@ class UserTools(BaseTool):
                             'description': self._get_attr_value(group_data, 'description', ''),
                             'groupType': self._get_attr_value(group_data, 'groupType', 0)
                         })
-                except:
+                except (KeyError, IndexError, TypeError, ValueError, LDAPException) as group_error:
                     # Skip if group info cannot be retrieved
+                    self.logger.warning(
+                        f"Could not retrieve group details for {group_dn}: "
+                        f"{type(group_error).__name__}"
+                    )
                     groups.append({'dn': group_dn, 'error': 'Could not retrieve group details'})
             
             log_ldap_operation("get_user_groups", user_dn, True, f"Retrieved {len(groups)} groups")
