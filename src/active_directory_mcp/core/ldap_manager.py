@@ -11,6 +11,25 @@ from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, ALL_OPERATIO
 from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPSocketOpenError
 
 from ..config.models import ActiveDirectoryConfig, SecurityConfig, PerformanceConfig
+import os
+SKIP_SCHEMA = os.environ.get("AD_MCP_SKIP_SCHEMA", "").lower() in ("1", "true", "yes")
+
+class _CIDict(dict):
+    """Dict with case-insensitive key lookup; keeps the original keys."""
+    def _find(self, key):
+        if isinstance(key, str):
+            low = key.lower()
+            for k in self.keys():
+                if isinstance(k, str) and k.lower() == low:
+                    return k
+        return key
+    def __getitem__(self, key):
+        return super().__getitem__(self._find(key))
+    def __contains__(self, key):
+        return super().__contains__(self._find(key))
+    def get(self, key, default=None):
+        return super().get(self._find(key), default)
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +78,7 @@ class LDAPManager:
             # Create primary server
             primary_server = Server(
                 self.ad_config.server,
-                get_info=ALL,
+                get_info=ldap3.NONE if SKIP_SCHEMA else ALL,
                 tls=tls_config,
                 connect_timeout=self.ad_config.timeout
             )
@@ -71,7 +90,7 @@ class LDAPManager:
                 for server_url in self.ad_config.server_pool:
                     server = Server(
                         server_url,
-                        get_info=ALL,
+                        get_info=ldap3.NONE if SKIP_SCHEMA else ALL,
                         tls=tls_config,
                         connect_timeout=self.ad_config.timeout
                     )
@@ -115,7 +134,7 @@ class LDAPManager:
                                 auto_bind=self.ad_config.auto_bind,
                                 receive_timeout=self.ad_config.receive_timeout,
                                 authentication=ldap3.SIMPLE,
-                                check_names=True,
+                                check_names=not SKIP_SCHEMA,
                                 raise_exceptions=True
                             )
                             
@@ -208,6 +227,8 @@ class LDAPManager:
                 )
                 
                 if not success:
+                    if SKIP_SCHEMA and connection.result and connection.result.get("result") == 0:
+                        break  # search succeeded but returned no entries
                     logger.error(f"Search failed: {connection.result}")
                     raise LDAPException(f"Search failed: {connection.result}")
                 
@@ -215,7 +236,7 @@ class LDAPManager:
                 for entry in connection.entries:
                     entry_dict = {
                         'dn': entry.entry_dn,
-                        'attributes': {}
+                        'attributes': (_CIDict() if SKIP_SCHEMA else {})
                     }
                     
                     for attr_name in entry.entry_attributes:
