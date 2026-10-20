@@ -1,0 +1,594 @@
+{
+  "tool_count": 42,
+  "tools": {
+    "add_group_member": {
+      "params": {
+        "group_name": {
+          "type": "string"
+        },
+        "member_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name",
+        "member_dn"
+      ]
+    },
+    "audit_admin_accounts": {
+      "params": {},
+      "required": []
+    },
+    "create_computer": {
+      "params": {
+        "additional_attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "object"
+        },
+        "computer_name": {
+          "type": "string"
+        },
+        "description": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "dns_hostname": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "create_group": {
+      "params": {
+        "additional_attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "object"
+        },
+        "description": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "display_name": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        },
+        "group_scope": {
+          "default": "Global",
+          "type": "string"
+        },
+        "group_type": {
+          "default": "Security",
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "create_organizational_unit": {
+      "params": {
+        "additional_attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "object"
+        },
+        "description": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "managed_by": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent_ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "create_user": {
+      "params": {
+        "additional_attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "object"
+        },
+        "email": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "first_name",
+        "last_name",
+        "password",
+        "username"
+      ]
+    },
+    "delete_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "delete_group": {
+      "params": {
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "delete_organizational_unit": {
+      "params": {
+        "force": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "delete_user": {
+      "params": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "disable_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "disable_user": {
+      "params": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "enable_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "enable_user": {
+      "params": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_computer": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "get_domain_info": {
+      "params": {},
+      "required": []
+    },
+    "get_group": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "get_group_members": {
+      "params": {
+        "group_name": {
+          "type": "string"
+        },
+        "recursive": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "get_inactive_users": {
+      "params": {
+        "days": {
+          "default": 90,
+          "type": "integer"
+        },
+        "include_disabled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "get_organizational_unit": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "get_organizational_unit_contents": {
+      "params": {
+        "object_types": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "get_password_policy_violations": {
+      "params": {},
+      "required": []
+    },
+    "get_privileged_groups": {
+      "params": {},
+      "required": []
+    },
+    "get_schema_info": {
+      "params": {},
+      "required": []
+    },
+    "get_stale_computers": {
+      "params": {
+        "days": {
+          "default": 90,
+          "type": "integer"
+        }
+      },
+      "required": []
+    },
+    "get_user": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_user_groups": {
+      "params": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_user_permissions": {
+      "params": {
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "health": {
+      "params": {},
+      "required": []
+    },
+    "list_computers": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "filter_criteria": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "list_groups": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "filter_criteria": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "list_organizational_units": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "filter_criteria": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "parent_ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "recursive": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "list_users": {
+      "params": {
+        "attributes": {
+          "default": null,
+          "nullable": true,
+          "type": "array<any>"
+        },
+        "filter_criteria": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "ou": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "modify_computer": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "computer_name"
+      ]
+    },
+    "modify_group": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "group_name"
+      ]
+    },
+    "modify_organizational_unit": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "ou_dn"
+      ]
+    },
+    "modify_user": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "username"
+      ]
+    },
+    "move_organizational_unit": {
+      "params": {
+        "new_parent_dn": {
+          "type": "string"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "new_parent_dn",
+        "ou_dn"
+      ]
+    },
+    "remove_group_member": {
+      "params": {
+        "group_name": {
+          "type": "string"
+        },
+        "member_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name",
+        "member_dn"
+      ]
+    },
+    "reset_computer_password": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "reset_user_password": {
+      "params": {
+        "force_change": {
+          "default": true,
+          "type": "boolean"
+        },
+        "new_password": {
+          "default": null,
+          "nullable": true,
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "test_connection": {
+      "params": {},
+      "required": []
+    }
+  }
+}
