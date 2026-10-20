@@ -20,7 +20,7 @@ uv run python tests/manual/http_server_smoke.py
 uv run python tests/manual/http_server_smoke.py http://your-server:8813/activedirectory-mcp
 ```
 
-Note: the script predates the Phase 3 `/health` route and the Phase 4 HTTP authentication, so it is a manual smoke aid only and may need updating once those land.
+Note: the server now also exposes an unauthenticated `GET /health` liveness route. This script still targets the MCP `health` tool and is unaffected by it. It predates the Phase 4 HTTP authentication, so it is a manual smoke aid only and may need updating once that lands.
 
 ## real_ad_smoke.py
 

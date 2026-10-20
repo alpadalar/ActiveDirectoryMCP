@@ -147,10 +147,13 @@ python -m active_directory_mcp.server_http --host 0.0.0.0 --port 8813 --path /ac
 ### HTTP API ile Test
 
 ```bash
-# Sağlık kontrolü
-curl -X POST "http://localhost:8813/activedirectory-mcp" \
-  -H "Content-Type: application/json" \
-  -d '{"method": "health", "params": {}}'
+# Sağlık kontrolü (kimlik doğrulaması olmayan canlılık kontrolü; LDAP sorgusu yapmaz,
+# yalnızca {"status", "server", "version"} döner)
+curl -sf http://localhost:8813/health
+
+# LDAP durumunu içeren kontrol için MCP endpoint'i üzerinden `health` MCP tool'unu
+# bir MCP istemcisiyle çağırın. Tool'lar tek bir yerde (registry.py) tanımlanır,
+# açıklamalar tools/definitions.py içindedir.
 
 # Kullanıcıları listele
 curl -X POST "http://localhost:8813/activedirectory-mcp" \
@@ -204,7 +207,7 @@ services:
       - HTTP_PATH=/activedirectory-mcp
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-s", "-f", "http://localhost:8813/activedirectory-mcp"]
+      test: ["CMD", "curl", "-s", "-f", "http://localhost:8813/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -490,10 +490,13 @@ uv run python tests/manual/real_ad_smoke.py
 
 ### Test HTTP API
 ```bash
-# Health check
-curl -X POST "http://localhost:8813/activedirectory-mcp" \
-  -H "Content-Type: application/json" \
-  -d '{"method": "health", "params": {}}'
+# Liveness check (unauthenticated GET /health; returns {"status", "server", "version"},
+# performs no LDAP probe and discloses no hostnames or credentials)
+curl -sf http://localhost:8813/health
+
+# LDAP-aware status: call the `health` MCP tool through the MCP endpoint with an MCP client.
+# Tools are declared once in src/active_directory_mcp/registry.py (descriptions live in
+# src/active_directory_mcp/tools/definitions.py) and served by both transports.
 
 # List users
 curl -X POST "http://localhost:8813/activedirectory-mcp" \
