@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Release workflow: the pyproject version check also covers non-dry-run dispatches, the
+  tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
+  and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.
 - `get_ou_statistics` reports real counts (`total_objects`, `users`, `groups`, `computers`,
   `sub_ous`) taken from the `get_ou_contents` payload instead of always returning zeros, and
   passes through `truncated` / `result_limit`.

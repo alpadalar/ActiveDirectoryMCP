@@ -6,6 +6,7 @@ file never contains a contiguous marker and passes its own scan.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -65,6 +66,8 @@ def test_workflow_has_permissions_and_job_timeouts(name):
     wf = _load(name)
     assert "permissions" in wf, f"{name}: top-level permissions missing"
     for job_name, job in wf["jobs"].items():
+        if "uses" in job:  # reusable-workflow call: the timeout lives in the called workflow
+            continue
         assert "timeout-minutes" in job, f"{name}: job {job_name} has no timeout-minutes"
 
 
@@ -126,10 +129,68 @@ def test_release_triggers_and_permissions():
     assert any(j.get("permissions", {}).get("packages") == "write" for j in wf["jobs"].values())
 
 
+def _release_steps() -> list[dict[str, Any]]:
+    return [s for _, s in _steps(_load("release.yml"))]
+
+
+def _step_named(fragment: str) -> dict[str, Any]:
+    matches = [s for s in _release_steps() if fragment in str(s.get("name", ""))]
+    assert len(matches) == 1, f"expected one release step named like {fragment!r}"
+    return matches[0]
+
+
 def test_release_metadata_cannot_roll_back_latest_or_emit_branch_tags():
     text = _text("release.yml")
-    assert "latest=${{ github.event_name == 'push' && 'auto' || 'false' }}" in text
+    assert "flavor: latest=false" in text
     assert "{{branch}}" not in text
+    meta = _step_named("Image metadata")
+    tags = meta["with"]["tags"]
+    assert "type=raw,value=latest,enable=${{ steps.latest.outputs.is_latest == 'true' }}" in tags
+    highest = _step_named("highest release")
+    assert highest["id"] == "latest"
+    assert "sort -V" in highest["run"] and "tail -n 1" in highest["run"]
+    assert 'GITHUB_REF_TYPE}" = "tag"' in highest["run"]
+
+
+def test_release_version_check_covers_push_and_non_dry_run_dispatch():
+    step = _step_named("Verify tag matches pyproject version")
+    cond = step["if"]
+    assert "github.event_name == 'push'" in cond and "inputs.dry_run == false" in cond
+    assert "GITHUB_REF_NAME" in step["run"] and "pyproject.toml" in step["run"]
+    assert "exit 1" in step["run"]
+
+
+def test_release_requires_tagged_commit_on_main_with_full_history():
+    wf = _load("release.yml")
+    job = wf["jobs"]["build-and-push"]
+    checkout = [s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout")]
+    assert checkout and checkout[0]["with"]["fetch-depth"] == 0
+    step = _step_named("Require the tagged commit to be on main")
+    assert "merge-base --is-ancestor" in step["run"] and "origin/main" in step["run"]
+    assert "github.event_name == 'push'" in step["if"] and "inputs.dry_run == false" in step["if"]
+
+
+def test_release_publish_job_needs_reused_test_and_lint_workflows():
+    wf = _load("release.yml")
+    jobs = wf["jobs"]
+    called = {
+        name: job["uses"] for name, job in jobs.items() if str(job.get("uses", "")).startswith("./")
+    }
+    assert "./.github/workflows/test.yml" in called.values()
+    assert "./.github/workflows/lint.yml" in called.values()
+    needs = jobs["build-and-push"]["needs"]
+    needs = [needs] if isinstance(needs, str) else needs
+    assert set(called) <= set(needs), "build-and-push must need every reused gate job"
+    for name in ("test.yml", "lint.yml"):
+        assert "workflow_call" in _triggers(_load(name)), f"{name} must be reusable"
+
+
+def test_release_never_publishes_without_gate_conditions():
+    build = _step_named("Build and push")
+    push = build["with"]["push"]
+    assert "github.event_name == 'push'" in push and "inputs.dry_run == false" in push
+    login = _step_named("Log in to GHCR")
+    assert "github.event_name == 'push'" in login["if"] and "inputs.dry_run == false" in login["if"]
 
 
 def test_release_image_is_lowercase_ghcr_and_multiarch():
@@ -176,6 +237,12 @@ def test_test_workflow_matrix_and_locked_sync():
     versions = wf["jobs"]["test"]["strategy"]["matrix"]["python-version"]
     assert [str(v) for v in versions] == ["3.11", "3.12", "3.13"]
     assert "uv sync --locked" in _text("test.yml")
+
+
+def test_test_job_checks_out_full_history_for_hygiene_tests():
+    steps = _load("test.yml")["jobs"]["test"]["steps"]
+    checkout = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")]
+    assert checkout and checkout[0].get("with", {}).get("fetch-depth") == 0
 
 
 def test_lint_workflow_runs_ruff_and_mypy():
@@ -270,6 +337,17 @@ def _allowlisted_shas() -> set[str]:
     not (ROOT / ".git").exists() or shutil.which("git") is None, reason="no git history"
 )
 def test_no_attribution_markers_in_commit_messages():
+    shallow = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if shallow == "true":
+        # A shallow clone would silently scan only part of the history.
+        if os.environ.get("CI"):
+            pytest.fail("shallow checkout in CI: use fetch-depth: 0 so all commits are scanned")
+        pytest.skip("shallow clone: commit history is incomplete")
     out = subprocess.run(
         ["git", "-C", str(ROOT), "log", "--format=%H%x00%B%x01"],
         capture_output=True,

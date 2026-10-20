@@ -1,7 +1,9 @@
 name: Release
 
 # Publishes to GHCR only on a v* tag push or a non-dry-run dispatch from a tag.
-# Never triggered by PR events.
+# Never triggered by PR events. Publishing needs the reused test and lint workflows to pass,
+# the tag to match pyproject, the tagged commit to be on origin/main, and :latest only moves
+# when the tag is the highest stable v* semver tag.
 on:
   push:
     tags: ["v*"]
@@ -16,14 +18,24 @@ permissions:
   contents: read
 
 jobs:
+  tests:
+    uses: ./.github/workflows/test.yml
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   build-and-push:
+    needs: [tests, lint]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       packages: write
     steps:
+      # Full history and tags: the main-ancestry and highest-tag checks need them.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Refuse non-dry-run dispatch from a non-tag ref
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false && github.ref_type != 'tag'
@@ -32,13 +44,36 @@ jobs:
           exit 1
 
       - name: Verify tag matches pyproject version
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.dry_run == false
         run: |
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
           if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match pyproject version v${VERSION}"
             exit 1
           fi
+
+      - name: Require the tagged commit to be on main
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::${GITHUB_SHA} is not an ancestor of origin/main; refusing to publish"
+            exit 1
+          fi
+
+      # :latest only moves when this tag is the highest stable vX.Y.Z tag, so re-running or
+      # dispatching an older tag can never move it backwards.
+      - name: Decide whether this tag is the highest release
+        id: latest
+        run: |
+          is_latest=false
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            highest=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+            if [ "${GITHUB_REF_NAME}" = "${highest}" ]; then
+              is_latest=true
+            fi
+          fi
+          echo "is_latest=${is_latest}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
@@ -54,8 +89,8 @@ jobs:
 
       # Image name is a lowercase literal: the repo name has capitals and
       # registries reject them. No branch-based tag type: on tag pushes it
-      # yields an invalid "-<sha>" tag. :latest only moves on tag pushes, so a
-      # dispatch can never roll it back.
+      # yields an invalid "-<sha>" tag. :latest comes only from the explicit raw tag below,
+      # gated on the highest-tag step (flavor latest=false disables the automatic one).
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -65,7 +100,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
-          flavor: latest=${{ github.event_name == 'push' && 'auto' || 'false' }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.is_latest == 'true' }}
+          flavor: latest=false
 
       - name: Build and push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
