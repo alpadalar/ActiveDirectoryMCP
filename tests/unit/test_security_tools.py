@@ -595,3 +595,22 @@ def test_security_module_has_no_private_filetime_converter():
     assert "def _convert_datetime_to_filetime" not in src
     assert "datetime(1601" not in src
     assert "except:" not in src.replace("except Exception", "")
+
+
+def test_get_user_permissions_logs_skipped_group(security_tools, mock_ldap_manager, caplog):
+    user_dn = f"CN=Alice,CN=Users,{BASE}"
+    bad_dn = f"CN=Broken,CN=Users,{BASE}"
+    user = ldap_entry(
+        user_dn, sAMAccountName="alice", memberOf=[bad_dn], userAccountControl=512
+    )
+
+    def search(search_base=None, **_kw):
+        if search_base == bad_dn:
+            raise RuntimeError("group lookup failed")
+        return [user]
+
+    mock_ldap_manager.search.side_effect = search
+    with caplog.at_level("WARNING"):
+        data = parse_response(security_tools.get_user_permissions("alice"))
+    assert data["privileged_groups_count"] == 0
+    assert any(bad_dn in r.getMessage() for r in caplog.records)

@@ -392,3 +392,66 @@ def test_get_ou_reports_error_when_counts_fail(ou_tools, mock_ldap_manager):
     data = parse_response(ou_tools.get_ou(OU))
     assert data["success"] is False
     assert "computed" not in data
+
+
+# ------------------------------------------------- config/validator hardening
+
+OUTSIDE = "OU=X,DC=evil,DC=com"
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda t: t.list_ous(parent_ou=OUTSIDE),
+        lambda t: t.list_ous(filter_criteria="(name=a*"),
+        lambda t: t.list_ous(filter_criteria=")(objectClass=*"),
+        lambda t: t.get_ou(OUTSIDE),
+        lambda t: t.create_ou("Sales", parent_ou=OUTSIDE),
+        lambda t: t.modify_ou(OUTSIDE, {"description": "x"}),
+        lambda t: t.delete_ou(OUTSIDE),
+        lambda t: t.delete_ou(OUTSIDE, force=True),
+        lambda t: t.move_ou(OUTSIDE, "DC=test,DC=local"),
+        lambda t: t.move_ou(OU, OUTSIDE),
+        lambda t: t.get_ou_contents(OUTSIDE),
+    ],
+    ids=[
+        "list-parent", "list-unbalanced", "list-breakout", "get", "create-parent", "modify",
+        "delete", "delete-force", "move-src", "move-dest", "contents",
+    ],
+)
+def test_ou_tools_reject_unconfined_or_hostile_input_without_ldap(
+    ou_tools, mock_ldap_manager, call
+):
+    data = parse_response(call(ou_tools))
+    assert data["success"] is False
+    for name in ("search", "add", "modify", "delete", "move"):
+        getattr(mock_ldap_manager, name).assert_not_called()
+
+
+def test_outside_base_error_text_differs_from_invalid_dn(ou_tools):
+    outside = parse_response(ou_tools.get_ou(OUTSIDE))
+    malformed = parse_response(ou_tools.get_ou("not a dn"))
+    assert "outside" in outside["error"]
+    assert "Invalid DN" in malformed["error"]
+    assert "outside" not in malformed["error"]
+
+
+def test_create_ou_escapes_name_rdn(ou_tools, mock_ldap_manager):
+    data = parse_response(ou_tools.create_ou("Sales,OU=Admins"))
+    assert data["success"] is True
+    dn = mock_ldap_manager.add.call_args.args[0]
+    assert dn.startswith("OU=Sales\\,OU\\=Admins,")
+    assert dn.endswith("DC=test,DC=local")
+
+
+def test_get_ou_contents_computer_branch_uses_configured_class(
+    ou_tools, mock_ldap_manager, ad_settings
+):
+    ad_settings.computer_object_class = "device"
+    ou_tools.get_ou_contents(OU, ["computer"])
+    assert mock_ldap_manager.search.call_args.kwargs["search_filter"] == "(|(objectClass=device))"
+
+
+def test_ou_level_and_gplink_fallbacks_are_preserved(ou_tools):
+    assert ou_tools._calculate_ou_level(None, "DC=test,DC=local") == 0
+    assert ou_tools._parse_gp_link(None) == []

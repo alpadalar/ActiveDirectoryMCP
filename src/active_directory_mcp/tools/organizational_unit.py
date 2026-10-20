@@ -1,17 +1,33 @@
 """Organizational Unit management tools for Active Directory."""
 
+import logging
 from typing import List, Dict, Any, Optional
 
 import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE, SUBTREE, BASE
 
 from .base import BaseTool
+from .. import validation
+from ..validation import ValidationError
 from ..core.logging import log_ldap_operation
+
+logger = logging.getLogger("active-directory-mcp.OrganizationalUnitTools")
 
 
 class OrganizationalUnitTools(BaseTool):
     """Tools for managing Active Directory Organizational Units."""
     
+    def _dn_error(self, operation: str, exc: ValidationError, **dns: str) -> List[Dict[str, Any]]:
+        """Structured rejection for a DN that is malformed or outside base_dn (no LDAP call made)."""
+        reason = str(exc)
+        if "outside the configured base DN" in reason:
+            error = "DN is outside the configured base DN"
+        else:
+            error = f"Invalid DN format: {reason}"
+        payload: Dict[str, Any] = {"success": False, "error": error}
+        payload.update(dns)
+        return self._format_response(payload, operation)
+
     def list_ous(self, parent_ou: Optional[str] = None, filter_criteria: Optional[str] = None,
                 attributes: Optional[List[str]] = None, recursive: bool = True) -> List[Dict[str, Any]]:
         """
@@ -26,19 +42,16 @@ class OrganizationalUnitTools(BaseTool):
         Returns:
             List of MCP content objects with OU information
         """
+        search_base = parent_ou or self.ldap.ad_config.base_dn
         try:
-            # Determine search base
+            # Determine search base (confined to base_dn)
             if parent_ou:
-                search_base = parent_ou
-            else:
-                search_base = self.ldap.ad_config.base_dn
-            
-            # Build search filter
-            base_filter = "(objectClass=organizationalUnit)"
-            if filter_criteria:
-                search_filter = f"(&{base_filter}{filter_criteria})"
-            else:
-                search_filter = base_filter
+                search_base = self._confined_dn(parent_ou)
+
+            # Build search filter (filter_criteria validated before any LDAP call)
+            search_filter = validation.combine_filters(
+                "(objectClass=organizationalUnit)", filter_criteria or None
+            )
             
             # Determine search scope
             search_scope = ldap3.SUBTREE if recursive else 1  # 1 = ONELEVEL equivalent
@@ -106,6 +119,8 @@ class OrganizationalUnitTools(BaseTool):
             
             return self._format_response(response_data, "list_ous")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "list_ous", search_base)
         except Exception as e:
             return self._handle_ldap_error(e, "list_ous", search_base)
     
@@ -121,13 +136,11 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with OU information
         """
         try:
-            # Validate DN
-            if not self._validate_dn(ou_dn):
-                return self._format_response({
-                    "success": False,
-                    "error": f"Invalid DN format: {ou_dn}",
-                    "ou_dn": ou_dn
-                }, "get_ou")
+            # Validate DN (well formed and confined to base_dn) before any LDAP call
+            try:
+                ou_dn = self._confined_dn(ou_dn)
+            except ValidationError as exc:
+                return self._dn_error("get_ou", exc, ou_dn=ou_dn)
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -200,8 +213,8 @@ class OrganizationalUnitTools(BaseTool):
             if parent_ou is None:
                 parent_ou = self.ldap.ad_config.base_dn
             
-            # Build DN
-            ou_dn = f"OU={name},{parent_ou}"
+            # Build DN (escaped RDN value, parent confined to base_dn)
+            ou_dn = validation.build_dn("OU", name, parent_ou, self.ldap.ad_config.base_dn)
             
             # Check if OU already exists
             existing_ou = self.ldap.search(
@@ -256,6 +269,8 @@ class OrganizationalUnitTools(BaseTool):
             else:
                 raise Exception("Failed to create OU")
             
+        except ValidationError as e:
+            return self._validation_error_response(e, "create_ou", parent_ou or "")
         except Exception as e:
             return self._handle_ldap_error(e, "create_ou", ou_dn if 'ou_dn' in locals() else name)
     
@@ -271,13 +286,11 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with modification result
         """
         try:
-            # Validate DN
-            if not self._validate_dn(ou_dn):
-                return self._format_response({
-                    "success": False,
-                    "error": f"Invalid DN format: {ou_dn}",
-                    "ou_dn": ou_dn
-                }, "modify_ou")
+            # Validate DN (well formed and confined to base_dn) before any LDAP call
+            try:
+                ou_dn = self._confined_dn(ou_dn)
+            except ValidationError as exc:
+                return self._dn_error("modify_ou", exc, ou_dn=ou_dn)
             
             # Check if OU exists
             existing_ou = self.ldap.search(
@@ -335,13 +348,11 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with deletion result
         """
         try:
-            # Validate DN
-            if not self._validate_dn(ou_dn):
-                return self._format_response({
-                    "success": False,
-                    "error": f"Invalid DN format: {ou_dn}",
-                    "ou_dn": ou_dn
-                }, "delete_ou")
+            # Validate DN (well formed and confined to base_dn) before any LDAP call
+            try:
+                ou_dn = self._confined_dn(ou_dn)
+            except ValidationError as exc:
+                return self._dn_error("delete_ou", exc, ou_dn=ou_dn)
             
             # Check if OU exists
             existing_ou = self.ldap.search(
@@ -406,14 +417,12 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with result
         """
         try:
-            # Validate DNs
-            if not self._validate_dn(ou_dn) or not self._validate_dn(new_parent_dn):
-                return self._format_response({
-                    "success": False,
-                    "error": "Invalid DN format",
-                    "ou_dn": ou_dn,
-                    "new_parent_dn": new_parent_dn
-                }, "move_ou")
+            # Validate DNs (well formed and confined to base_dn) before any LDAP call
+            try:
+                ou_dn = self._confined_dn(ou_dn)
+                new_parent_dn = self._confined_dn(new_parent_dn)
+            except ValidationError as exc:
+                return self._dn_error("move_ou", exc, ou_dn=ou_dn, new_parent_dn=new_parent_dn)
             
             # Check if OU exists
             existing_ou = self.ldap.search(
@@ -483,13 +492,11 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with OU contents
         """
         try:
-            # Validate DN
-            if not self._validate_dn(ou_dn):
-                return self._format_response({
-                    "success": False,
-                    "error": f"Invalid DN format: {ou_dn}",
-                    "ou_dn": ou_dn
-                }, "get_ou_contents")
+            # Validate DN (well formed and confined to base_dn) before any LDAP call
+            try:
+                ou_dn = self._confined_dn(ou_dn)
+            except ValidationError as exc:
+                return self._dn_error("get_ou_contents", exc, ou_dn=ou_dn)
             
             # Default object types
             if object_types is None:
@@ -585,7 +592,8 @@ class OrganizationalUnitTools(BaseTool):
                     return 0
                 return len([part for part in relative_dn.split(',') if part.strip().startswith('OU=')])
             return 0
-        except:
+        except (AttributeError, TypeError, ValueError) as exc:
+            logger.debug("Could not calculate OU level for %r: %s", ou_dn, exc)
             return 0
     
     def _count_child_objects(self, ou_dn: str) -> int:
@@ -634,7 +642,8 @@ class OrganizationalUnitTools(BaseTool):
                     })
             
             return gpos
-        except:
+        except (AttributeError, TypeError, ValueError, IndexError) as exc:
+            logger.warning("Could not parse gPLink value: %s", exc)
             return []
     
     def _delete_ou_contents(self, ou_dn: str) -> None:

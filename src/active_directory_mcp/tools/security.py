@@ -205,8 +205,11 @@ class SecurityTools(BaseTool):
 
                         group_analysis.append(group_entry)
 
-                except Exception:
-                    # Skip groups that can't be analyzed
+                except Exception as group_exc:
+                    # Skip groups that can't be analyzed, but leave a trace
+                    self.logger.warning(
+                        f"Skipping group {group_dn} while analyzing {username}: {group_exc}"
+                    )
                     continue
 
             # Check account status
