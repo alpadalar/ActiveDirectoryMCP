@@ -498,6 +498,9 @@ Write access and the HTTP transport are locked down by default. Example (placeho
   (timestamp, tool, risk, target, outcome, redacted arguments; no passwords) to an
   append-only file created with mode `0600`. The server refuses to start if the path
   cannot be opened, and logs a warning when `allow_writes` is true without a path.
+  Destructive calls also write an `intent` record first; HTTP calls add an `actor`.
+- `audit_fail_closed` (default `false`, needs `audit_log_path`) refuses write and destructive
+  calls when the audit record cannot be written, instead of running them unaudited.
 - Generate and hash an HTTP API key:
 
 ```bash

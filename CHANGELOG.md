@@ -177,6 +177,31 @@ and enforced by the golden snapshots in `tests/golden/`.
   original 42 entries are byte-identical (enforced by a fingerprint test,
   `tests/unit/test_golden_additive.py`); the only altered existing line is `tool_count`.
 
+### Fixed (Phase 4.1 review)
+
+- Audit file: opened with `O_NOFOLLOW`, must be a regular file owned by the server user, and
+  an existing looser mode is tightened to `0600`. The path is re-checked on every record, so
+  rotation by rename or deletion no longer sends records to an orphaned file; destructive
+  records are fsynced. `AuditLogger.failed_writes` counts failed writes.
+- Destructive calls now write an `intent` record before the action and an outcome record
+  after it; interrupts (`KeyboardInterrupt`, cancellation) are recorded as `error`. Results
+  that cannot be read are recorded as `unknown` instead of `success`. HTTP calls add an
+  `actor` (key id = first 8 hex of the key digest, client address, request id). Target values
+  must be strings and are truncated to 512 characters.
+- New option `security.audit_fail_closed` (default `false`, requires `audit_log_path`):
+  refuse write and destructive calls with `audit_unavailable` when the intent record cannot
+  be written.
+- `get_nested_group_members`: accepts group names containing `(`, `)`, `*` and `\` (they are
+  escaped, not rejected); errors on an ambiguous group name; the chain query has a 30 s server
+  time limit and a hard 10000-entry ceiling that also applies when `max_list_results` is `0`.
+  Members whose primary group is the target (for example Domain Users) are not returned by
+  the chain rule, and results past the cap are an arbitrary subset (`truncated` is set).
+- `get_tls_posture`: connection failures return the fixed code `connect_failed` and a
+  `connection_failed` finding instead of raw exception text; the probe makes one bind attempt
+  and flags SSLv3, TLS 1.0 and TLS 1.1 as `weak_tls_version`.
+- `get_schema_info` reports the directory tools; `get_rootdse_info` matches attribute names
+  case-insensitively. Tool names, parameters and golden snapshots are unchanged.
+
 ### Added
 
 - Unit test suite under `tests/unit` (mocked LDAP, no directory server needed).
