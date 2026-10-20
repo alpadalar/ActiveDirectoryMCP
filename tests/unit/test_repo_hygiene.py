@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -461,8 +462,15 @@ EXAMPLES = sorted(
 ) if (REPO_ROOT / "ad-config").is_dir() else []
 
 _PASSWORD_KEYS = {"password", "bind_password", "client_secret", "api_key"}
-_ALLOWED_HOSTS = ("example.com", ".example", "localhost", "test.local", "yourdomain.com",
+_ALLOWED_HOSTS = ("example.com", "example", "localhost", "test.local", "yourdomain.com",
                   "domain.com", "192.168.1.100")
+
+
+def _host_allowed(host: str) -> bool:
+    """Exact host or a true subdomain: ``mydomain.com`` must not pass for ``domain.com``."""
+    return host.startswith("your-") or any(
+        host == allowed or host.endswith("." + allowed) for allowed in _ALLOWED_HOSTS
+    )
 
 
 def _walk(node, path=""):
@@ -480,21 +488,17 @@ def _walk(node, path=""):
 def test_example_configs_are_placeholder_only(example, monkeypatch):
     data = json.loads(example.read_text(encoding="utf-8"))
     for where, value in _walk(data):
-        assert value in (None, "") or str(value).startswith("${"), where
+        assert value in (None, "") or re.fullmatch(r"\$\{[A-Z_][A-Z0-9_]*\}", str(value)), where
     ad = data["active_directory"]
     for server in [ad["server"], *ad.get("server_pool", [])]:
         host = server.split("://", 1)[-1].split(":")[0]
-        assert host.endswith(_ALLOWED_HOSTS) or host == "localhost" or host.startswith(
-            "your-"
-        ), server
+        assert _host_allowed(host), server
     from active_directory_mcp.config.models import Config
 
     assert Config(**data)
 
 
 def test_env_and_compose_files_hold_no_literal_credentials():
-    import re
-
     pattern = re.compile(
         r"^\s*-?\s*(AD_PASSWORD|LDAP_ADMIN_PASSWORD|LDAP_CONFIG_PASSWORD|AZURE_CLIENT_SECRET)"
         r"\s*[=:]\s*(?P<value>\S*)",
@@ -603,3 +607,13 @@ def test_lab_ldif_holds_no_password_material():
         for line in path.read_text(encoding="utf-8").splitlines():
             assert not line.lower().startswith("userpassword"), path.name
             assert list(mod.scan_line(rules, f"ldap-init/{path.name}", line)) == []
+
+
+@pytest.mark.parametrize("host", ["mydomain.com", "notexample.com", "evil-example.com"])
+def test_example_host_check_rejects_lookalike_registrable_domains(host):
+    assert not _host_allowed(host)
+
+
+@pytest.mark.parametrize("host", ["dc.example.com", "example.com", "dc1.domain.com", "localhost"])
+def test_example_host_check_accepts_reserved_and_subdomain_hosts(host):
+    assert _host_allowed(host)
