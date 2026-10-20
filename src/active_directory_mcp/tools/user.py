@@ -5,7 +5,8 @@ import json
 import secrets
 import string
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+
+from datetime import datetime
 
 import ldap3
 from ldap3 import MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE
@@ -71,7 +72,7 @@ class UserTools(BaseTool):
                     'sAMAccountName': self._get_attr_value(entry['attributes'], 'sAMAccountName', ''),
                     'displayName': self._get_attr_value(entry['attributes'], 'displayName', ''),
                     'mail': self._get_attr_value(entry['attributes'], 'mail', ''),
-                    'enabled': self._is_user_enabled(self._get_attr_value(entry['attributes'], 'userAccountControl', 0))
+                    'enabled': self._is_user_enabled(self._get_attr_value(entry['attributes'], 'userAccountControl'))
                 }
 
                 # Add additional attributes if present
@@ -150,7 +151,8 @@ class UserTools(BaseTool):
             }
 
             # Add computed fields
-            uac = self._get_attr_value(user_entry['attributes'], 'userAccountControl')
+            user_attrs = user_entry['attributes']
+            uac = self._get_attr_value(user_attrs, 'userAccountControl')
             user_info['computed'] = {
                 'enabled': self._is_user_enabled(uac),
                 'locked': self._is_user_locked(uac),
@@ -632,22 +634,16 @@ class UserTools(BaseTool):
     def _is_password_expired(self, attributes: Dict[str, Any]) -> bool:
         """Check if user password is expired."""
         pwd_last_set = self._get_attr_value(attributes, 'pwdLastSet', 0)
-        return pwd_last_set == 0
+        # pwdLastSet == 0 means "must change at next logon"; ldap3 reports it as a
+        # year-1601 datetime when schema info is loaded, as 0/'0' otherwise.
+        if isinstance(pwd_last_set, datetime):
+            return pwd_last_set.year <= 1601
+        return self._to_int(pwd_last_set, 0) == 0
 
     def _is_account_expired(self, attributes: Dict[str, Any]) -> bool:
-        """Check if user account is expired."""
-        account_expires = self._get_attr_value(attributes, 'accountExpires', 0)
-        if account_expires == 0 or account_expires == 9223372036854775807:  # Never expires
-            return False
+        """Check if user account is expired (False when unset, "never" or unparseable)."""
+        return self._is_past(self._get_attr_value(attributes, 'accountExpires'))
 
-        # Convert Windows timestamp to datetime
-        try:
-            expire_date = datetime(1601, 1, 1) + timedelta(microseconds=account_expires / 10)
-            return expire_date < datetime.now()
-        except:
-            return False
-
-    
     def get_schema_info(self) -> Dict[str, Any]:
         """Get schema information for user operations."""
         return {
