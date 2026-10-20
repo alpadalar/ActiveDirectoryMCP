@@ -209,3 +209,112 @@ def test_stdio_handler_exception_returns_error_json() -> None:
         )
         result = asyncio.run(handler(req))
         assert json.loads(result.root.content[0].text) == {"error": "kaboom"}
+
+
+# ------------------------------------------------------------ SEC-02 wiring
+
+
+def test_http_server_without_credential_fails_before_ldap() -> None:
+    import os
+
+    from active_directory_mcp.auth import HTTPAuthConfigError
+
+    with _offline_env(HTTP_MOD):
+        os.environ.pop("AD_MCP_HTTP_API_KEY", None)
+        with patch(f"{HTTP_MOD}.LDAPManager") as manager:
+            with pytest.raises(HTTPAuthConfigError):
+                _http_server()
+            manager.assert_not_called()
+
+
+def test_http_server_with_key_rejects_unauthenticated_mcp_request() -> None:
+    from starlette.testclient import TestClient
+
+    with _offline_env(HTTP_MOD):
+        server = _http_server()
+        app = server.build_app()
+        with TestClient(app) as client:
+            resp = client.post(server.path, json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+            assert resp.status_code == 401
+            assert client.get("/health").status_code == 200
+
+
+def test_http_server_auth_opt_out_serves_unauthenticated(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+    import os
+
+    from starlette.testclient import TestClient
+
+    import active_directory_mcp.server_http as mod
+
+    real_load = mod.load_config
+
+    def load(path: Optional[str] = None) -> Any:
+        config = real_load(path)
+        config.security.http_auth.required = False
+        return config
+
+    caplog.set_level(logging.WARNING)
+    with _offline_env(HTTP_MOD):
+        os.environ.pop("AD_MCP_HTTP_API_KEY", None)
+        with patch.object(mod, "load_config", load):
+            server = _http_server()
+        assert "DISABLED" in caplog.text
+        with TestClient(server.build_app()) as client:
+            assert client.get("/health").status_code == 200
+            assert client.post(server.path, json={}).status_code != 401
+
+
+def _call(server: Any, name: str, args: dict) -> dict:
+    import fastmcp
+
+    async def go() -> dict:
+        async with fastmcp.Client(server.mcp) as client:
+            result = await client.call_tool(name, args, raise_on_error=False)
+            return json.loads(result.content[0].text)
+
+    return asyncio.run(go())
+
+
+CREATE_ARGS = {
+    "username": "u1",
+    "password": "Str0ng-Passw0rd!x",
+    "first_name": "A",
+    "last_name": "B",
+}
+
+
+def test_http_default_policy_blocks_writes_and_allow_writes_passes() -> None:
+    import active_directory_mcp.server_http as mod
+
+    with _offline_env(HTTP_MOD):
+        server = _http_server()
+        assert _call(server, "create_user", CREATE_ARGS)["error_code"] == "write_blocked"
+
+    real_load = mod.load_config
+
+    def load(path: Optional[str] = None) -> Any:
+        config = real_load(path)
+        config.security.allow_writes = True
+        return config
+
+    with _offline_env(HTTP_MOD):
+        with patch.object(mod, "load_config", load):
+            server = _http_server()
+        server.user_tools.create_user = MagicMock(return_value={"success": True})
+        result = _call(server, "create_user", CREATE_ARGS)
+        assert result.get("error_code") != "write_blocked"
+
+
+def test_stdio_server_does_not_import_auth() -> None:
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, active_directory_mcp.server; "
+        "sys.exit(1 if 'active_directory_mcp.auth' in sys.modules else 0)"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], cwd=SRC.parents[1], capture_output=True)
+    assert proc.returncode == 0, proc.stderr.decode()[-500:]

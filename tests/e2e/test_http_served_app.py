@@ -4,7 +4,7 @@ import asyncio
 import json
 import socket
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from unittest.mock import patch
 
 import fastmcp
@@ -26,17 +26,29 @@ INIT_BODY = {
         "clientInfo": {"name": "e2e-probe", "version": "0"},
     },
 }
+CREATE_ARGS = {
+    "username": "carol",
+    "password": "Str0ng-Passw0rd!x",
+    "first_name": "Carol",
+    "last_name": "Test",
+}
 MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
 
 
-def probe_served_app(base_url: str, mcp_path: str) -> Dict[str, Any]:
-    """Observe statuses and headers of /health and an MCP initialize POST."""
+def probe_served_app(
+    base_url: str, mcp_path: str, headers: Optional[Dict[str, str]] = None
+) -> Dict[str, Any]:
+    """Observe statuses and headers of /health (no credentials) and an MCP initialize POST."""
     out: Dict[str, Any] = {}
     health = httpx.get(f"{base_url}/health", timeout=5)
     out["health_status"] = health.status_code
     out["health_headers"] = dict(health.headers)
     with httpx.stream(
-        "POST", f"{base_url}{mcp_path}", json=INIT_BODY, headers=MCP_HEADERS, timeout=5
+        "POST",
+        f"{base_url}{mcp_path}",
+        json=INIT_BODY,
+        headers={**MCP_HEADERS, **(headers or {})},
+        timeout=5,
     ) as resp:
         out["mcp_status"] = resp.status_code
         out["mcp_headers"] = dict(resp.headers)
@@ -48,7 +60,9 @@ def _golden_names() -> set:
 
 
 def _client(served: ServedApp, path: str = "/mcp") -> fastmcp.Client:
-    return fastmcp.Client(StreamableHttpTransport(f"{served.base_url}{path}"))
+    return fastmcp.Client(
+        StreamableHttpTransport(f"{served.base_url}{path}", headers=served.auth_headers)
+    )
 
 
 def test_health_is_unauthenticated_and_leak_free(
@@ -63,11 +77,16 @@ def test_health_is_unauthenticated_and_leak_free(
     for secret in (mock_directory.bind_dn, mock_directory.bind_password, "dc.test.local"):
         assert secret not in resp.text
     assert httpx.head(url, timeout=5).status_code == 200
-    assert httpx.post(url, timeout=5).status_code == 405
+    # POST is not exempt from auth, so it is rejected before routing
+    assert httpx.post(url, timeout=5).status_code == 401
+    posted = httpx.post(url, headers=served_http_server.auth_headers, timeout=5)
+    assert posted.status_code == 405
 
 
 def test_middleware_runs_on_served_http_app(served_http_server: ServedApp) -> None:
-    observed = probe_served_app(served_http_server.base_url, "/mcp")
+    observed = probe_served_app(
+        served_http_server.base_url, "/mcp", served_http_server.auth_headers
+    )
     assert observed["health_status"] == 200
     assert observed["mcp_status"] == 200
     for headers in (observed["health_headers"], observed["mcp_headers"]):
@@ -85,6 +104,56 @@ def test_middleware_runs_on_served_http_app(served_http_server: ServedApp) -> No
         )
         assert resp.headers["x-request-id"] != hostile
         assert len(resp.headers["x-request-id"]) <= 64
+
+
+def _post_init(served: ServedApp, headers: Dict[str, str]) -> httpx.Response:
+    return httpx.post(
+        f"{served.base_url}/mcp",
+        json=INIT_BODY,
+        headers={**MCP_HEADERS, **headers},
+        timeout=5,
+    )
+
+
+def test_unauthenticated_mcp_is_401(served_http_server: ServedApp) -> None:
+    for headers in ({}, {"Authorization": "Bearer wrong-key-" + "x" * 20}):
+        resp = _post_init(served_http_server, headers)
+        assert resp.status_code == 401
+        assert resp.headers["www-authenticate"] == "Bearer"
+        assert resp.headers["x-request-id"]
+        assert served_http_server.api_key not in resp.text
+
+
+def test_x_api_key_header_variant(served_http_server: ServedApp) -> None:
+    resp = _post_init(served_http_server, {"X-API-Key": served_http_server.api_key})
+    assert resp.status_code == 200
+
+
+def test_health_needs_no_credentials_even_with_wrong_key(served_http_server: ServedApp) -> None:
+    url = f"{served_http_server.base_url}/health"
+    assert httpx.get(url, timeout=5).status_code == 200
+    assert httpx.get(url, headers={"X-API-Key": "wrong"}, timeout=5).status_code == 200
+    assert httpx.post(url, timeout=5).status_code == 401
+
+
+def test_write_tool_blocked_by_default(served_http_server: ServedApp) -> None:
+    async def scenario() -> None:
+        async with _client(served_http_server) as client:
+            result = await client.call_tool("create_user", CREATE_ARGS, raise_on_error=False)
+            assert json.loads(result.content[0].text)["error_code"] == "write_blocked"
+
+    asyncio.run(scenario())
+
+
+def test_write_tool_allowed_when_configured(tmp_path: Path, mock_directory: MockDirectory) -> None:
+    with serve_ad_http(tmp_path, mock_directory, allow_writes=True, path="/mcp") as served:
+
+        async def scenario() -> None:
+            async with _client(served) as client:
+                result = await client.call_tool("create_user", CREATE_ARGS, raise_on_error=False)
+                assert "write_blocked" not in result.content[0].text
+
+        asyncio.run(scenario())
 
 
 def test_mcp_client_session_end_to_end(served_http_server: ServedApp) -> None:
@@ -116,7 +185,9 @@ def test_configured_path_is_the_served_path(tmp_path: Path, mock_directory: Mock
                 assert len(await client.list_tools()) == 42
 
         asyncio.run(scenario())
-        default = httpx.get(f"{served.base_url}/activedirectory-mcp", timeout=5)
+        default = httpx.get(
+            f"{served.base_url}/activedirectory-mcp", headers=served.auth_headers, timeout=5
+        )
         assert default.status_code in (404, 405)
 
 

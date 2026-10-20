@@ -13,6 +13,10 @@ services:
       - HTTP_HOST=0.0.0.0
       - HTTP_PORT=8813
       - HTTP_PATH=/activedirectory-mcp
+
+      # Required API key for the HTTP transport (compose refuses to start without it).
+      # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      - AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:?set AD_MCP_HTTP_API_KEY (see README)}
       
       # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
       # - AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/

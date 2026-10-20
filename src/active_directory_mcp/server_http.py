@@ -23,7 +23,9 @@ from .tools.group import GroupTools
 from .tools.computer import ComputerTools
 from .tools.organizational_unit import OrganizationalUnitTools
 from .tools.security import SecurityTools
+from .auth import resolve_auth
 from .http_app import build_http_app
+from .policy import ToolPolicy
 from .registry import FastMCPToolSink, ToolContext, register_tools
 
 
@@ -65,6 +67,8 @@ class ActiveDirectoryMCPHTTPServer:
     - HTTP transport via FastMCP
     - All Active Directory management operations
     - Health checks and monitoring
+    - API-key authentication (required by default; /health is exempt)
+    - Read-only-by-default tool policy
     """
     
     def __init__(self, 
@@ -84,6 +88,9 @@ class ActiveDirectoryMCPHTTPServer:
         # Load and validate configuration
         self.config = load_config(config_path)
         validate_config(self.config)
+
+        # Fail fast (before any LDAP connection) when no credential is configured.
+        self._verifier = resolve_auth(self.config.security, os.environ)
         
         # Setup logging
         self.logger = setup_logging(self.config.logging)
@@ -123,6 +130,7 @@ class ActiveDirectoryMCPHTTPServer:
             ldap_manager=self.ldap_manager,
             server_name="ActiveDirectoryMCP-HTTP",
             endpoint=f"http://{host}:{port}{path}",
+            policy=ToolPolicy.from_security(self.config.security),
         )
         register_tools(ctx, FastMCPToolSink(self.mcp))
         self._uvicorn_server: Optional[uvicorn.Server] = None
@@ -143,7 +151,14 @@ class ActiveDirectoryMCPHTTPServer:
 
     def build_app(self) -> Any:
         """Build the ASGI app to serve (the only place the served app is created)."""
-        return build_http_app(self.mcp, path=self.path)
+        return build_http_app(
+            self.mcp,
+            path=self.path,
+            auth=self._verifier,
+            allow_unauthenticated=(
+                self._verifier is None and not self.config.security.http_auth.required
+            ),
+        )
 
     async def serve(self, sockets: Optional[List[socket.socket]] = None) -> None:
         """Serve the app from :meth:`build_app` with uvicorn until it exits.

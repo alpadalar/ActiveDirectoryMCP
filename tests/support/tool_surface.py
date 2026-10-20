@@ -131,7 +131,11 @@ def _offline_env(module: str) -> Iterator[None]:
         }
         path = Path(tmp) / "config.json"
         path.write_text(json.dumps(config), encoding="utf-8")
-        env = {"AD_MCP_CONFIG": str(path), "AD_PASSWORD": "dummy-password"}
+        env = {
+            "AD_MCP_CONFIG": str(path),
+            "AD_PASSWORD": "dummy-password",
+            "AD_MCP_HTTP_API_KEY": "offline-surface-key-0123456789abcdef",
+        }
         manager = MagicMock()
         manager.test_connection.return_value = {"connected": False}
         with patch.dict(os.environ, env), patch(f"{module}.LDAPManager", return_value=manager):

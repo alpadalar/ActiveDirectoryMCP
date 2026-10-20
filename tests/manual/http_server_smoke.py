@@ -7,13 +7,14 @@ via HTTP transport and tests various operations.
 
 Usage: uv run python tests/manual/http_server_smoke.py [URL]
 
-Manual smoke aid only (not collected by pytest). It predates the Phase 3
-/health route and the Phase 4 HTTP authentication, so parts of it may need
-updating once those land.
+Manual smoke aid only (not collected by pytest). The HTTP transport
+requires an API key: export AD_MCP_HTTP_API_KEY with the server's key before
+running. /health is unauthenticated.
 """
 
 import requests
 import json
+import os
 import sys
 import time
 from typing import Dict, Any, Optional
@@ -35,6 +36,9 @@ class ActiveDirectoryMCPClient:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         })
+        api_key = os.environ.get('AD_MCP_HTTP_API_KEY')
+        if api_key:
+            self.session.headers['Authorization'] = f'Bearer {api_key}'
     
     def call_tool(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -196,6 +200,9 @@ def check_server_availability(client: ActiveDirectoryMCPClient) -> bool:
 
 def main():
     """Main test function."""
+    if not os.environ.get('AD_MCP_HTTP_API_KEY'):
+        print("SKIP: set AD_MCP_HTTP_API_KEY to the server's API key (MCP calls require it).")
+        return
     print("🔧 ActiveDirectoryMCP HTTP Server Test Script")
     print("=" * 60)
     

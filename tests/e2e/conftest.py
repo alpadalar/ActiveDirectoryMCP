@@ -6,7 +6,9 @@ real ``ActiveDirectoryMCPHTTPServer`` and the negative-control app.
 """
 
 import asyncio
+import json
 import os
+import secrets
 import socket
 import threading
 import time
@@ -33,6 +35,11 @@ class ServedApp:
     stop: Callable[[], None]
     server: Any = None
     extra: dict = field(default_factory=dict)
+    api_key: str = ""
+
+    @property
+    def auth_headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.api_key}"}
 
     @property
     def base_url(self) -> str:
@@ -103,14 +110,28 @@ def serve_bare_app(app: Any) -> Iterator[ServedApp]:
 
 @contextmanager
 def serve_ad_http(
-    tmp_path: Path, directory: MockDirectory, **server_kwargs: Any
+    tmp_path: Path,
+    directory: MockDirectory,
+    allow_writes: bool = False,
+    **server_kwargs: Any,
 ) -> Iterator[ServedApp]:
-    """Build ActiveDirectoryMCPHTTPServer over the mock directory and serve it live."""
+    """Build ActiveDirectoryMCPHTTPServer over the mock directory and serve it live.
+
+    A per-run random API key is installed through ``AD_MCP_HTTP_API_KEY``.
+    """
     from active_directory_mcp.server_http import ActiveDirectoryMCPHTTPServer
 
     with ExitStack() as stack:
         stack.enter_context(directory.patch())
-        stack.enter_context(patch.dict(os.environ, directory.env(tmp_path)))
+        api_key = secrets.token_urlsafe(32)
+        env = directory.env(tmp_path)
+        env["AD_MCP_HTTP_API_KEY"] = api_key
+        if allow_writes:
+            cfg_path = Path(env["AD_MCP_CONFIG"])
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            data["security"] = {"allow_writes": True}
+            cfg_path.write_text(json.dumps(data), encoding="utf-8")
+        stack.enter_context(patch.dict(os.environ, env))
         for var in ("AD_BIND_DN", "AZURE_KEYVAULT_URL"):
             os.environ.pop(var, None)
         server = ActiveDirectoryMCPHTTPServer(
@@ -126,6 +147,7 @@ def serve_ad_http(
             lambda sock: server.serve(sockets=[sock]), server.stop, ready
         ) as served:
             served.server = server
+            served.api_key = api_key
             served.extra = spy_state
             try:
                 yield served

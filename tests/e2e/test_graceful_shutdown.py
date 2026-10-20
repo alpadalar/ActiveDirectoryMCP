@@ -65,6 +65,7 @@ def _wait_listening(port: int, proc: subprocess.Popen, timeout: float = 20.0) ->
 def test_signal_disconnects_ldap_and_exits_zero(tmp_path: Path, sig: int) -> None:
     directory = MockDirectory()
     env = {**os.environ, **directory.env(tmp_path)}
+    env["AD_MCP_HTTP_API_KEY"] = "shutdown-test-key-0123456789abcdef"
     for var in ("AD_BIND_DN", "AZURE_KEYVAULT_URL"):
         env.pop(var, None)
     repo_root = Path(__file__).resolve().parents[2]
