@@ -2,8 +2,9 @@
 """Scan tracked files and commit metadata for AI-attribution and tooling residue.
 
 Tree hits always fail. History hits fail unless the commit SHA is listed in
-``scripts/ai_residue_allowlist.txt`` (format: ``<sha> # reason``). Exit codes:
-0 clean, 1 findings, 2 tooling error.
+``scripts/ai_residue_allowlist.txt`` (format: ``<sha> # reason``, SHA of at least 12 hex
+digits). Commit messages, author and committer names and e-mails, and annotated tag
+messages are scanned. Exit codes: 0 clean, 1 findings, 2 tooling error.
 """
 
 from __future__ import annotations
@@ -22,6 +23,10 @@ PATTERNS: List[Tuple[str, "re.Pattern[str]"]] = [
     ("ai-coauthor-trailer", re.compile(rf"co-authored-by:.*{_AGENTS}", re.I)),
     ("generated-with", re.compile(rf"generated (?:with|by) \[?{_AGENTS}", re.I)),
     ("anthropic-noreply", re.compile(r"noreply@anthropic\.com", re.I)),
+    ("claude-session-trailer", re.compile(r"claude-session\s*:", re.I)),
+    ("claude-code-link", re.compile(r"claude\.ai/code", re.I)),
+    ("agent-email", re.compile(
+        rf"[\w.+-]*{_AGENTS}[\w.+-]*@[\w.-]+|@[\w.-]*(?:anthropic|openai)\.[a-z]+", re.I)),
     ("copilot-app", re.compile(r"copilot app", re.I)),
     ("robot-emoji", re.compile("\U0001f916")),
     ("planning-tool", re.compile(r"\bGSD\b|\.planning/|REVIZYON|gsd-", re.I)),
@@ -60,20 +65,30 @@ def scan_tree(repo: Path) -> List[Hit]:
     return hits
 
 
+MIN_SHA_LENGTH = 12
+
+
 def load_allowlist(path: Path) -> Set[str]:
+    """Read allowed commit SHAs; entries shorter than 12 hex digits are rejected."""
     shas: Set[str] = set()
     if path.exists():
         for raw in path.read_text(encoding="utf-8").splitlines():
             entry = raw.split("#", 1)[0].strip()
-            if entry:
-                shas.add(entry.split()[0])
+            if not entry:
+                continue
+            sha = entry.split()[0].lower()
+            if not re.fullmatch(rf"[0-9a-f]{{{MIN_SHA_LENGTH},40}}", sha):
+                raise RuntimeError(
+                    f"bad allowlist entry {sha!r}: need {MIN_SHA_LENGTH}-40 hex digits"
+                )
+            shas.add(sha)
     return shas
 
 
 def scan_history(repo: Path, allowlist: Set[str]) -> Tuple[List[Hit], int]:
     out = subprocess.run(
         ["git", "-C", str(repo), "log", "--all",
-         "--format=%H%x00%an%x00%cn%x00%B%x01"],
+         "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x01"],
         capture_output=True, check=False,
     )
     if out.returncode != 0:
@@ -84,13 +99,32 @@ def scan_history(repo: Path, allowlist: Set[str]) -> Tuple[List[Hit], int]:
         record = record.strip("\n")
         if not record:
             continue
-        sha, author, committer, body = record.split("\x00", 3)
+        sha, author, author_mail, committer, committer_mail, body = record.split("\x00", 5)
         commits += 1
-        if any(sha.startswith(a) for a in allowlist):
+        if any(sha.lower().startswith(a) for a in allowlist):
             continue
-        for rule in _match(f"{author}\n{committer}\n{body}"):
+        text = f"{author}\n{author_mail}\n{committer}\n{committer_mail}\n{body}"
+        for rule in _match(text):
             hits.append(("history", sha, rule))
     return hits, commits
+
+
+def scan_tags(repo: Path) -> List[Hit]:
+    out = subprocess.run(
+        ["git", "-C", str(repo), "tag", "-l", "--format=%(refname:short)%00%(contents)%01"],
+        capture_output=True, check=False,
+    )
+    if out.returncode != 0:
+        raise RuntimeError("git tag failed")
+    hits: List[Hit] = []
+    for record in out.stdout.decode("utf-8", errors="replace").split("\x01"):
+        record = record.strip("\n")
+        if not record:
+            continue
+        name, _, message = record.partition("\x00")
+        for rule in _match(f"{name}\n{message}"):
+            hits.append(("tag", name, rule))
+    return hits
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -110,6 +144,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.history:
             found, commits = scan_history(args.repo, load_allowlist(allow_path))
             hits += found
+            hits += scan_tags(args.repo)
             print(f"history: {commits} commits scanned")
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)

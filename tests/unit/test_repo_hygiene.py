@@ -333,6 +333,69 @@ def test_ai_scan_honors_sha_allowlist(repo, tmp_path_factory):
     assert _run_ai(repo, allow, "--history").returncode == 1
 
 
+SESSION_TRAILER = "Claude-" + "Session: https://claude" + ".ai/code/session_abc123"
+
+
+@pytest.mark.parametrize(
+    ("text", "rule"),
+    [
+        (SESSION_TRAILER, "claude-session-trailer"),
+        ("see https://claude" + ".ai/code/session_x", "claude-code-link"),
+        ("Dev <noreply@" + "anthropic.com>", "anthropic-noreply"),
+        ("claude-bot" + "@users.noreply.github.com", "agent-email"),
+        ("Co-Authored-By: " + "Noreply <noreply@anthropic" + ".com>", "anthropic-noreply"),
+    ],
+)
+def test_ai_scan_matches_session_trailers_links_and_agent_emails(text, rule):
+    mod = _load("ai_residue_scan")
+    assert rule in mod._match(text)
+
+
+def test_ai_scan_flags_session_trailer_in_history_and_agent_author_email(
+    repo, tmp_path_factory
+):
+    allow = tmp_path_factory.mktemp("o") / "allow.txt"
+    allow.write_text("", encoding="utf-8")
+    sha = _commit(repo, "b.txt", "x\n", f"feat: thing\n\n{SESSION_TRAILER}")
+    res = _run_ai(repo, allow, "--history")
+    assert res.returncode == 1 and sha[:12] in res.stdout
+    other = tmp_path_factory.mktemp("r")
+    _git(other, "init", "-q")
+    (other / "a.txt").write_text("x\n", encoding="utf-8")
+    _git(other, "add", "a.txt")
+    subprocess.run(
+        ["git", "-C", str(other), "-c", "user.name=Dev", "-c", "user.email=codex" + "@example.org",
+         "-c", "commit.gpgsign=false", "commit", "-q", "-m", "plain message"],
+        check=True, capture_output=True,
+    )
+    res = _run_ai(other, allow, "--history")
+    assert res.returncode == 1 and "agent-email" in res.stdout
+
+
+def test_ai_scan_flags_annotated_tag_messages(repo, tmp_path_factory):
+    allow = tmp_path_factory.mktemp("o") / "allow.txt"
+    allow.write_text("", encoding="utf-8")
+    _commit(repo, "a.txt", "x\n", "add file")
+    _git(repo, "tag", "-a", "v1", "-m", f"release\n\n{TRAILER}")
+    res = _run_ai(repo, allow, "--history")
+    assert res.returncode == 1 and "tag v1" in res.stdout
+
+
+def test_ai_scan_allowlist_rejects_short_sha_prefixes(repo, tmp_path_factory):
+    sha = _commit(repo, "b.txt", "x\n", f"feat: thing\n\n{TRAILER}")
+    allow = tmp_path_factory.mktemp("o") / "allow.txt"
+    allow.write_text(f"{sha[:6]} # too short, would match many commits\n", encoding="utf-8")
+    assert _run_ai(repo, allow, "--history").returncode == 2
+    allow.write_text(f"{sha[:12]} # ok\n", encoding="utf-8")
+    assert _run_ai(repo, allow, "--history").returncode == 0
+
+
+def test_committed_ai_allowlist_only_names_full_length_shas():
+    mod = _load("ai_residue_scan")
+    entries = mod.load_allowlist(SCRIPTS / "ai_residue_allowlist.txt")
+    assert entries and all(len(e) == 40 for e in entries)
+
+
 def test_ai_scan_does_not_flag_mcp_client_names():
     mod = _load("ai_residue_scan")
     assert mod._match("Works with Claude Desktop and Claude Code") == []
