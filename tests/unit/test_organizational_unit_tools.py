@@ -352,3 +352,43 @@ def test_extract_ou_name_and_validate_ou_dn(ou_tools):
 
 def test_schema_info(ou_tools):
     assert "delete_ou" in ou_tools.get_schema_info()["operations"]
+
+
+# ------------------------------------------------ B-02: counting must not swallow errors
+
+
+def test_count_child_objects_propagates_error(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.side_effect = Exception("ldap down")
+    with pytest.raises(Exception, match="ldap down"):
+        ou_tools._count_child_objects(OU)
+
+
+def test_count_sub_ous_propagates_error(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.side_effect = Exception("ldap down")
+    with pytest.raises(Exception, match="ldap down"):
+        ou_tools._count_sub_ous(OU)
+
+
+def test_delete_ou_refuses_when_child_count_fails(ou_tools, mock_ldap_manager):
+    def search(search_base, search_filter, attributes=None, search_scope=2, **_):
+        if search_filter == "(objectClass=*)":
+            raise Exception("count failed")
+        return [_ou(search_base)]
+
+    mock_ldap_manager.search.side_effect = search
+    data = parse_response(ou_tools.delete_ou(OU, force=False))
+    assert data["success"] is False
+    assert "count failed" in data["error"]
+    mock_ldap_manager.delete.assert_not_called()
+
+
+def test_get_ou_reports_error_when_counts_fail(ou_tools, mock_ldap_manager):
+    def search(search_base, search_filter, attributes=None, search_scope=2, **_):
+        if search_filter == "(objectClass=*)":
+            raise Exception("count failed")
+        return [_ou(search_base)]
+
+    mock_ldap_manager.search.side_effect = search
+    data = parse_response(ou_tools.get_ou(OU))
+    assert data["success"] is False
+    assert "computed" not in data

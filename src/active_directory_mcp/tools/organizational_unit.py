@@ -589,31 +589,25 @@ class OrganizationalUnitTools(BaseTool):
             return 0
     
     def _count_child_objects(self, ou_dn: str) -> int:
-        """Count all child objects in an OU."""
-        try:
-            results = self.ldap.search(
-                search_base=ou_dn,
-                search_filter="(objectClass=*)",
-                attributes=['objectClass'],  # DN is always returned separately, not as an attribute
-                search_scope=1  # ONELEVEL equivalent
-            )
-            return len(results)
-        except:
-            return 0
+        """Count all child objects in an OU. LDAP errors propagate (never reported as 0)."""
+        results = self.ldap.search(
+            search_base=ou_dn,
+            search_filter="(objectClass=*)",
+            attributes=['objectClass'],  # DN is always returned separately, not as an attribute
+            search_scope=1  # ONELEVEL equivalent
+        )
+        return len(results)
 
     def _count_sub_ous(self, ou_dn: str) -> int:
-        """Count sub-OUs in an OU."""
-        try:
-            results = self.ldap.search(
-                search_base=ou_dn,
-                search_filter="(objectClass=organizationalUnit)",
-                attributes=['objectClass'],  # DN is always returned separately, not as an attribute
-                search_scope=1  # ONELEVEL equivalent
-            )
-            return len(results)
-        except:
-            return 0
-    
+        """Count sub-OUs in an OU. LDAP errors propagate (never reported as 0)."""
+        results = self.ldap.search(
+            search_base=ou_dn,
+            search_filter="(objectClass=organizationalUnit)",
+            attributes=['objectClass'],  # DN is always returned separately, not as an attribute
+            search_scope=1  # ONELEVEL equivalent
+        )
+        return len(results)
+
     def _parse_gp_link(self, gp_link: str) -> List[Dict[str, Any]]:
         """Parse GP Link attribute to extract linked GPOs."""
         try:
