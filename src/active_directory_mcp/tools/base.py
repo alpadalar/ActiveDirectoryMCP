@@ -3,13 +3,18 @@
 import json
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from mcp.types import TextContent as Content
 from ldap3.core.exceptions import LDAPException
 
 from ..core.ldap_manager import LDAPManager
 from ..core.logging import get_logger, log_ldap_operation
+
+# Active Directory FILETIME: 100-nanosecond ticks since 1601-01-01 UTC.
+FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
+FILETIME_TICKS_PER_MICROSECOND = 10
+FILETIME_NEVER = 9223372036854775807  # 0x7FFFFFFFFFFFFFFF, "never expires"
 
 
 class BaseTool(ABC):
@@ -36,6 +41,76 @@ class BaseTool(ABC):
         else:
             return obj
     
+    # ------------------------------------------------------------------
+    # Shared AD time helpers
+    # ------------------------------------------------------------------
+
+    def _ad_datetime(self, value: Any) -> Optional[datetime]:
+        """Normalise an AD time value to a tz-aware UTC datetime, or None if unset.
+
+        Accepts tz-aware or naive datetimes (naive assumed UTC), int/float/numeric-str
+        FILETIME values. Returns None for empty, 0, the "never" sentinel, ldap3's
+        year-1601 / year-9999 placeholders, and anything unparseable. Never raises.
+        """
+        try:
+            if value is None or isinstance(value, (bool, bytes, bytearray)):
+                return None
+            if isinstance(value, datetime):
+                dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+                dt = dt.astimezone(timezone.utc)
+                if dt.year <= 1601 or dt.year >= 9999:
+                    return None
+                return dt
+            if isinstance(value, str):
+                text = value.strip()
+                if not text:
+                    return None
+                ticks = int(text)
+            elif isinstance(value, (int, float)):
+                ticks = int(value)
+            else:
+                return None
+            if ticks <= 0 or ticks >= FILETIME_NEVER:
+                return None
+            dt = FILETIME_EPOCH + timedelta(microseconds=ticks // FILETIME_TICKS_PER_MICROSECOND)
+            if dt.year >= 9999:
+                return None
+            return dt
+        except (TypeError, ValueError, OverflowError) as e:
+            self.logger.debug(f"Unparseable AD time value {value!r}: {e}")
+            return None
+
+    def _convert_filetime_to_datetime(self, value: Any) -> Optional[datetime]:
+        """Convert an AD time value to an aware UTC datetime; None when unset/never."""
+        return self._ad_datetime(value)
+
+    def _convert_datetime_to_filetime(self, dt: datetime) -> int:
+        """Convert a datetime (naive assumed UTC) to an AD FILETIME integer."""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = dt.astimezone(timezone.utc) - FILETIME_EPOCH
+        return (delta // timedelta(microseconds=1)) * FILETIME_TICKS_PER_MICROSECOND
+
+    def _days_since(self, value: Any, now: Optional[datetime] = None) -> Optional[int]:
+        """Whole days elapsed since an AD time value; None if unset, never negative."""
+        dt = self._ad_datetime(value)
+        if dt is None:
+            return None
+        current = now if now is not None else datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return max((current - dt).days, 0)
+
+    def _is_past(self, value: Any, now: Optional[datetime] = None) -> bool:
+        """True only if value is a real timestamp strictly before now."""
+        dt = self._ad_datetime(value)
+        if dt is None:
+            return False
+        current = now if now is not None else datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return dt < current
+
     def _format_response(self, data: Any, operation: str = "operation") -> List[Content]:
         """
         Format response data for MCP.
