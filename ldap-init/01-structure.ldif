@@ -71,7 +71,7 @@ uid: testadmin
 uidNumber: 1004
 gidNumber: 1001
 homeDirectory: /home/testadmin
-userPassword: {SSHA}Admin123!
+userPassword: {SSHA}Password123!
 mail: testadmin@test.local
 description: Test Administrator
 
