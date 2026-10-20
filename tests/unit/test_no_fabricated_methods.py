@@ -46,7 +46,7 @@ def test_registry_never_exposes_deleted_names(mock_ldap_manager):
         server_name="t",
     )
     names = {spec.name for spec in build_tool_specs(ctx)}
-    assert len(names) == 44
+    assert len(names) == 45
     assert names.isdisjoint({n for _, n in DELETED})
 
 

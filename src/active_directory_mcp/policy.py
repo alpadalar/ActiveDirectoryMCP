@@ -39,7 +39,7 @@ _READ = (
     "get_domain_info", "get_privileged_groups", "get_user_permissions",
     "get_inactive_users", "get_password_policy_violations", "audit_admin_accounts",
     "test_connection", "health", "get_schema_info",
-    "get_nested_group_members", "get_rootdse_info",
+    "get_nested_group_members", "get_rootdse_info", "get_tls_posture",
 )
 _WRITE = (
     "create_user", "modify_user", "enable_user", "disable_user", "reset_user_password",

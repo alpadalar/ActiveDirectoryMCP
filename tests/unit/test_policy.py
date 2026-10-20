@@ -68,7 +68,7 @@ def _any_tool_called(ctx: Any) -> bool:
 def test_classification_covers_exactly_the_registered_tools() -> None:
     names = {spec.name for spec in build_tool_specs(make_ctx())}
     assert set(RISK_CLASSIFICATION) == names
-    assert len(names) == 44
+    assert len(names) == 45
     assert all(isinstance(r, Risk) for r in RISK_CLASSIFICATION.values())
 
 
@@ -363,11 +363,11 @@ def test_stdio_server_fails_to_start_on_unwritable_audit_path(tmp_path: Any) -> 
                 mod.ActiveDirectoryMCPServer()
 
 
-def test_new_directory_tools_are_classified_read_and_exactly_two_were_added() -> None:
+def test_new_directory_tools_are_classified_read_and_exactly_three_were_added() -> None:
     from active_directory_mcp.policy import RISK_CLASSIFICATION, Risk
     from tests.unit.test_golden_additive import ADDITIVE_TOOLS
 
-    assert ADDITIVE_TOOLS == {"get_nested_group_members", "get_rootdse_info"}
+    assert ADDITIVE_TOOLS == {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
     for name in ADDITIVE_TOOLS:
         assert RISK_CLASSIFICATION[name] is Risk.READ
-    assert sum(1 for r in RISK_CLASSIFICATION.values() if r is Risk.READ) == 23
+    assert sum(1 for r in RISK_CLASSIFICATION.values() if r is Risk.READ) == 24

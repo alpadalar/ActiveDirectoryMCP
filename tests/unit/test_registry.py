@@ -57,7 +57,7 @@ def ctx() -> ToolContext:
 
 def test_specs_cover_golden_set_in_stable_order(ctx: ToolContext) -> None:
     specs = build_tool_specs(ctx)
-    assert len(specs) == 44
+    assert len(specs) == 45
     assert {spec.name for spec in specs} == TOOL_NAMES
     assert [s.name for s in specs] == [s.name for s in build_tool_specs(ctx)]
     for spec in specs:
@@ -79,7 +79,7 @@ async def test_register_tools_on_fastmcp(ctx: ToolContext) -> None:
     mcp = FastMCP("test")
     assert register_tools(ctx, FastMCPToolSink(mcp)) is None
     tools = await mcp.list_tools()
-    assert len(tools) == 44
+    assert len(tools) == 45
     assert {t.name for t in tools} == TOOL_NAMES
     for tool in tools:
         assert tool.output_schema is None
@@ -97,20 +97,20 @@ async def test_registering_twice_on_one_fastmcp_is_recorded(ctx: ToolContext) ->
         outcome = "raises"
     else:
         outcome = "replaces"
-    assert len(await mcp.list_tools()) == 44
+    assert len(await mcp.list_tools()) == 45
     assert outcome in {"raises", "replaces"}
 
 
 def test_register_tools_calls_sink_once_per_spec(ctx: ToolContext) -> None:
     sink = MagicMock()
     assert register_tools(ctx, sink) is None
-    assert sink.add.call_count == 44
+    assert sink.add.call_count == 45
 
 
 def test_stdio_sink_matches_stdio_golden(ctx: ToolContext) -> None:
     sink = StdioToolSink()
     register_tools(ctx, sink)
-    assert len(sink.tools) == 44
+    assert len(sink.tools) == 45
     assert set(sink.handlers) == TOOL_NAMES
     for tool in sink.tools:
         assert canonical_input_schema(tool.inputSchema) == STDIO_GOLDEN["tools"][tool.name]
@@ -246,7 +246,7 @@ DELEGATION = [
 
 SYSTEM_TOOLS = {"test_connection", "health", "get_schema_info"}
 # Built by the registry itself (DirectoryTools(ctx.ldap_manager)), not a ToolContext member.
-DIRECTORY_TOOLS = {"get_nested_group_members", "get_rootdse_info"}
+DIRECTORY_TOOLS = {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
 
 
 def test_delegation_table_covers_every_non_system_tool() -> None:
@@ -270,6 +270,7 @@ def test_directory_handlers_delegate_to_directory_tools(ctx: ToolContext) -> Non
     )
     instance.get_nested_group_members.assert_called_once_with("g")
     assert specs["get_rootdse_info"].handler() is instance.get_rootdse_info.return_value
+    assert specs["get_tls_posture"].handler() is instance.get_tls_posture.return_value
 
 
 @pytest.mark.parametrize(("name", "kwargs", "attr", "method", "expected"), DELEGATION)

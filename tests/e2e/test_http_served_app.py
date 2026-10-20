@@ -161,7 +161,7 @@ def test_mcp_client_session_end_to_end(served_http_server: ServedApp) -> None:
         async with _client(served_http_server) as client:
             tools = await client.list_tools()
             assert {t.name for t in tools} == _golden_names()
-            assert len(tools) == 44
+            assert len(tools) == 45
 
             health = await client.call_tool("health", {})
             info = json.loads(health.content[0].text)
@@ -182,7 +182,7 @@ def test_configured_path_is_the_served_path(tmp_path: Path, mock_directory: Mock
 
         async def scenario() -> None:
             async with _client(served, "/mcp-e2e") as client:
-                assert len(await client.list_tools()) == 44
+                assert len(await client.list_tools()) == 45
 
         asyncio.run(scenario())
         default = httpx.get(

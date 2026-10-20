@@ -1,5 +1,5 @@
 {
-  "tool_count": 44,
+  "tool_count": 45,
   "tools": {
     "add_group_member": {
       "params": {
@@ -324,6 +324,10 @@
           "type": "integer"
         }
       },
+      "required": []
+    },
+    "get_tls_posture": {
+      "params": {},
       "required": []
     },
     "get_user": {

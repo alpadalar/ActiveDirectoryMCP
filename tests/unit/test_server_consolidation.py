@@ -108,7 +108,7 @@ def test_http_server_registers_44_tools_and_health_route() -> None:
     with _offline_env(HTTP_MOD):
         server = _http_server()
         names = {t.name for t in asyncio.run(server.mcp.list_tools())}
-        assert len(names) == 44 and "health" in names
+        assert len(names) == 45 and "health" in names
         app = server.build_app()
         assert HEALTH_PATH in [getattr(r, "path", None) for r in app.routes]
 
@@ -182,7 +182,7 @@ def test_stdio_registers_once_with_44_tools_and_error_shape() -> None:
         with patch.object(mod, "register_tools", wraps=mod.register_tools) as spy:
             server = mod.ActiveDirectoryMCPServer()
         spy.assert_called_once()
-        assert len(server._tools) == 44
+        assert len(server._tools) == 45
 
         handler = server.mcp.request_handlers[types.CallToolRequest]
         req = types.CallToolRequest(

@@ -369,6 +369,18 @@ Example:
 
 Useful to confirm which DC answered and its functional level."""
 
+GET_TLS_POSTURE_DESC = """Report the TLS posture of the connection to the domain controller.
+
+Returns the configured values (use_ssl, ssl_port, enable_tls, validate_certificate,
+whether a CA file is set, require_secure_connection), the live channel (ldaps,
+starttls or plaintext, plus TLS version and cipher when available) and a list of
+findings {severity, code, message}. Takes no input; no secrets or paths are returned.
+
+Example:
+- get_tls_posture()
+
+Useful to verify that the bind is encrypted and the certificate is validated."""
+
 GET_PRIVILEGED_GROUPS_DESC = """Get information about privileged groups.
 
 Identifies and analyzes high-privilege groups including Domain Admins,
@@ -486,6 +498,7 @@ TOOL_DESCRIPTIONS: Dict[str, str] = {
     "get_domain_info": GET_DOMAIN_INFO_DESC,
     "get_nested_group_members": GET_NESTED_GROUP_MEMBERS_DESC,
     "get_rootdse_info": GET_ROOTDSE_INFO_DESC,
+    "get_tls_posture": GET_TLS_POSTURE_DESC,
     "get_privileged_groups": GET_PRIVILEGED_GROUPS_DESC,
     "get_user_permissions": GET_USER_PERMISSIONS_DESC,
     "get_inactive_users": GET_INACTIVE_USERS_DESC,
@@ -855,6 +868,7 @@ TOOL_INPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
     },
     "get_domain_info": {"type": "object", "properties": {}},
     "get_rootdse_info": {"type": "object", "properties": {}},
+    "get_tls_posture": {"type": "object", "properties": {}},
     "get_nested_group_members": {
         "type": "object",
         "properties": {

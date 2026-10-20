@@ -355,6 +355,9 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
     def get_rootdse_info() -> Any:
         return directory.get_rootdse_info()
 
+    def get_tls_posture() -> Any:
+        return directory.get_tls_posture()
+
     ordered = (
         list_users,
         get_user,
@@ -400,12 +403,13 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
         get_schema_info,
         get_nested_group_members,
         get_rootdse_info,
+        get_tls_posture,
     )
     return {fn.__name__: fn for fn in ordered}
 
 
 def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
-    """Return the 44 tool specs in a stable order (KeyError if a definition is missing).
+    """Return the 45 tool specs in a stable order (KeyError if a definition is missing).
 
     Every handler is wrapped by the policy gate; a tool without a risk
     classification is a build-time error (fail closed).

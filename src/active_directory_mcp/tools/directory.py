@@ -6,6 +6,7 @@ import ldap3
 
 from .. import validation
 from ..core.logging import log_ldap_operation
+from ..redaction import redact
 from ..validation import ValidationError
 from .base import BaseTool
 
@@ -165,9 +166,88 @@ class DirectoryTools(BaseTool):
         except Exception as exc:
             return self._handle_ldap_error(exc, "get_rootdse_info")
 
+    def get_tls_posture(self) -> List[Any]:
+        """Report configured TLS settings and the live channel state (fixed allow-list)."""
+        security = self.ldap.security_config
+        ad = self.ldap.ad_config
+        configured = {
+            "use_ssl": bool(ad.use_ssl),
+            "ssl_port": ad.ssl_port,
+            "enable_tls": bool(security.enable_tls),
+            "validate_certificate": bool(security.validate_certificate),
+            "ca_cert_file_set": bool(security.ca_cert_file),
+            "require_secure_connection": bool(security.require_secure_connection),
+        }
+        findings: List[Dict[str, str]] = []
+        live: Dict[str, Any] = {"connected": False}
+        try:
+            connection = self.ldap.connect()
+            ssl_server = bool(getattr(connection.server, "ssl", False))
+            starttls = bool(getattr(connection, "tls_started", False))
+            channel = "ldaps" if ssl_server else "starttls" if starttls else "plaintext"
+            live = {
+                "connected": True,
+                "channel": channel,
+                "secure_channel": bool(self.ldap.is_secure_channel()),
+            }
+            sock = getattr(connection, "socket", None)
+            version = getattr(sock, "version", None)
+            cipher = getattr(sock, "cipher", None)
+            if callable(version):
+                value = version()
+                if isinstance(value, str):
+                    live["tls_version"] = value
+            if callable(cipher):
+                value = cipher()
+                if isinstance(value, (tuple, list)) and value and isinstance(value[0], str):
+                    live["cipher"] = value[0]
+            if channel == "plaintext":
+                findings.append(
+                    {
+                        "severity": "high",
+                        "code": "plaintext_channel",
+                        "message": "The LDAP connection is not encrypted (no LDAPS or StartTLS)",
+                    }
+                )
+        except Exception as exc:
+            live = {"connected": False, "error": redact(str(exc))}
+        if not configured["validate_certificate"]:
+            findings.append(
+                {
+                    "severity": "high",
+                    "code": "certificate_validation_disabled",
+                    "message": "Server certificate validation is disabled",
+                }
+            )
+        if not configured["enable_tls"]:
+            findings.append(
+                {
+                    "severity": "medium",
+                    "code": "tls_disabled",
+                    "message": "security.enable_tls is false",
+                }
+            )
+        if not configured["require_secure_connection"]:
+            findings.append(
+                {
+                    "severity": "medium",
+                    "code": "secure_connection_not_required",
+                    "message": "security.require_secure_connection is false",
+                }
+            )
+        return self._format_response(
+            {
+                "success": True,
+                "configured": configured,
+                "live": live,
+                "findings": findings,
+            },
+            "get_tls_posture",
+        )
+
     def get_schema_info(self) -> Dict[str, Any]:
         return {
-            "operations": ["get_nested_group_members", "get_rootdse_info"],
+            "operations": ["get_nested_group_members", "get_rootdse_info", "get_tls_posture"],
             "rootdse_attributes": list(ROOTDSE_ATTRIBUTES),
             "matching_rule_in_chain": MATCHING_RULE_IN_CHAIN,
         }
