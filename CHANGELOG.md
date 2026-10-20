@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `LDAPManager.move` keeps every component of a multi-valued RDN (`CN=a+SN=b`).
+- `LDAPManager.search` rejects boolean, out-of-range and unknown `search_scope` values with
+  `ValueError` before any connection is made.
+
 ## [1.0.0] - Unreleased (date is set when the owner tags)
 
 The MCP tool names and parameters of the 42 original tools are unchanged in this release.

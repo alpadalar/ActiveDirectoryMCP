@@ -282,6 +282,13 @@ class TestWriteOperations:
             "CN=a\\,b,OU=x", "CN=a\\,b", new_superior="OU=y"
         )
 
+    @pytest.mark.parametrize("scope", [True, False, 3, -1, "ONE", "base"])
+    def test_search_rejects_invalid_scope_before_connecting(self, manager, ldap3_seam, scope):
+        _, conn_cls = ldap3_seam
+        with pytest.raises(ValueError, match="search_scope"):
+            manager.search("DC=x", "(objectClass=*)", search_scope=scope)
+        conn_cls.return_value.search.assert_not_called()
+
     def test_move_keeps_all_components_of_multivalued_rdn(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
         manager.move("CN=a+SN=b,OU=x", "OU=y")

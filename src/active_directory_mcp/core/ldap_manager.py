@@ -270,6 +270,21 @@ class LDAPManager:
             return base64.b64encode(value).decode("ascii")
         return value
 
+    @staticmethod
+    def _normalize_scope(
+        search_scope: Union[Literal["BASE", "LEVEL", "SUBTREE"], int],
+    ) -> Literal["BASE", "LEVEL", "SUBTREE"]:
+        """Return the ldap3 scope constant, rejecting bools and unknown values."""
+        if isinstance(search_scope, bool):
+            raise ValueError(f"Invalid search_scope: {search_scope!r}")
+        if isinstance(search_scope, int):
+            if search_scope not in _SCOPE_BY_INT:
+                raise ValueError(f"Invalid search_scope: {search_scope!r} (expected 0, 1 or 2)")
+            return _SCOPE_BY_INT[search_scope]
+        if search_scope not in (BASE, LEVEL, SUBTREE):
+            raise ValueError(f"Invalid search_scope: {search_scope!r}")
+        return search_scope
+
     def search(
         self,
         search_base: str,
@@ -297,6 +312,7 @@ class LDAPManager:
         Raises:
             LDAPException: If search fails
         """
+        scope = self._normalize_scope(search_scope)
         connection = self.connect()
 
         try:
@@ -310,10 +326,6 @@ class LDAPManager:
             )
 
             extra_kwargs: Dict[str, Any] = {"time_limit": time_limit} if time_limit > 0 else {}
-
-            scope: Literal["BASE", "LEVEL", "SUBTREE"] = (
-                _SCOPE_BY_INT[search_scope] if isinstance(search_scope, int) else search_scope
-            )
 
             entries = []
             cookie = None
