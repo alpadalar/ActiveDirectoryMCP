@@ -1,13 +1,22 @@
 {
     "mcpServers": {
-        "ActiveDirectoryMCP-OpenLDAP": {
-            "transport": {
-                "type": "http",
-                "url": "http://localhost:8813/activedirectory-mcp"
-            },
-            "description": "Active Directory MCP with OpenLDAP Test Environment",
+        "ActiveDirectoryMCP-OpenLDAP-stdio": {
+            "command": "uv",
+            "args": [
+                "--directory",
+                "/absolute/path/to/ActiveDirectoryMCP",
+                "run",
+                "activedirectory-mcp"
+            ],
             "env": {
-                "AD_MCP_CONFIG": "/media/workspace/ActiveDirectoryMCP/ad-config/ad-config.json"
+                "AD_MCP_CONFIG": "/absolute/path/to/ActiveDirectoryMCP/ad-config/openldap-lab.example.json",
+                "LAB_LDAP_PASSWORD": "${env:LAB_LDAP_PASSWORD}"
+            }
+        },
+        "ActiveDirectoryMCP-OpenLDAP-HTTP": {
+            "url": "http://localhost:8813/activedirectory-mcp",
+            "headers": {
+                "Authorization": "Bearer ${env:AD_MCP_HTTP_API_KEY}"
             }
         }
     }

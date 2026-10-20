@@ -1,0 +1,18 @@
+{
+    "mcpServers": {
+        "ActiveDirectoryMCP": {
+            "command": "uv",
+            "args": [
+                "--directory",
+                "/absolute/path/to/ActiveDirectoryMCP",
+                "run",
+                "activedirectory-mcp"
+            ],
+            "env": {
+                "AD_MCP_CONFIG": "/absolute/path/to/ActiveDirectoryMCP/ad-config/ad-config.json",
+                "AD_BIND_DN": "CN=service-account,OU=Service Accounts,DC=example,DC=com",
+                "AD_PASSWORD": "REPLACE_WITH_BIND_PASSWORD"
+            }
+        }
+    }
+}

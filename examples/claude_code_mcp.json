@@ -1,0 +1,26 @@
+{
+    "mcpServers": {
+        "activedirectory-stdio": {
+            "type": "stdio",
+            "command": "uv",
+            "args": [
+                "--directory",
+                "${CLAUDE_PROJECT_DIR:-.}",
+                "run",
+                "activedirectory-mcp"
+            ],
+            "env": {
+                "AD_MCP_CONFIG": "${CLAUDE_PROJECT_DIR:-.}/ad-config/ad-config.json",
+                "AD_BIND_DN": "${AD_BIND_DN}",
+                "AD_PASSWORD": "${AD_PASSWORD}"
+            }
+        },
+        "activedirectory-http": {
+            "type": "http",
+            "url": "http://localhost:8813/activedirectory-mcp",
+            "headers": {
+                "Authorization": "Bearer ${AD_MCP_HTTP_API_KEY}"
+            }
+        }
+    }
+}
