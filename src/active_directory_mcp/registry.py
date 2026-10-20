@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 from mcp import types
 from mcp.types import TextContent as Content
 
+from .audit import AuditLogger
 from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
 from .redaction import redact
 from .tools.definitions import TOOL_DESCRIPTIONS, TOOL_INPUT_SCHEMAS
@@ -45,6 +46,7 @@ class ToolContext:
     endpoint: Optional[str] = None
     health_extras: Callable[[], Dict[str, Any]] = _no_extras
     policy: Optional[ToolPolicy] = None  # None resolves to the most restrictive policy
+    audit: Optional[AuditLogger] = None  # None disables the write/destructive audit trail
 
 
 @dataclass(frozen=True)
@@ -407,7 +409,7 @@ def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
             name=name,
             description=TOOL_DESCRIPTIONS[name],
             input_schema=TOOL_INPUT_SCHEMAS[name],
-            handler=guard(name, handler, policy),
+            handler=guard(name, handler, policy, ctx.audit),
         )
         for name, handler in handlers.items()
     ]

@@ -9,6 +9,7 @@ any LDAP call: a blocked call never reaches the underlying tool method.
 """
 
 import functools
+import inspect
 import json
 import logging
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from mcp.types import TextContent as Content
 
+from .audit import AuditLogger, classify_outcome
 from .config.models import SecurityConfig
 
 logger = logging.getLogger("active-directory-mcp.policy")
@@ -105,10 +107,29 @@ def blocked_response(tool_name: str, risk: Risk) -> Dict[str, Any]:
     }
 
 
+def _bound_args(
+    handler: Callable[..., Any], args: Any, kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    try:
+        bound = inspect.signature(handler).bind_partial(*args, **kwargs)
+        return dict(bound.arguments)
+    except (TypeError, ValueError):
+        return dict(kwargs)
+
+
 def guard(
-    name: str, handler: Callable[..., Any], policy: ToolPolicy
+    name: str,
+    handler: Callable[..., Any],
+    policy: ToolPolicy,
+    audit: Optional[AuditLogger] = None,
 ) -> Callable[..., Any]:
-    """Wrap ``handler`` so blocked calls return a refusal and never reach it."""
+    """Wrap ``handler`` so blocked calls return a refusal and never reach it.
+
+    With ``audit`` set, every write/destructive call (unknown tools count as
+    destructive) appends one audit record; read tools are never audited.
+    """
+    risk = RISK_CLASSIFICATION.get(name, Risk.DESTRUCTIVE)
+    audited = audit is not None and risk is not Risk.READ
 
     @functools.wraps(handler)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -119,7 +140,21 @@ def guard(
             payload: List[Content] = [
                 Content(type="text", text=json.dumps(blocked, indent=2))
             ]
+            if audited and audit is not None:
+                audit.record(
+                    name, risk.value, _bound_args(handler, args, kwargs),
+                    "blocked", blocked.get("error_code"),
+                )
             return payload
-        return handler(*args, **kwargs)
+        if not audited or audit is None:
+            return handler(*args, **kwargs)
+        try:
+            result = handler(*args, **kwargs)
+        except Exception:
+            audit.record(name, risk.value, _bound_args(handler, args, kwargs), "error")
+            raise
+        outcome, code = classify_outcome(result)
+        audit.record(name, risk.value, _bound_args(handler, args, kwargs), outcome, code)
+        return result
 
     return wrapper

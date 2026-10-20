@@ -311,3 +311,53 @@ def test_permitted_call_is_not_logged_as_blocked(caplog: pytest.LogCaptureFixtur
     wrapped = guard("get_user", Mock(return_value="ran"), ToolPolicy())
     assert wrapped(username="u") == "ran"
     assert "policy blocked" not in caplog.text
+
+
+# ---------------------------------------------------------------- audit hook (FEAT-01)
+
+
+def test_guard_audits_positional_and_keyword_calls(tmp_path: Any) -> None:
+    from active_directory_mcp.audit import AuditLogger
+
+    log = tmp_path / "g.log"
+
+    def create_group(group_name: str, description: str = "") -> Any:
+        return [Mock(text=json.dumps({"success": True}))]
+
+    wrapped = guard("create_group", create_group, ToolPolicy(True, False), AuditLogger(str(log)))
+    wrapped("g1", description="d")
+    wrapped(group_name="g2")
+    recs = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [r["target"]["group_name"] for r in recs] == ["g1", "g2"]
+    assert recs[0]["redacted_args"] == {"description": "***REDACTED***"}
+
+
+def test_guard_does_not_audit_reads(tmp_path: Any) -> None:
+    from active_directory_mcp.audit import AuditLogger
+
+    log = tmp_path / "r.log"
+    wrapped = guard("get_user", Mock(return_value="ok"), ToolPolicy(), AuditLogger(str(log)))
+    assert wrapped(username="bob") == "ok"
+    assert log.read_text() == ""
+
+
+def test_stdio_server_fails_to_start_on_unwritable_audit_path(tmp_path: Any) -> None:
+    from unittest.mock import patch
+
+    import active_directory_mcp.server as mod
+    from active_directory_mcp.audit import AuditConfigError
+    from active_directory_mcp.config.models import SecurityConfig
+
+    with _offline_env("active_directory_mcp.server"):
+        original = mod.load_config
+
+        def load_bad(path: Any = None) -> Any:
+            cfg = original(path)
+            cfg.security = SecurityConfig(
+                allow_writes=True, audit_log_path=str(tmp_path / "nope" / "a.log")
+            )
+            return cfg
+
+        with patch.object(mod, "load_config", Mock(side_effect=load_bad)):
+            with pytest.raises(AuditConfigError):
+                mod.ActiveDirectoryMCPServer()

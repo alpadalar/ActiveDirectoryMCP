@@ -25,6 +25,7 @@ from .tools.organizational_unit import OrganizationalUnitTools
 from .tools.security import SecurityTools
 from .auth import resolve_auth
 from .http_app import build_http_app
+from .audit import AuditLogger
 from .policy import ToolPolicy
 from .registry import FastMCPToolSink, ToolContext, register_tools
 
@@ -131,6 +132,7 @@ class ActiveDirectoryMCPHTTPServer:
             server_name="ActiveDirectoryMCP-HTTP",
             endpoint=f"http://{host}:{port}{path}",
             policy=ToolPolicy.from_security(self.config.security),
+            audit=AuditLogger.from_security(self.config.security),
         )
         register_tools(ctx, FastMCPToolSink(self.mcp))
         self._uvicorn_server: Optional[uvicorn.Server] = None

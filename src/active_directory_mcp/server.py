@@ -37,6 +37,7 @@ from .tools.group import GroupTools
 from .tools.computer import ComputerTools
 from .tools.organizational_unit import OrganizationalUnitTools
 from .tools.security import SecurityTools
+from .audit import AuditLogger
 from .policy import ToolPolicy
 from .registry import StdioToolSink, ToolContext, register_tools
 
@@ -131,6 +132,7 @@ class ActiveDirectoryMCPServer:
             endpoint=None,
             health_extras=self._health_extras,
             policy=ToolPolicy.from_security(self.config.security),
+            audit=AuditLogger.from_security(self.config.security),
         )
         sink = StdioToolSink()
         register_tools(ctx, sink)
