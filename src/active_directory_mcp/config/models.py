@@ -1,6 +1,7 @@
 """Configuration models for Active Directory MCP."""
 
 from typing import List, Optional
+
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from ..validation import validate_object_class

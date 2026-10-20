@@ -7,13 +7,16 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
+from pydantic import SecretStr, ValidationError
+
+from ..redaction import register_secret
 from .keyvault import KeyVaultError, get_secret
 from .models import Config
 
 logger = logging.getLogger(__name__)
 
 
-ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::([^}]*))?\}")
+ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")
 
 
 def _resolve_env_placeholders(value: Any) -> Any:
@@ -37,8 +40,8 @@ def _resolve_env_placeholders(value: Any) -> Any:
             if default is not None:
                 return default
             raise ValueError(
-                f"Environment variable '{env_key}' is not set "
-                f"for configuration placeholder {value!r}"
+                f"Environment variable '{env_key}' is not set and its configuration "
+                "placeholder has no default"
             )
 
         return ENV_PATTERN.sub(_replace, value)
@@ -82,10 +85,17 @@ def load_config(config_path: Optional[str] = None) -> Config:
         config_data = _resolve_env_placeholders(config_data)
         
         # Validate and create config object
-        config = Config(**config_data)
+        try:
+            config = Config(**config_data)
+        except ValidationError as exc:
+            raise ValueError(_sanitize_validation_error(exc)) from None
 
         # Resolve bind username/password securely (Azure Key Vault, env vars, or file)
         _resolve_credentials(config)
+
+        # Catch-all: whatever the source, the final password must never appear in logs
+        if config.active_directory.password is not None:
+            register_secret(config.active_directory.password.get_secret_value())
 
         logger.info("Configuration loaded successfully")
         
@@ -103,6 +113,21 @@ def load_config(config_path: Optional[str] = None) -> Config:
     except Exception as e:
         logger.error(f"Error loading configuration: {e}")
         raise
+
+
+def _sanitize_validation_error(exc: ValidationError) -> str:
+    """Render a pydantic error as location + reason only (never the offending input)."""
+    parts = []
+    for err in exc.errors(include_input=False, include_url=False):
+        loc = ".".join(str(item) for item in err.get("loc", ())) or "<root>"
+        parts.append(f"{loc}: {err.get('msg', 'invalid value')}")
+    return "Invalid configuration: " + "; ".join(parts)
+
+
+def _set_password(ad: Any, value: str) -> None:
+    """Store the bind password as SecretStr and register it for log redaction."""
+    ad.password = SecretStr(value)
+    register_secret(value)
 
 
 def _resolve_credentials(config: Config) -> None:
@@ -153,7 +178,7 @@ def _resolve_credentials(config: Config) -> None:
             f"(secret: {password_secret_name})"
         )
         try:
-            ad.password = get_secret(vault_url, password_secret_name)
+            _set_password(ad, get_secret(vault_url, password_secret_name))
         except KeyVaultError as exc:
             raise ValueError(str(exc)) from exc
         return
@@ -166,10 +191,11 @@ def _resolve_credentials(config: Config) -> None:
     env_password = os.getenv("AD_PASSWORD")
     if env_password:
         logger.info("Using AD bind password from AD_PASSWORD environment variable")
-        ad.password = env_password
+        _set_password(ad, env_password)
         return
 
-    if ad.password:
+    if ad.password is not None and ad.password.get_secret_value():
+        register_secret(ad.password.get_secret_value())
         logger.warning(
             "AD bind password is stored in plaintext in the configuration file. "
             "For production deployments, configure Azure Key Vault via the "
@@ -222,5 +248,28 @@ def validate_config(config: Config) -> None:
             raise ValueError("Secure connection required but 'use_ssl' is disabled")
         if not config.active_directory.server.startswith('ldaps://'):
             raise ValueError("Secure connection required but server URL is not ldaps://")
+        if not config.security.enable_tls:
+            raise ValueError("Secure connection required but TLS disabled ('security.enable_tls')")
+        if not config.security.validate_certificate:
+            logger.warning(
+                "TLS certificate validation is disabled; the server identity is not "
+                "verified. Use only for lab/self-signed setups and prefer 'ca_cert_file'."
+            )
+    elif (
+        not config.active_directory.use_ssl
+        or not config.security.enable_tls
+        or not config.active_directory.server.startswith('ldaps://')
+    ):
+        logger.warning(
+            "require_secure_connection is false and the connection is not secured: "
+            "credentials and directory data will travel in plaintext. Do not use "
+            "this outside an isolated test environment."
+        )
+
+    if config.performance.connection_pool_size is not None:
+        logger.warning(
+            "performance.connection_pool_size is ignored: a single serialized LDAP "
+            "connection is used. Remove it from the configuration."
+        )
     
     logger.info("Configuration validation completed")

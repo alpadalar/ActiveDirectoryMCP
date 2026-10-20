@@ -457,3 +457,191 @@ def test_local_ad_config_parses():
     if not path.exists():
         pytest.skip("ad-config/ad-config.json not present")
     assert Config(**json.loads(path.read_text(encoding="utf-8")))
+
+
+
+# --- Loader hardening (02-02 task 2) ---
+
+import logging  # noqa: E402
+
+from active_directory_mcp import redaction  # noqa: E402
+
+SECRET = "hunter2hunter2"
+
+
+@pytest.fixture(autouse=True)
+def _clean_redaction():
+    redaction.clear_secrets()
+    yield
+    redaction.clear_secrets()
+
+
+def _write(tmp_path, ad_overrides=None, **sections):
+    ad = dict(_AD)
+    ad.update(ad_overrides or {})
+    data = {"active_directory": ad}
+    data.update(sections)
+    path = tmp_path / "cfg.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+@pytest.fixture
+def clean_env(monkeypatch):
+    for var in (
+        "AD_PASSWORD", "AD_BIND_DN", "AZURE_KEYVAULT_URL",
+        "AZURE_KEYVAULT_SECRET_USERNAME", "AZURE_KEYVAULT_SECRET_PASSWORD",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_placeholder_unset_error_names_only_variable(monkeypatch):
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    monkeypatch.delenv("AD_TEST_UNSET", raising=False)
+    with pytest.raises(ValueError) as info:
+        _resolve_env_placeholders("topsecret-${AD_TEST_UNSET}")
+    assert "AD_TEST_UNSET" in str(info.value)
+    assert "topsecret" not in str(info.value)
+
+
+def test_placeholder_empty_default(monkeypatch):
+    from active_directory_mcp.config.loader import _resolve_env_placeholders
+
+    monkeypatch.delenv("AD_TEST_UNSET", raising=False)
+    assert _resolve_env_placeholders("a${AD_TEST_UNSET:}b") == "ab"
+
+
+def test_validation_error_never_echoes_input(tmp_path, clean_env, caplog):
+    path = _write(tmp_path, ad_overrides={"passwrd": SECRET})
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as info:
+            load_config(path)
+    assert SECRET not in str(info.value)
+    assert "passwrd" in str(info.value)
+    assert SECRET not in caplog.text
+
+
+def test_value_error_in_field_does_not_echo_password(tmp_path, clean_env, caplog):
+    path = _write(tmp_path, ad_overrides={"server": SECRET})
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as info:
+            load_config(path)
+    assert SECRET not in str(info.value)
+    assert SECRET not in caplog.text
+
+
+def _assert_registered(secret, caplog):
+    assert secret not in redaction.redact(f"token={secret}")
+    assert secret not in caplog.text
+
+
+def test_secret_registered_from_file(tmp_path, clean_env, caplog):
+    with caplog.at_level(logging.DEBUG):
+        cfg = load_config(_write(tmp_path))
+    assert cfg.active_directory.password.get_secret_value() == _AD["password"]
+    _assert_registered(_AD["password"], caplog)
+
+
+def test_secret_registered_from_placeholder(tmp_path, clean_env, monkeypatch, caplog):
+    monkeypatch.setenv("AD_BIND_PASSWORD", SECRET)
+    path = _write(tmp_path, ad_overrides={"password": "${AD_BIND_PASSWORD}"})
+    with caplog.at_level(logging.DEBUG):
+        cfg = load_config(path)
+    assert cfg.active_directory.password.get_secret_value() == SECRET
+    _assert_registered(SECRET, caplog)
+
+
+def test_secret_registered_from_env(tmp_path, clean_env, monkeypatch, caplog):
+    monkeypatch.setenv("AD_PASSWORD", SECRET)
+    path = _write(tmp_path, ad_overrides={"password": None})
+    with caplog.at_level(logging.DEBUG):
+        cfg = load_config(path)
+    assert cfg.active_directory.password.get_secret_value() == SECRET
+    _assert_registered(SECRET, caplog)
+
+
+def test_secret_registered_from_keyvault(tmp_path, clean_env, monkeypatch, caplog):
+    from unittest.mock import patch
+
+    def fake(vault_url, name):
+        return {"user-secret": "CN=kv,DC=test,DC=local", "pw-secret": SECRET}[name]
+
+    path = _write(
+        tmp_path,
+        ad_overrides={"password": None},
+        key_vault={
+            "vault_url": "https://v.vault.azure.net/",
+            "username_secret_name": "user-secret",
+            "password_secret_name": "pw-secret",
+        },
+    )
+    with patch("active_directory_mcp.config.loader.get_secret", side_effect=fake):
+        with caplog.at_level(logging.DEBUG):
+            cfg = load_config(path)
+    assert cfg.active_directory.password.get_secret_value() == SECRET
+    assert cfg.active_directory.bind_dn == "CN=kv,DC=test,DC=local"
+    _assert_registered(SECRET, caplog)
+
+
+def test_keyvault_error_surfaces_as_value_error(tmp_path, clean_env):
+    from unittest.mock import patch
+
+    from active_directory_mcp.config.keyvault import KeyVaultError
+
+    path = _write(
+        tmp_path,
+        ad_overrides={"password": None},
+        key_vault={"vault_url": "https://v.vault.azure.net/"},
+    )
+    with patch(
+        "active_directory_mcp.config.loader.get_secret", side_effect=KeyVaultError("kv boom")
+    ):
+        with pytest.raises(ValueError, match="kv boom"):
+            load_config(path)
+
+
+def _cfg(ad=None, security=None, performance=None):
+    ad_data = dict(_AD)
+    ad_data.update(ad or {})
+    return Config(
+        active_directory=ad_data,
+        security=security or {},
+        performance=performance or {},
+    )
+
+
+def test_validate_rejects_plaintext_by_default():
+    with pytest.raises(ValueError, match="Secure connection required"):
+        validate_config(_cfg(ad={"server": "ldap://dc.test.local"}))
+    with pytest.raises(ValueError, match="use_ssl"):
+        validate_config(_cfg(ad={"use_ssl": False}))
+
+
+def test_validate_rejects_tls_disabled():
+    with pytest.raises(ValueError, match="TLS disabled"):
+        validate_config(_cfg(security={"enable_tls": False}))
+
+
+def test_validate_explicit_opt_out_warns_plaintext(caplog):
+    cfg = _cfg(ad={"server": "ldap://dc.test.local"}, security={"require_secure_connection": False})
+    with caplog.at_level(logging.WARNING):
+        validate_config(cfg)
+    assert "plaintext" in caplog.text
+
+
+def test_validate_certificate_disabled_warns(caplog):
+    cfg = _cfg(security={"validate_certificate": False})
+    with caplog.at_level(logging.WARNING):
+        validate_config(cfg)
+    assert "certificate validation is disabled" in caplog.text
+
+
+def test_validate_pool_size_ignored_warning(caplog):
+    with caplog.at_level(logging.WARNING):
+        validate_config(_cfg(performance={"connection_pool_size": 5}))
+    assert "ignored" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        validate_config(_cfg())
+    assert "connection_pool_size" not in caplog.text
