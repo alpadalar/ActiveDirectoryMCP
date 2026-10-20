@@ -773,7 +773,7 @@ class OrganizationalUnitTools(BaseTool):
                 'sub_ous': contents.get('sub_ous_count', 0)
             }
             
-            return self._format_response(True, stats)
+            return self._format_response(stats, 'get_ou_statistics')
             
         except Exception as e:
             return self._handle_ldap_error(e, 'get_ou_statistics', ou_dn)

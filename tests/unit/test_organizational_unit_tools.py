@@ -494,3 +494,10 @@ def test_move_ou_new_dn_escapes_special_characters(ou_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = [ldap_entry(OU, objectClass=OU_CLASSES, name="A,B")]
     data = parse_response(ou_tools.move_ou(OU, "OU=Archive,DC=test,DC=local"))
     assert data["new_dn"] == "OU=A\\,B,OU=Archive,DC=test,DC=local"
+
+
+def test_get_ou_statistics_formats_stats_not_flag(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.side_effect = _tree({})
+    data = parse_response(ou_tools.get_ou_statistics(OU))
+    assert data["ou_dn"] == OU
+    assert "total_objects" in data
