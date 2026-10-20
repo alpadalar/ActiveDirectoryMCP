@@ -45,7 +45,7 @@ class GroupTools(BaseTool):
             if attributes is None:
                 attributes = [
                     'sAMAccountName', 'displayName', 'description', 'mail',
-                    'groupType', 'groupScope', 'member', 'memberOf',
+                    'groupType', 'member', 'memberOf',
                     'whenCreated', 'whenChanged', 'managedBy'
                 ]
             
@@ -123,7 +123,7 @@ class GroupTools(BaseTool):
             if attributes is None:
                 attributes = [
                     'sAMAccountName', 'displayName', 'description', 'mail',
-                    'groupType', 'groupScope', 'member', 'memberOf',
+                    'groupType', 'member', 'memberOf',
                     'whenCreated', 'whenChanged', 'managedBy', 'info'
                 ]
             
@@ -385,7 +385,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:
@@ -451,7 +451,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:
@@ -515,7 +515,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['dn', 'member']
+                attributes=['member']
             )
             
             if not group_results:

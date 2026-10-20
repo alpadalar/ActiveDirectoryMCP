@@ -15,6 +15,7 @@ from .base import BaseTool
 from ldap3.core.exceptions import LDAPException
 
 from ..core.logging import log_ldap_operation
+from ..redaction import register_secret
 from .. import validation
 from ..validation import ValidationError
 
@@ -189,6 +190,8 @@ class UserTools(BaseTool):
         Returns:
             List of MCP content objects with creation result
         """
+        # Never let the supplied password reach a log line or an error response
+        register_secret(password, persistent=False)
         try:
             # Determine OU (default from configuration, explicit value confined to base_dn)
             if ou is None:
@@ -427,12 +430,16 @@ class UserTools(BaseTool):
         
         Args:
             username: Username to reset password for
-            new_password: New password (if None, generates random password)
+            new_password: New password (if None, generates random password).
+                The new password is returned in the response by design (so a generated
+                password can be handed over); it is redacted from logs and error text.
             force_change: Force user to change password at next logon
             
         Returns:
             List of MCP content objects with result
         """
+        # Never let a supplied password reach a log line or an error response
+        register_secret(new_password, persistent=False)
         try:
             # Find user DN
             user_results = self.ldap.search(
@@ -453,6 +460,7 @@ class UserTools(BaseTool):
             # Generate password if not provided
             if new_password is None:
                 new_password = self._generate_password()
+                register_secret(new_password, persistent=False)
             
             self.logger.info(f"Resetting password for user: {username}")
             
@@ -495,7 +503,7 @@ class UserTools(BaseTool):
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
-                attributes=['memberOf', 'dn']
+                attributes=['memberOf']
             )
             
             if not user_results:
