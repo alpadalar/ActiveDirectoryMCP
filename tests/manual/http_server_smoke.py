@@ -4,6 +4,12 @@ Test script for ActiveDirectoryMCP HTTP server.
 
 This script demonstrates how to interact with the ActiveDirectoryMCP server
 via HTTP transport and tests various operations.
+
+Usage: uv run python tests/manual/http_server_smoke.py [URL]
+
+Manual smoke aid only (not collected by pytest). It predates the Phase 3
+/health route and the Phase 4 HTTP authentication, so parts of it may need
+updating once those land.
 """
 
 import requests

@@ -5,17 +5,13 @@ Requires actual AD connection and credentials.
 """
 
 import os
-import sys
 import json
-
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from active_directory_mcp.config.loader import load_config
 from active_directory_mcp.core.ldap_manager import LDAPManager
 from active_directory_mcp.tools.user import UserTools
 
-def test_real_ad_connection():
+def run_real_ad_connection():
     """Test with real AD connection."""
     
     # Load real config
@@ -92,11 +88,11 @@ def main():
     print("   cp ad-config/config.example.json ad-config/config.json")
     print("   # Edit config.json with your AD details")
     print("   export AD_MCP_CONFIG=ad-config/config.json")
-    print("   python test_real_ad.py")
+    print("   uv run python tests/manual/real_ad_smoke.py")
     
     print("\n🚀 Starting test...")
     
-    success = test_real_ad_connection()
+    success = run_real_ad_connection()
     
     if success:
         print("\n🎉 Real AD test successful!")
