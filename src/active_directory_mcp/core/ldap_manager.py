@@ -8,8 +8,8 @@ from typing import Optional, List, Dict, Any, Union
 from threading import Lock
 
 import ldap3
-from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPSocketOpenError
+from ldap3 import Server, Connection, ALL, SUBTREE, BASE, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
+from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPSocketOpenError, LDAPNoSuchObjectResult
 
 from ..redaction import redact
 from ..config.models import (
@@ -255,18 +255,24 @@ class LDAPManager:
             cookie = None
             
             while True:
-                success = connection.search(
-                    search_base=search_base,
-                    search_filter=search_filter,
-                    search_scope=search_scope,
-                    attributes=attributes,
-                    paged_size=paged_size,
-                    paged_cookie=cookie
-                )
+                try:
+                    success = connection.search(
+                        search_base=search_base,
+                        search_filter=search_filter,
+                        search_scope=search_scope,
+                        attributes=attributes,
+                        paged_size=paged_size,
+                        paged_cookie=cookie
+                    )
+                except LDAPNoSuchObjectResult:
+                    if search_scope == BASE:
+                        # A BASE probe of a missing entry means "does not exist".
+                        break
+                    raise
                 
                 if not success:
-                    if SKIP_SCHEMA and connection.result and connection.result.get("result") == 0:
-                        break  # search succeeded but returned no entries
+                    if connection.result and connection.result.get("result") == 0:
+                        break  # search succeeded but returned no entries (or empty last page)
                     logger.error(f"Search failed: {connection.result}")
                     raise LDAPException(f"Search failed: {connection.result}")
                 

@@ -253,15 +253,9 @@ def test_schema_less_mode_stringifies_integers(seeded):
     assert data["attributes"]["userAccountControl"] == ["b'512'"]
 
 
-# ---------------------------------------------------------------- latent product bugs
+# ---------------------------------------------------------------- regressions for former product bugs
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LDAPManager.search raises on any empty result in schema mode: ldap3 search() "
-    "returns False for zero entries and only SKIP_SCHEMA mode treats result 0 as success "
-    "(see deferred-items.md)",
-)
 def test_create_user_round_trip_schema_mode(directory):
     with directory.patch():
         tools = UserTools(directory.make_manager())
@@ -270,11 +264,6 @@ def test_create_user_round_trip_schema_mode(directory):
         ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="create_ou probes the not-yet-existing OU with a BASE search; ldap3 raises "
-    "noSuchObject (raise_exceptions=True) instead of returning no entries (see deferred-items.md)",
-)
 def test_create_ou_succeeds(directory):
     with directory.patch(schema_less=True):
         tools = OrganizationalUnitTools(directory.make_manager())
@@ -375,20 +364,49 @@ def test_fidelity_paged_search_cookie_behaviour(seeded):
 
         # Exhausted-cookie case: when the result count is an exact multiple of page_size the
         # mock hands back a non-empty cookie and then an empty final page. ldap3 reports an
-        # empty page as False, and LDAPManager.search treats that as a failed search and raises.
+        # empty page as False; LDAPManager.search treats result code 0 as success, so the
+        # empty final page ends the loop and all entries are returned.
         # Real AD behaviour for this boundary is not verified here (live-AD checklist).
-        with pytest.raises(LDAPException, match="Search failed"):
-            seeded.make_manager(page_size=7).search(seeded.base_dn, "(objectClass=user)", ["sAMAccountName"])
+        exact = seeded.make_manager(page_size=7).search(
+            seeded.base_dn, "(objectClass=user)", ["sAMAccountName"]
+        )
+        assert len(exact) == 7
 
 
-def test_fidelity_empty_result_raises_in_schema_mode(seeded):
-    # ldap3 search() returns False for zero entries; LDAPManager only tolerates this in
-    # schema-less mode. Pinned so the xfail create_user test above is understood.
+def test_empty_result_returns_empty_list_in_both_modes(seeded):
+    # ldap3 search() returns False for zero entries with result code 0: that is success.
+    for kwargs in ({}, {"schema_less": True}):
+        with seeded.patch(**kwargs):
+            manager = seeded.make_manager()
+            assert manager.search(seeded.base_dn, "(sAMAccountName=nobody)", ["cn"]) == []
+
+
+def test_empty_last_page_does_not_raise(seeded):
+    # 2 seeded users + exact page-size multiple -> final page is empty.
     with seeded.patch():
-        with pytest.raises(LDAPException, match="Search failed"):
-            seeded.make_manager().search(seeded.base_dn, "(sAMAccountName=nobody)", ["cn"])
-    with seeded.patch(schema_less=True):
-        assert seeded.make_manager().search(seeded.base_dn, "(sAMAccountName=nobody)", ["cn"]) == []
+        found = seeded.make_manager(page_size=1).search(
+            seeded.base_dn, "(&(objectClass=user)(sAMAccountName=alice))", ["sAMAccountName"]
+        )
+    assert len(found) == 1
+
+
+def test_base_search_on_missing_entry_returns_empty(seeded):
+    from ldap3 import BASE
+
+    with seeded.patch():
+        manager = seeded.make_manager()
+        missing = "OU=Nope," + seeded.base_dn
+        assert manager.search(missing, "(objectClass=*)", ["name"], search_scope=BASE) == []
+
+
+def test_group_tools_work_in_schema_mode(seeded):
+    from active_directory_mcp.tools.group import GroupTools
+
+    with seeded.patch():
+        tools = GroupTools(seeded.make_manager())
+        assert isinstance(parse_response(tools.list_groups()), (dict, list))
+        assert parse_response(tools.get_members("nonexistent-group"))["success"] is False
+        assert parse_response(tools.get_group("nonexistent-group"))["success"] is False
 
 
 def test_fidelity_non_leaf_delete_allowed(seeded):
@@ -447,8 +465,7 @@ def test_fidelity_state_is_per_connection(seeded):
         ]
         assert len(seeded.connections) == 2
         # The first manager still sees its own delete.
-        with pytest.raises(LDAPException):
-            first.search(seeded.base_dn, "(sAMAccountName=alice)", ["cn"])
+        assert first.search(seeded.base_dn, "(sAMAccountName=alice)", ["cn"]) == []
 
 
 def test_fidelity_case_handling(seeded):
