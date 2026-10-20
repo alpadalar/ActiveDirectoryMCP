@@ -232,13 +232,13 @@ def test_create_computer_ldap_exception(computer_tools, mock_ldap_manager):
 
 def test_modify_computer_success(computer_tools, mock_ldap_manager):
     mock_ldap_manager.search.return_value = [ldap_entry(WS_DN)]
-    data = parse_response(computer_tools.modify_computer("WS01", {"description": "x", "l": ["a"]}))
+    data = parse_response(computer_tools.modify_computer("WS01", {"description": "x", "location": ["a"]}))
     assert data["success"] is True
-    assert data["modified_attributes"] == ["description", "l"]
+    assert data["modified_attributes"] == ["description", "location"]
     dn, mods = mock_ldap_manager.modify.call_args.args
     assert dn == WS_DN
     assert mods["description"][0][1] == ["x"]
-    assert mods["l"][0][1] == ["a"]
+    assert mods["location"][0][1] == ["a"]
 
 
 def test_modify_computer_not_found(computer_tools, mock_ldap_manager):
@@ -481,3 +481,69 @@ def test_create_computer_rejects_out_of_base_ou(computer_tools, mock_ldap_manage
     assert data["success"] is False
     mock_ldap_manager.search.assert_not_called()
     mock_ldap_manager.add.assert_not_called()
+
+
+# ------------------------------------------- allow-lists, caps, notes (SEC-03/06)
+
+BAD_ATTRS = ["userAccountControl", "servicePrincipalName", "unicodePwd",
+             "msDS-AllowedToActOnBehalfOfOtherIdentity", "description_unknown"]
+
+
+@pytest.mark.parametrize("attr", BAD_ATTRS)
+def test_modify_computer_rejects_disallowed_with_no_ldap_calls(
+    computer_tools, mock_ldap_manager, attr
+):
+    data = parse_response(computer_tools.modify_computer("WS01", {"description": "x", attr: 1}))
+    assert data["success"] is False
+    assert data["error_code"] == "attribute_not_allowed"
+    assert attr in data["rejected_attributes"]
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.modify.assert_not_called()
+
+
+@pytest.mark.parametrize("attr", BAD_ATTRS[:3])
+def test_create_computer_rejects_disallowed_additional_attributes(
+    computer_tools, mock_ldap_manager, attr
+):
+    data = parse_response(computer_tools.create_computer("WS09", additional_attributes={attr: 1}))
+    assert data["success"] is False
+    assert data["error_code"] == "attribute_not_allowed"
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.add.assert_not_called()
+
+
+def test_create_computer_accepts_allowed_additional_attributes(computer_tools, mock_ldap_manager):
+    data = parse_response(
+        computer_tools.create_computer("WS09", additional_attributes={"location": "HQ"})
+    )
+    assert data["success"] is True
+    assert mock_ldap_manager.add.call_args.args[1]["location"] == "HQ"
+
+
+def _computers(n):
+    return [ldap_entry(f"CN=PC{i},CN=Computers,DC=test,DC=local", sAMAccountName=f"PC{i}$",
+                       userAccountControl=4096) for i in range(n)]
+
+
+def test_list_computers_capped_and_truncated(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 3
+    mock_ldap_manager.search.return_value = _computers(4)
+    data = parse_response(computer_tools.list_computers())
+    assert data["count"] == 3 and data["truncated"] is True and data["result_limit"] == 3
+    assert mock_ldap_manager.search.call_args.kwargs["size_limit"] == 4
+
+
+def test_list_computers_cap_opt_out(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 0
+    mock_ldap_manager.search.return_value = _computers(5)
+    data = parse_response(computer_tools.list_computers())
+    assert data["count"] == 5 and data["truncated"] is False and data["result_limit"] is None
+    assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
+def test_get_stale_computers_capped_with_accuracy_note(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 2
+    mock_ldap_manager.search.return_value = _computers(3)
+    data = parse_response(computer_tools.get_stale_computers(30))
+    assert data["truncated"] is True and data["result_limit"] == 2
+    assert "lastLogonTimestamp" in data["accuracy_note"]

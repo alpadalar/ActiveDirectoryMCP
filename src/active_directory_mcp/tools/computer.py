@@ -14,6 +14,11 @@ from ..validation import ValidationError
 from ..core.logging import log_ldap_operation
 from ..redaction import register_secret
 
+LASTLOGON_NOTE = (
+    "lastLogon is not replicated between domain controllers; this value is from the DC "
+    "the server is connected to. lastLogonTimestamp is replicated but can lag by up to 14 days."
+)
+
 
 class ComputerTools(BaseTool):
     """Tools for managing Active Directory computer objects."""
@@ -57,7 +62,7 @@ class ComputerTools(BaseTool):
             self.logger.info(f"Listing computers from {search_base}")
             
             # Perform search
-            results = self.ldap.search(
+            results, truncated, limit = self._capped_search(
                 search_base=search_base,
                 search_filter=search_filter,
                 attributes=attributes
@@ -98,7 +103,8 @@ class ComputerTools(BaseTool):
                 "computers": computers,
                 "count": len(computers),
                 "search_base": search_base,
-                "filter": search_filter
+                "filter": search_filter,
+                **self._cap_metadata(truncated, limit)
             }
             
             return self._format_response(response_data, "list_computers")
@@ -195,6 +201,13 @@ class ComputerTools(BaseTool):
             List of MCP content objects with creation result
         """
         try:
+            if additional_attributes:
+                rejection = self._check_modify_attributes(
+                    "computer", additional_attributes, "create_computer", computer_name
+                )
+                if rejection is not None:
+                    return rejection
+
             # Normalize computer name
             sam_account_name = computer_name if computer_name.endswith('$') else f"{computer_name}$"
             computer_cn = computer_name.rstrip('$')
@@ -293,6 +306,13 @@ class ComputerTools(BaseTool):
             List of MCP content objects with modification result
         """
         try:
+            # Attribute allow-list first: no LDAP call for a disallowed attribute
+            rejection = self._check_modify_attributes(
+                "computer", attributes, "modify_computer", computer_name
+            )
+            if rejection is not None:
+                return rejection
+
             # Normalize computer name
             if not computer_name.endswith('$'):
                 computer_name += '$'
@@ -506,7 +526,7 @@ class ComputerTools(BaseTool):
             search_filter = self._computer_filter()
             attributes = ['sAMAccountName', 'dNSHostName', 'lastLogon', 'pwdLastSet', 'operatingSystem', 'description']
 
-            results = self.ldap.search(
+            results, truncated, limit = self._capped_search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=search_filter,
                 attributes=attributes
@@ -536,7 +556,9 @@ class ComputerTools(BaseTool):
                 "stale_computers": stale_computers,
                 "count": len(stale_computers),
                 "criteria_days": days,
-                "cutoff_date": cutoff_date.isoformat()
+                "cutoff_date": cutoff_date.isoformat(),
+                "accuracy_note": LASTLOGON_NOTE,
+                **self._cap_metadata(truncated, limit)
             }, "get_stale_computers")
             
         except Exception as e:

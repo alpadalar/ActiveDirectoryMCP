@@ -501,3 +501,64 @@ def test_get_ou_statistics_formats_stats_not_flag(ou_tools, mock_ldap_manager):
     data = parse_response(ou_tools.get_ou_statistics(OU))
     assert data["ou_dn"] == OU
     assert "total_objects" in data
+
+
+# ------------------------------------------- allow-lists and caps (SEC-03/06)
+
+
+@pytest.mark.parametrize("attr", ["gPLink", "gPOptions", "nTSecurityDescriptor", "bogus"])
+def test_modify_ou_rejects_disallowed_with_no_ldap_calls(ou_tools, mock_ldap_manager, attr):
+    data = parse_response(ou_tools.modify_ou(OU, {"description": "x", attr: "v"}))
+    assert data["success"] is False
+    assert data["error_code"] == "attribute_not_allowed"
+    assert attr in data["rejected_attributes"]
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.modify.assert_not_called()
+
+
+@pytest.mark.parametrize("attr", ["gPLink", "nTSecurityDescriptor"])
+def test_create_ou_rejects_disallowed_additional_attributes(ou_tools, mock_ldap_manager, attr):
+    data = parse_response(ou_tools.create_ou("Eng", additional_attributes={attr: "v"}))
+    assert data["success"] is False
+    assert data["error_code"] == "attribute_not_allowed"
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.add.assert_not_called()
+
+
+def test_create_ou_first_class_params_unaffected(ou_tools, mock_ldap_manager):
+    data = parse_response(
+        ou_tools.create_ou("Eng", description="d", managed_by="CN=a,DC=test,DC=local",
+                           additional_attributes={"l": "x"})
+    )
+    assert data["success"] is True
+
+
+def test_list_ous_capped(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 2
+    mock_ldap_manager.search.return_value = [_ou(f"OU=O{i},DC=test,DC=local") for i in range(3)]
+    data = parse_response(ou_tools.list_ous())
+    assert data["count"] == 2 and data["truncated"] is True and data["result_limit"] == 2
+
+
+def test_get_ou_contents_capped(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 1
+    mock_ldap_manager.search.return_value = [
+        ldap_entry(f"CN=u{i},{OU}", objectClass=["top", "user"], sAMAccountName=f"u{i}")
+        for i in range(2)
+    ]
+    data = parse_response(ou_tools.get_ou_contents(OU))
+    assert data["total_count"] == 1 and data["truncated"] is True
+
+
+def test_delete_ou_force_walks_every_child_beyond_cap(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 1
+    kids = [f"CN=u{i},{OU}" for i in range(4)]
+    mock_ldap_manager.search.side_effect = _tree(
+        {OU: [ldap_entry(k, objectClass=["top", "user"]) for k in kids]}
+    )
+    data = parse_response(ou_tools.delete_ou(OU, force=True))
+    assert data["success"] is True
+    deleted = [c.args[0] for c in mock_ldap_manager.delete.call_args_list]
+    assert set(kids) <= set(deleted) and deleted[-1] == OU
+    for call in mock_ldap_manager.search.call_args_list:
+        assert "size_limit" not in call.kwargs

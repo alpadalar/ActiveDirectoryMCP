@@ -66,7 +66,7 @@ class OrganizationalUnitTools(BaseTool):
             self.logger.info(f"Listing OUs from {search_base} (recursive: {recursive})")
             
             # Perform search
-            results = self.ldap.search(
+            results, truncated, limit = self._capped_search(
                 search_base=search_base,
                 search_filter=search_filter,
                 attributes=attributes,
@@ -114,7 +114,8 @@ class OrganizationalUnitTools(BaseTool):
                 "count": len(ous),
                 "search_base": search_base,
                 "recursive": recursive,
-                "filter": search_filter
+                "filter": search_filter,
+                **self._cap_metadata(truncated, limit)
             }
             
             return self._format_response(response_data, "list_ous")
@@ -209,6 +210,13 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with creation result
         """
         try:
+            if additional_attributes:
+                rejection = self._check_modify_attributes(
+                    "ou", additional_attributes, "create_ou", name
+                )
+                if rejection is not None:
+                    return rejection
+
             # Determine parent OU
             if parent_ou is None:
                 parent_ou = self.ldap.ad_config.base_dn
@@ -286,6 +294,11 @@ class OrganizationalUnitTools(BaseTool):
             List of MCP content objects with modification result
         """
         try:
+            # Attribute allow-list first: no LDAP call for a disallowed attribute
+            rejection = self._check_modify_attributes("ou", attributes, "modify_ou", ou_dn)
+            if rejection is not None:
+                return rejection
+
             # Validate DN (well formed and confined to base_dn) before any LDAP call
             try:
                 ou_dn = self._confined_dn(ou_dn, allow_base=False)
@@ -530,7 +543,7 @@ class OrganizationalUnitTools(BaseTool):
             self.logger.info(f"Getting contents of OU: {ou_dn}")
             
             # Perform search
-            results = self.ldap.search(
+            results, truncated, limit = self._capped_search(
                 search_base=ou_dn,
                 search_filter=search_filter,
                 attributes=['objectClass', 'sAMAccountName', 'name', 'displayName', 'description'],
@@ -580,7 +593,8 @@ class OrganizationalUnitTools(BaseTool):
                 "contents": contents,
                 "total_count": len(contents),
                 "type_counts": type_counts,
-                "object_types": object_types
+                "object_types": object_types,
+                **self._cap_metadata(truncated, limit)
             }, "get_ou_contents")
             
         except Exception as e:

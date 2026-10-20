@@ -600,3 +600,44 @@ def test_get_user_permissions_logs_skipped_group(security_tools, mock_ldap_manag
         data = parse_response(security_tools.get_user_permissions("alice"))
     assert data["privileged_groups_count"] == 0
     assert any(bad_dn in r.getMessage() for r in caplog.records)
+
+
+# ------------------------------------------- caps and accuracy notes (SEC-06)
+
+
+def _user_entries(n):
+    return [
+        ldap_entry(f"CN=u{i},CN=Users,{BASE}", sAMAccountName=f"u{i}", userAccountControl=512,
+                   lastLogon=0, pwdLastSet=0)
+        for i in range(n)
+    ]
+
+
+def test_get_inactive_users_capped_with_accuracy_note(security_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 2
+    mock_ldap_manager.search.return_value = _user_entries(3)
+    data = parse_response(security_tools.get_inactive_users())
+    assert data["truncated"] is True and data["result_limit"] == 2 and data["count"] == 2
+    assert "lastLogonTimestamp" in data["accuracy_note"]
+    assert mock_ldap_manager.search.call_args.kwargs["size_limit"] == 3
+
+
+def test_get_inactive_users_cap_opt_out(security_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 0
+    mock_ldap_manager.search.return_value = _user_entries(3)
+    data = parse_response(security_tools.get_inactive_users())
+    assert data["count"] == 3 and data["truncated"] is False
+    assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
+def test_password_policy_violations_capped(security_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 2
+    domain = ldap_entry(BASE, maxPwdAge=0, minPwdAge=0)
+    mock_ldap_manager.search.side_effect = [[domain], _user_entries(3)]
+    data = parse_response(security_tools.get_password_policy_violations())
+    assert data["truncated"] is True and data["result_limit"] == 2 and data["count"] == 2
+
+
+def test_audit_admin_accounts_has_lastlogon_note(security_tools, mock_ldap_manager):
+    data = parse_response(security_tools.audit_admin_accounts())
+    assert "lastLogon" in data["accuracy_note"]

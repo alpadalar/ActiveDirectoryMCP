@@ -12,6 +12,11 @@ from .base import BaseTool
 from ..core.logging import log_ldap_operation
 
 
+LASTLOGON_NOTE = (
+    "lastLogon is not replicated between domain controllers; this value is from the DC "
+    "the server is connected to. lastLogonTimestamp is replicated but can lag by up to 14 days."
+)
+
 class SecurityTools(BaseTool):
     """Tools for Active Directory security operations and auditing."""
     
@@ -267,7 +272,7 @@ class SecurityTools(BaseTool):
                 )
             
             # Search for all users
-            results = self.ldap.search(
+            results, truncated, limit = self._capped_search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=search_filter,
                 attributes=[
@@ -313,7 +318,9 @@ class SecurityTools(BaseTool):
                 "count": len(inactive_users),
                 "criteria_days": days,
                 "include_disabled": include_disabled,
-                "cutoff_date": cutoff_date.isoformat()
+                "cutoff_date": cutoff_date.isoformat(),
+                "accuracy_note": LASTLOGON_NOTE,
+                **self._cap_metadata(truncated, limit)
             }, "get_inactive_users")
             
         except Exception as e:
@@ -350,7 +357,7 @@ class SecurityTools(BaseTool):
                 max_pwd_age = 0
 
             # Search for users
-            user_results = self.ldap.search(
+            user_results, truncated, limit = self._capped_search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(objectClass={self.ldap.ad_config.user_object_class})",
                 attributes=[
@@ -419,7 +426,8 @@ class SecurityTools(BaseTool):
             
             return self._format_response({
                 "password_violations": violations,
-                "count": len(violations)
+                "count": len(violations),
+                **self._cap_metadata(truncated, limit)
             }, "get_password_policy_violations")
             
         except Exception as e:
@@ -528,7 +536,11 @@ class SecurityTools(BaseTool):
                 "total_admin_accounts": len(admin_accounts),
                 "high_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'high']),
                 "medium_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'medium']),
-                "low_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'low'])
+                "low_risk_count": len([acc for acc in admin_accounts if str(acc['risk_level']).lower() == 'low']),
+                "accuracy_note": (
+                    "Logon-age figures are based on lastLogon, which is not replicated between "
+                    "domain controllers; values come from the DC the server is connected to."
+                )
             }, "audit_admin_accounts")
             
         except Exception as e:
