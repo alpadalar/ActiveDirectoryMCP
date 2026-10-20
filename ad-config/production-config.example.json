@@ -1,8 +1,7 @@
 {
     "active_directory": {
-        "server": "ldap://your-ad-server.domain.com:389",
+        "server": "ldaps://your-ad-server.domain.com:636",
         "use_ssl": true,
-        "ssl_port": 636,
         "domain": "yourdomain.com",
         "base_dn": "DC=yourdomain,DC=com",
         "bind_dn": "CN=ServiceAccount,OU=Service Accounts,DC=yourdomain,DC=com",
@@ -24,7 +23,6 @@
     "security": {
         "enable_tls": true,
         "validate_certificate": true,
-        "ca_cert_file": "/app/ssl/ca-certificate.pem",
         "require_secure_connection": true,
         "allow_writes": false,
         "allow_destructive": false,

@@ -502,3 +502,29 @@ def test_copied_env_example_plus_plaintext_credentials_loads_without_azure(monke
     monkeypatch.setenv("AD_PASSWORD", "placeholder-pw")
     config = load_config(str(REPO_ROOT / "ad-config" / "config.example.json"))
     assert config.active_directory.password.get_secret_value() == "placeholder-pw"
+
+
+@pytest.mark.parametrize("example", EXAMPLES, ids=lambda p: p.name)
+def test_every_example_config_passes_startup_validation_as_shipped(example, monkeypatch):
+    """WR-07: load AND validate each example the way server startup does, Key Vault mocked."""
+    from active_directory_mcp.config import loader
+
+    monkeypatch.setenv("AD_BIND_DN", "CN=svc,DC=example,DC=com")
+    monkeypatch.setenv("AD_PASSWORD", "placeholder-pw")
+    monkeypatch.setenv("LAB_LDAP_PASSWORD", "placeholder-pw")
+    for name in ("AZURE_KEYVAULT_URL", "AZURE_KEYVAULT_SECRET_USERNAME",
+                 "AZURE_KEYVAULT_SECRET_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(loader, "get_secret", lambda _url, _name: "placeholder-pw")
+    config = loader.load_config(str(example))
+    loader.validate_config(config)
+    # A shipped path to a file the repository does not provide fails at connect time.
+    assert not config.security.ca_cert_file or Path(config.security.ca_cert_file).exists()
+
+
+def test_production_example_is_secure_by_default():
+    data = json.loads(
+        (REPO_ROOT / "ad-config" / "production-config.example.json").read_text(encoding="utf-8")
+    )
+    assert data["active_directory"]["server"].startswith("ldaps://")
+    assert data["security"]["require_secure_connection"] is True
