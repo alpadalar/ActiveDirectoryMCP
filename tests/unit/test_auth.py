@@ -198,3 +198,14 @@ def test_resolve_env_plaintext_length_counted_after_strip() -> None:
     with pytest.raises(HTTPAuthConfigError):
         resolve_auth(_sec(), {auth.ENV_API_KEY: padded})
 
+
+def test_auth_failure_log_neutralises_request_path(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    client.get("/%0a2099-01-01 CRITICAL forged%0d" + "x" * 500)
+    messages = [r.getMessage() for r in caplog.records if "auth failure" in r.getMessage()]
+    assert messages
+    for message in messages:
+        assert "\n" not in message and "\r" not in message
+        assert len(message) < 400

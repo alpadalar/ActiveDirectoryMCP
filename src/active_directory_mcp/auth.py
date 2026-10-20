@@ -190,7 +190,7 @@ class ApiKeyAuthMiddleware:
     async def _deny_http(self, scope: Scope, send: Send) -> None:
         request_id = scope.get("state", {}).get("request_id", "-")
         logger.warning(
-            "auth failure method=%s path=%s request_id=%s",
+            "auth failure method=%s path=%.200r request_id=%s",
             scope.get("method"),
             scope.get("path"),
             request_id,
