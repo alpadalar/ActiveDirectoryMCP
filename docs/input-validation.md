@@ -22,6 +22,14 @@ Rejected (the tool returns an error and sends nothing to the directory):
   start a new top-level term.
 - NUL bytes and other control characters.
 - Fragments that do not parse as an LDAP filter, and empty fragments.
+- Terms on sensitive attributes (`userPassword`, `unicodePwd`, `ntSecurityDescriptor`,
+  `msDS-KeyCredentialLink`, `ms-Mcs-AdmPwd`, `msLAPS-*`, `msDS-ManagedPassword*`,
+  `msFVE-*`, trust auth blobs and similar; the full list is
+  `validation.SENSITIVE_FILTER_ATTRIBUTES`) and attributes written as OIDs. Why: a
+  filter is a blind oracle, since result counts reveal a secret attribute one prefix
+  at a time even when output is filtered.
+- Extensible-match terms (`attr:rule:=value`, `:dn:=`), including the expensive
+  `memberOf:1.2.840.113556.1.4.1941:=` matching-rule-in-chain query.
 
 Limits you must understand:
 
@@ -29,7 +37,8 @@ Limits you must understand:
   the caller's responsibility: the server does not rewrite them. A caller can still
   express any read-only search the bind account is allowed to run (for example
   `(adminCount=1)`).
-- Treat `filter_criteria` as trusted-caller input. Do not expose the parameter to
+- The deny-list is not a substitute for directory ACLs: give the bind account no read
+  access to secrets it does not need. Treat `filter_criteria` as trusted-caller input. Do not expose the parameter to
   untrusted prompts or end users without a proxy that constrains what the model can
   send, and give the bind account only the read rights you are happy to expose.
 

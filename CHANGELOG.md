@@ -54,6 +54,19 @@ and enforced by the golden snapshots in `tests/golden/`.
 - The bind password is a `SecretStr`; its repr and JSON dump are masked, and registered
   secrets are redacted from all log handlers, connection errors and tool error responses.
 
+- `filter_criteria` now rejects terms on sensitive attributes (password hashes,
+  `unicodePwd`, LAPS, gMSA, key credentials, security descriptors, BitLocker recovery
+  data) and extensible-match terms such as `memberOf:1.2.840.113556.1.4.1941:=`, which
+  closes a blind-oracle probe of secrets. See `docs/input-validation.md`.
+- `delete_ou`, `modify_ou` and `move_ou` (source) now reject `base_dn` itself, and
+  `move_ou` rejects a target parent that is the OU or beneath it. Read operations may
+  still target `base_dn`.
+- RDN values with a trailing space are now written with the `\20` escape instead of
+  failing with "Malformed DN".
+- Passwords passed to `create_user` and `reset_password` (including generated ones) are
+  registered for redaction, so they are scrubbed from logs and error responses. The
+  `reset_password` success response still returns the new password by design.
+
 ### Deprecated
 
 - `performance.connection_pool_size` is accepted but ignored (one serialized LDAP
@@ -61,6 +74,14 @@ and enforced by the golden snapshots in `tests/golden/`.
   release.
 
 ### Fixed
+
+- DN confinement could be bypassed with a multi-valued RDN such as
+  `CN=a+DC=corp,DC=example,DC=com`; DNs are now compared RDN by RDN.
+- Attribute and objectClass names with a trailing newline were accepted.
+- Log redaction is installed at record creation, so records from other loggers
+  (fastmcp, uvicorn, ldap3), handlers added later and pre-setup records are redacted. It
+  also covers JSON/repr-escaped and `unicodePwd` encodings of a secret, and fails closed
+  (the record is replaced by a placeholder) instead of passing the raw record through.
 
 - `LDAPManager.search` no longer raises "Search failed" when a search returns zero entries
   (or an empty last page) with result code 0; it returns an empty list. This fixes lookups
