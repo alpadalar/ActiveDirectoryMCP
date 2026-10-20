@@ -126,3 +126,13 @@ def test_partial_organizational_units_are_filled_from_defaults(missing):
     ous = Config(active_directory=AD, organizational_units=full).organizational_units
     assert getattr(ous, missing).endswith(",DC=test,DC=local")
     assert getattr(ous, missing).startswith("CN=")
+
+
+def test_computer_filters_use_configured_computer_object_class():
+    manager = _real_manager()
+    manager.ad_config.computer_object_class = "device"
+    ComputerTools(manager).list_computers()
+    ComputerTools(manager).get_computer("PC1")
+    filters = [c.kwargs["search_filter"] for c in manager.search.call_args_list]
+    assert filters and all("(objectClass=device)" in f for f in filters)
+    assert not any("objectClass=computer" in f for f in filters)

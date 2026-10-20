@@ -42,6 +42,8 @@ and enforced by the golden snapshots in `tests/golden/`.
 - Days since last logon and password age are computed correctly for the values real AD
   returns (timezone-aware datetimes, FILETIME integers, numeric strings) instead of
   silently becoming empty or -1.
+- Computer searches (`list_computers`, `get_computer`, status/groups/modify/delete lookups
+  and OU object listings) now honour `computer_object_class`; it was defined but ignored.
 - `create_user` now creates users in the configured `organizational_units.users_ou`
   (previously hard-coded to `CN=Users,<base_dn>`) when no `ou` is passed.
 - `get_password_policy_violations` no longer fails with a TypeError when `maxPwdAge`

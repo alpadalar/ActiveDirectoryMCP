@@ -34,7 +34,7 @@ class ComputerTools(BaseTool):
                 search_base = self.ldap.ad_config.base_dn
             
             # Build search filter
-            base_filter = "(objectClass=computer)"
+            base_filter = f"(objectClass={self.ldap.ad_config.computer_object_class})"
             if filter_criteria:
                 search_filter = f"(&{base_filter}{filter_criteria})"
             else:
@@ -118,7 +118,7 @@ class ComputerTools(BaseTool):
             
             # Build search filter
             escaped_computer_name = self._escape_ldap_filter(computer_name)
-            search_filter = f"(&(objectClass=computer)(sAMAccountName={escaped_computer_name}))"
+            search_filter = f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={escaped_computer_name}))"
             
             # Determine attributes to retrieve
             if attributes is None:
@@ -290,7 +290,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=computer)(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -351,7 +351,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=computer)(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -427,7 +427,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=computer)(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
@@ -482,7 +482,7 @@ class ComputerTools(BaseTool):
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Search for all computers
-            search_filter = "(objectClass=computer)"
+            search_filter = f"(objectClass={self.ldap.ad_config.computer_object_class})"
             attributes = ['sAMAccountName', 'dNSHostName', 'lastLogon', 'pwdLastSet', 'operatingSystem', 'description']
 
             results = self.ldap.search(
@@ -531,7 +531,7 @@ class ComputerTools(BaseTool):
             # Find computer DN
             computer_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
-                search_filter=f"(&(objectClass=computer)(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
+                search_filter=f"(&(objectClass={self.ldap.ad_config.computer_object_class})(sAMAccountName={self._escape_ldap_filter(computer_name)}))",
                 attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
             )
 
