@@ -241,7 +241,7 @@ def test_secret_scan_ignores_github_actions_expressions(line):
 @pytest.mark.parametrize(
     "line",
     [
-        '          token: "${{ secrets.X }}' + 'realsecret"',
+        json.dumps({"token": "${{ secrets.X }}" + "realsecret"}),
         "          token: x${{ secrets.X }}",
         "          token: ${{ secrets.X || 'hunter2hunter2' }}",
         "          token: ${{ hunter2hunter2 }}",
