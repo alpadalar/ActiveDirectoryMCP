@@ -98,7 +98,8 @@ class ActiveDirectoryMCPServer:
 
             if connection_info.get("connected"):
                 self.logger.info(
-                    f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}"
+                    f"Successfully connected to {connection_info.get('server')}:"
+                    f"{connection_info.get('port')}"
                 )
                 if connection_info.get("search_test"):
                     self.logger.info("LDAP search test passed")

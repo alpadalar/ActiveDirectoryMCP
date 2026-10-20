@@ -252,7 +252,7 @@ def test_schema_less_mode_stringifies_integers(seeded):
     assert data["attributes"]["userAccountControl"] == ["b'512'"]
 
 
-# ---------------------------------------------------------------- regressions for former product bugs
+# ------------------------------------------------------- regressions for former product bugs
 
 
 def test_create_user_round_trip_schema_mode(directory):

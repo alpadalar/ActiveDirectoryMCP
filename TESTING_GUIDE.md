@@ -23,10 +23,12 @@ uv run pytest
 ```python
 directory = MockDirectory()
 directory.add_user("alice", displayName="Alice")
-with directory.patch():                      # patch(schema_less=True) mirrors AD_MCP_SKIP_SCHEMA
+with directory.patch():  # patch(schema_less=True) mirrors AD_MCP_SKIP_SCHEMA
     manager = directory.make_manager(page_size=2)
     UserTools(manager).disable_user("alice")
-    directory.search("(sAMAccountName=alice)", ["userAccountControl"])   # [{"dn": ..., "attributes": {...: [514]}}]
+    directory.search(
+        "(sAMAccountName=alice)", ["userAccountControl"]
+    )  # [{"dn": ..., "attributes": {...: [514]}}]
 ```
 
 `directory.ad_config()`, `ou_config()`, `security_config()`, `performance_config()` build ready configuration models; `directory.env(tmp_path)` returns `AD_MCP_CONFIG` and `AD_PASSWORD` for `patch.dict(os.environ, ...)`. The bind password defaults to the placeholder `mock-bind-secret`. Each new connection replays the seeds into its own store, so one `LDAPManager` (which caches a single connection) sees its own writes consistently.

@@ -195,7 +195,8 @@ class LDAPManager:
                     # If we get here, all servers failed for this attempt
                     if attempt < attempts - 1:
                         logger.info(
-                            f"Retry {attempt + 1}/{attempts} after {self.performance_config.retry_delay}s"
+                            f"Retry {attempt + 1}/{attempts} after "
+                            f"{self.performance_config.retry_delay}s"
                         )
                         time.sleep(self.performance_config.retry_delay)
 

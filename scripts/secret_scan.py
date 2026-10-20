@@ -220,21 +220,45 @@ def compare(
 
 def run_gitleaks(repo: Path, config: Path) -> Optional[Dict[str, object]]:
     """Run gitleaks if it is already available locally; never install or pull."""
-    base = ["detect", "--redact", "--no-banner", "--report-format", "json",
-            "--report-path", "/dev/stdout", "--exit-code", "0"]
+    base = [
+        "detect",
+        "--redact",
+        "--no-banner",
+        "--report-format",
+        "json",
+        "--report-path",
+        "/dev/stdout",
+        "--exit-code",
+        "0",
+    ]
     if shutil.which("gitleaks"):
         cmd = ["gitleaks", *base, "--source", str(repo), "--config", str(config)]
         tool = "gitleaks"
     elif shutil.which("docker"):
         images = subprocess.run(
             ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout.split()
         image = next((i for i in images if "gitleaks" in i), None)
         if not image:
             return None
-        cmd = ["docker", "run", "--rm", "--network", "none", "-v", f"{repo}:/repo:ro",
-               image, *base, "--source", "/repo", "--config", "/repo/.gitleaks.toml"]
+        cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "-v",
+            f"{repo}:/repo:ro",
+            image,
+            *base,
+            "--source",
+            "/repo",
+            "--config",
+            "/repo/.gitleaks.toml",
+        ]
         tool = f"docker:{image}"
     else:
         return None
@@ -304,9 +328,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         with args.report.open("w", encoding="utf-8") as fh:
             for finding in sorted(findings):
                 sha, path, rule, fp = finding
-                fh.write(json.dumps({"commit": sha, "path": path, "rule": rule,
-                                     "fingerprint": fp,
-                                     "baselined": finding not in new}) + "\n")
+                fh.write(
+                    json.dumps(
+                        {
+                            "commit": sha,
+                            "path": path,
+                            "rule": rule,
+                            "fingerprint": fp,
+                            "baselined": finding not in new,
+                        }
+                    )
+                    + "\n"
+                )
     return 1 if new else 0
 
 

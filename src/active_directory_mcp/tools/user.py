@@ -344,7 +344,10 @@ class UserTools(BaseTool):
                             f"Rollback delete of {user_dn} failed: {type(rollback_error).__name__}"
                         )
 
-                    raise Exception(f"User created but password setting failed: {pwd_error}")
+                    # from None: the cause may carry bind/connection parameters (credential safety)
+                    raise Exception(
+                        f"User created but password setting failed: {pwd_error}"
+                    ) from None
             else:
                 raise Exception("Failed to create user account")
 

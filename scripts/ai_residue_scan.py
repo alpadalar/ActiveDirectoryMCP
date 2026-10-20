@@ -25,8 +25,12 @@ PATTERNS: List[Tuple[str, "re.Pattern[str]"]] = [
     ("anthropic-noreply", re.compile(r"noreply@anthropic\.com", re.I)),
     ("claude-session-trailer", re.compile(r"claude-session\s*:", re.I)),
     ("claude-code-link", re.compile(r"claude\.ai/code", re.I)),
-    ("agent-email", re.compile(
-        rf"[\w.+-]*{_AGENTS}[\w.+-]*@[\w.-]+|@[\w.-]*(?:anthropic|openai)\.[a-z]+", re.I)),
+    (
+        "agent-email",
+        re.compile(
+            rf"[\w.+-]*{_AGENTS}[\w.+-]*@[\w.-]+|@[\w.-]*(?:anthropic|openai)\.[a-z]+", re.I
+        ),
+    ),
     ("copilot-app", re.compile(r"copilot app", re.I)),
     ("robot-emoji", re.compile("\U0001f916")),
     ("planning-tool", re.compile(r"\bGSD\b|\.planning/|REVIZYON|gsd-", re.I)),
@@ -87,9 +91,16 @@ def load_allowlist(path: Path) -> Set[str]:
 
 def scan_history(repo: Path, allowlist: Set[str]) -> Tuple[List[Hit], int]:
     out = subprocess.run(
-        ["git", "-C", str(repo), "log", "--all",
-         "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x01"],
-        capture_output=True, check=False,
+        [
+            "git",
+            "-C",
+            str(repo),
+            "log",
+            "--all",
+            "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x01",
+        ],
+        capture_output=True,
+        check=False,
     )
     if out.returncode != 0:
         raise RuntimeError("git log failed")
@@ -112,7 +123,8 @@ def scan_history(repo: Path, allowlist: Set[str]) -> Tuple[List[Hit], int]:
 def scan_tags(repo: Path) -> List[Hit]:
     out = subprocess.run(
         ["git", "-C", str(repo), "tag", "-l", "--format=%(refname:short)%00%(contents)%01"],
-        capture_output=True, check=False,
+        capture_output=True,
+        check=False,
     )
     if out.returncode != 0:
         raise RuntimeError("git tag failed")

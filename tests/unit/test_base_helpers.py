@@ -1,9 +1,12 @@
 """Tests for the shared AD time helpers on BaseTool (bug B-01a)."""
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
+from active_directory_mcp import validation
 from active_directory_mcp.config.models import SecurityConfig
 from active_directory_mcp.tools.base import BaseTool
 from tests.support.helpers import parse_response
@@ -139,11 +142,6 @@ def test_is_past_unset_false(tool, value):
 
 
 # --- delegation to the central validation module (CONF-02) -------------------
-
-import json
-from pathlib import Path
-
-from active_directory_mcp import validation
 
 
 def test_escape_ldap_filter_delegates(tool):

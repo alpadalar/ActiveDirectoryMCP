@@ -1,14 +1,22 @@
 """Tests for configuration module."""
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
+from active_directory_mcp import redaction
 from active_directory_mcp.config.loader import load_config, validate_config
-from active_directory_mcp.config.models import ActiveDirectoryConfig, Config
+from active_directory_mcp.config.models import (
+    ActiveDirectoryConfig,
+    Config,
+    HttpAuthConfig,
+    SecurityConfig,
+)
 
 
 def test_load_config_from_file():
@@ -291,10 +299,10 @@ def test_default_values():
     config = Config(**config_data)
 
     # Test default values
-    assert config.security.enable_tls == True
+    assert config.security.enable_tls is True
     assert config.logging.level == "INFO"
     assert config.performance.connection_pool_size is None
-    assert config.active_directory.use_ssl == True
+    assert config.active_directory.use_ssl is True
     assert config.active_directory.ssl_port == 636
 
 
@@ -465,10 +473,6 @@ def test_lab_example_config_loads(monkeypatch):
 
 
 # --- Loader hardening (02-02 task 2) ---
-
-import logging  # noqa: E402
-
-from active_directory_mcp import redaction  # noqa: E402
 
 SECRET = "hunter2hunter2"
 
@@ -655,10 +659,6 @@ def test_validate_pool_size_ignored_warning(caplog):
 
 
 # ---------------------------------------------------------------- SecurityConfig (SEC-01/02)
-
-from pydantic import ValidationError  # noqa: E402
-
-from active_directory_mcp.config.models import HttpAuthConfig, SecurityConfig  # noqa: E402
 
 _DIGEST = "a" * 64
 

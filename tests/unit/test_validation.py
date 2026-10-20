@@ -193,7 +193,9 @@ def test_module_has_no_internal_imports():
     import inspect
 
     src = inspect.getsource(v)
-    code = "\n".join(l for l in src.splitlines() if l.lstrip().startswith(("import ", "from ")))
+    code = "\n".join(
+        line for line in src.splitlines() if line.lstrip().startswith(("import ", "from "))
+    )
     assert "active_directory_mcp" not in code
     assert "endswith" not in src
 

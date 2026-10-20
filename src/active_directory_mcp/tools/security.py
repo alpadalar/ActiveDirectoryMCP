@@ -599,7 +599,8 @@ class SecurityTools(BaseTool):
                                 )
                                 if uac is None:
                                     self.logger.warning(
-                                        f"Skipping admin audit for {member_dn}: unreadable userAccountControl"
+                                        f"Skipping admin audit for {member_dn}: "
+                                        "unreadable userAccountControl"
                                     )
                                     continue
 
@@ -847,7 +848,7 @@ class SecurityTools(BaseTool):
             return "Monitor account activity and maintain current security posture"
 
     def _get_days_since_last_logon(self, attributes: Dict[str, Any]) -> Optional[int]:
-        """Whole days since last logon; None when unset/never. Accepts datetime, int, numeric str."""
+        """Whole days since last logon; None when unset/never. Accepts datetime/int/numeric str."""
         return self._days_since(self._get_attr_value(attributes, "lastLogon", 0))
 
     # Additional policy checks

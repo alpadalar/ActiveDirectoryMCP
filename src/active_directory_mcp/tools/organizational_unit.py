@@ -18,7 +18,7 @@ class OrganizationalUnitTools(BaseTool):
     """Tools for managing Active Directory Organizational Units."""
 
     def _dn_error(self, operation: str, exc: ValidationError, **dns: str) -> List[Dict[str, Any]]:
-        """Structured rejection for a DN that is malformed or outside base_dn (no LDAP call made)."""
+        """Structured rejection for a malformed or out-of-base_dn DN (no LDAP call made)."""
         reason = str(exc)
         if "outside the configured base DN" in reason:
             error = "DN is outside the configured base DN"
@@ -524,7 +524,8 @@ class OrganizationalUnitTools(BaseTool):
 
         Args:
             ou_dn: OU distinguished name
-            object_types: Types of objects to include (optional: user, group, computer, organizationalUnit)
+            object_types: Types of objects to include (optional: user, group, computer,
+                organizationalUnit)
 
         Returns:
             List of MCP content objects with OU contents

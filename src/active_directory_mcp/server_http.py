@@ -146,7 +146,8 @@ class ActiveDirectoryMCPHTTPServer:
 
             if connection_info.get("connected"):
                 self.logger.info(
-                    f"Successfully connected to {connection_info.get('server')}:{connection_info.get('port')}"
+                    f"Successfully connected to {connection_info.get('server')}:"
+                    f"{connection_info.get('port')}"
                 )
             else:
                 self.logger.error(f"Initial connection failed: {connection_info.get('error')}")

@@ -111,5 +111,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
+# Explicit set pins behavior across ruff default changes. No rule is ignored globally and
+# no per-file-ignores exist: every finding was fixed in code (no noqa suppressions remain).
 select = ["E", "F", "B", "I"]
 ignore = []

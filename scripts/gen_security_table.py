@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render the tool-risk table of SECURITY.md from policy.RISK_CLASSIFICATION.
 
-    python scripts/gen_security_table.py --check   # exit 1 when SECURITY.md is out of date
-    python scripts/gen_security_table.py --write   # rewrite only the marked region
-    python scripts/gen_security_table.py           # print the table
+python scripts/gen_security_table.py --check   # exit 1 when SECURITY.md is out of date
+python scripts/gen_security_table.py --write   # rewrite only the marked region
+python scripts/gen_security_table.py           # print the table
 """
 
 from __future__ import annotations
