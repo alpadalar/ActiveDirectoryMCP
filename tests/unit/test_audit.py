@@ -212,9 +212,33 @@ def test_classify_outcome() -> None:
         "not_found",
     )
     assert classify_outcome(_text({"error": "boom"})) == ("failure", None)
-    assert classify_outcome([MagicMock(text="not json")]) == ("success", None)
+    assert classify_outcome(_text({"success": True, "error": "partial"})) == ("success", None)
+    assert classify_outcome([MagicMock(text="not json")]) == ("unknown", None)
     assert classify_outcome({"success": False}) == ("failure", None)
-    assert classify_outcome([]) == ("success", None)
+    assert classify_outcome([]) == ("unknown", None)
+    assert classify_outcome([MagicMock(text=None)]) == ("unknown", None)
+    assert classify_outcome(_text(["list"])) == ("unknown", None)
+    assert classify_outcome(_text({"ok": 1})) == ("unknown", None)
+    assert classify_outcome("text") == ("unknown", None)
+
+
+def test_target_values_are_strings_only_and_bounded() -> None:
+    rec = build_record("create_group", "write", {"name": {"a": 1}, "ou": ["x"]}, "success")
+    assert rec["target"] == {"name": REDACTED, "ou": REDACTED}
+    rec = build_record("create_user", "write", {"username": "u" * 5000}, "success")
+    assert len(rec["target"]["username"]) < 600
+
+
+def test_actor_is_recorded_when_set() -> None:
+    from active_directory_mcp.audit import audit_actor
+
+    assert "actor" not in build_record("create_user", "write", {}, "success")
+    token = audit_actor.set({"key_id": "abcd1234", "client": "10.0.0.5"})
+    try:
+        rec = build_record("create_user", "write", {}, "success")
+    finally:
+        audit_actor.reset(token)
+    assert rec["actor"] == {"key_id": "abcd1234", "client": "10.0.0.5"}
 
 
 # ------------------------------------------------------------ integration
@@ -280,6 +304,69 @@ def test_exception_records_error_and_reraises(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError):
         sink.dispatch("enable_user", {"username": "bob"})
     assert [(r["tool"], r["outcome"]) for r in _lines(path)] == [("enable_user", "error")]
+
+
+def test_destructive_call_writes_intent_before_outcome(tmp_path: Path) -> None:
+    path = tmp_path / "i.log"
+    ctx = _ctx(path, destructive=True)
+    seen: List[int] = []
+
+    def handler(*_: Any, **__: Any) -> Dict[str, Any]:
+        seen.append(len(_lines(path)))  # intent already on disk while the action runs
+        return {"success": True}
+
+    ctx.user_tools.delete_user.side_effect = handler
+    ctx.user_tools.disable_user.return_value = {"success": True}
+    sink = StdioToolSink()
+    register_tools(ctx, sink)
+    sink.dispatch("delete_user", {"username": "bob"})
+    sink.dispatch("disable_user", {"username": "bob"})
+    assert seen == [1]
+    assert [(r["tool"], r["outcome"]) for r in _lines(path)] == [
+        ("delete_user", "intent"),
+        ("delete_user", "success"),
+        ("disable_user", "success"),
+    ]
+
+
+def test_base_exception_is_recorded(tmp_path: Path) -> None:
+    path = tmp_path / "k.log"
+    ctx = _ctx(path)
+    ctx.user_tools.enable_user.side_effect = KeyboardInterrupt()
+    sink = StdioToolSink()
+    register_tools(ctx, sink)
+    with pytest.raises(KeyboardInterrupt):
+        sink.dispatch("enable_user", {"username": "bob"})
+    assert [r["outcome"] for r in _lines(path)] == ["error"]
+
+
+def test_fail_closed_refuses_when_sink_is_unwritable(tmp_path: Path) -> None:
+    path = tmp_path / "fc.log"
+    audit = AuditLogger(str(path), fail_closed=True)
+    ctx = make_ctx(policy=ToolPolicy(True, True), audit=audit)
+    sink = StdioToolSink()
+    register_tools(ctx, sink)
+    audit.close()
+    out = sink.dispatch("delete_user", {"username": "bob"})
+    ctx.user_tools.delete_user.assert_not_called()
+    assert json.loads(out[0].text)["error_code"] == "audit_unavailable"
+
+
+def test_fail_open_by_default_when_sink_is_unwritable(tmp_path: Path) -> None:
+    audit = AuditLogger(str(tmp_path / "fo.log"))
+    ctx = make_ctx(policy=ToolPolicy(True, True), audit=audit)
+    ctx.user_tools.delete_user.return_value = {"success": True}
+    sink = StdioToolSink()
+    register_tools(ctx, sink)
+    audit.close()
+    sink.dispatch("delete_user", {"username": "bob"})
+    ctx.user_tools.delete_user.assert_called_once()
+
+
+def test_fail_closed_config_requires_audit_path() -> None:
+    with pytest.raises(ValueError):
+        SecurityConfig(audit_fail_closed=True)
+    assert SecurityConfig(audit_fail_closed=True, audit_log_path="/x/a.log").audit_fail_closed
 
 
 def test_passwords_never_reach_the_file(tmp_path: Path) -> None:

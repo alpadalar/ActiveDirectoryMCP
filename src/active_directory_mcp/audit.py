@@ -12,6 +12,7 @@ logs ``OSError`` without the arguments.
 """
 
 import json
+import contextvars
 import logging
 import os
 import stat
@@ -24,7 +25,9 @@ from .redaction import REDACTED, redact
 
 logger = logging.getLogger("active-directory-mcp.audit")
 
-# Per-tool allow-list of identifying arguments whose values are kept.
+# Allow-list of identifying argument names whose (string) values are kept. It is global,
+# not per tool: a new tool that names a parameter like one of these has its value written,
+# so choose parameter names deliberately. Non-string values are always redacted.
 AUDIT_TARGET_KEYS: Tuple[str, ...] = (
     "username",
     "group_name",
@@ -37,7 +40,14 @@ AUDIT_TARGET_KEYS: Tuple[str, ...] = (
     "parent_ou",
 )
 
-OUTCOMES = ("success", "failure", "blocked", "error")
+OUTCOMES = ("success", "failure", "blocked", "error", "intent", "unknown")
+
+MAX_VALUE_LENGTH = 512
+
+# Who is calling (HTTP transport): set by the auth middleware, read when a record is built.
+audit_actor: "contextvars.ContextVar[Optional[Mapping[str, str]]]" = contextvars.ContextVar(
+    "audit_actor", default=None
+)
 
 _LINE_BREAKS = {" ": "\\u2028", " ": "\\u2029", "\x85": "\\u0085"}
 
@@ -47,7 +57,15 @@ class AuditConfigError(RuntimeError):
 
 
 def _safe_text(value: Any) -> str:
-    return redact(value if isinstance(value, str) else str(value))
+    text = redact(value if isinstance(value, str) else str(value))
+    if len(text) > MAX_VALUE_LENGTH:
+        text = text[:MAX_VALUE_LENGTH] + "...[truncated]"
+    return text
+
+
+def _target_text(value: Any) -> str:
+    # Only plain strings are identifiers; anything structured is never written.
+    return _safe_text(value) if isinstance(value, str) else REDACTED
 
 
 def _redact_value(value: Any) -> Any:
@@ -75,7 +93,7 @@ def build_record(
 ) -> Dict[str, Any]:
     """Build one audit record (no I/O)."""
     target = {
-        key: _safe_text(args[key])
+        key: _target_text(args[key])
         for key in AUDIT_TARGET_KEYS
         if key in args and args[key] is not None
     }
@@ -89,29 +107,38 @@ def build_record(
     if error_code:
         record["error_code"] = _safe_text(error_code)
     record["redacted_args"] = redact_args(args)
+    actor = audit_actor.get()
+    if actor:
+        record["actor"] = {_safe_text(k): _safe_text(v) for k, v in actor.items()}
     return record
 
 
 def classify_outcome(result: Any) -> Tuple[str, Optional[str]]:
-    """Map a guard result to (outcome, error_code) without keeping the body."""
+    """Map a guard result to (outcome, error_code) without keeping the body.
+
+    Only an explicit ``"success": true`` counts as success; a result whose shape
+    cannot be read is ``"unknown"``, never silently ``"success"``.
+    """
     payload: Any = result
     if isinstance(result, list):
         text = getattr(result[0], "text", None) if result else None
         if not isinstance(text, str):
-            return "success", None
+            return "unknown", None
         try:
             payload = json.loads(text)
         except ValueError:
-            return "success", None
+            return "unknown", None
     if not isinstance(payload, dict):
-        return "success", None
+        return "unknown", None
     code = payload.get("error_code")
     code = code if isinstance(code, str) else None
     if code and code.endswith("_blocked"):
         return "blocked", code
+    if payload.get("success") is True:
+        return "success", None
     if payload.get("success") is False or "error" in payload:
         return "failure", code
-    return "success", None
+    return "unknown", code
 
 
 def _dumps(record: Mapping[str, Any]) -> str:
@@ -195,8 +222,8 @@ class AuditLogger:
             return
         try:
             self._file.close()
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("closing rotated audit handle failed: %s", type(exc).__name__)
         self._file, self._ident = self._open()
 
     @classmethod
@@ -209,7 +236,7 @@ class AuditLogger:
                     "mutating tools run without an audit trail"
                 )
             return None
-        return cls(security.audit_log_path)
+        return cls(security.audit_log_path, fail_closed=security.audit_fail_closed)
 
     def record(
         self,

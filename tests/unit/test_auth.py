@@ -209,3 +209,40 @@ def test_auth_failure_log_neutralises_request_path(
     for message in messages:
         assert "\n" not in message and "\r" not in message
         assert len(message) < 400
+
+
+def test_key_id_identifies_the_matching_key_only() -> None:
+    import hashlib
+
+    token = "k" * 30
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    verifier = TokenVerifier([digest])
+    assert verifier.key_id(token) == digest[:8]
+    assert verifier.key_id("wrong") is None and verifier.key_id(None) is None
+
+
+def test_authenticated_request_sets_audit_actor() -> None:
+    import hashlib
+
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    from active_directory_mcp.audit import audit_actor
+
+    token = "z" * 30
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    seen = {}
+
+    async def endpoint(request):  # type: ignore[no-untyped-def]
+        seen["actor"] = audit_actor.get()
+        return JSONResponse({})
+
+    app = Starlette(
+        routes=[Route("/x", endpoint)],
+        middleware=[Middleware(ApiKeyAuthMiddleware, verifier=TokenVerifier([digest]))],
+    )
+    TestClient(app).get("/x", headers={"X-API-Key": token})
+    assert seen["actor"]["key_id"] == digest[:8]
+    assert token not in str(seen["actor"])
+    assert audit_actor.get() is None

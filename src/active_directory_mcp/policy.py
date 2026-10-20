@@ -149,13 +149,36 @@ def guard(
             return payload
         if not audited or audit is None:
             return handler(*args, **kwargs)
+        bound = _bound_args(handler, args, kwargs)
+        if risk is Risk.DESTRUCTIVE or audit.fail_closed:
+            # Intent first: a crash or kill mid-operation still leaves a trace.
+            if not audit.record(name, risk.value, bound, "intent") and audit.fail_closed:
+                logger.error("audit sink unavailable: refusing tool=%s", name)
+                return [
+                    Content(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "error": (
+                                    f"Tool '{name}' was refused because the audit log is "
+                                    "unwritable and security.audit_fail_closed is set."
+                                ),
+                                "error_code": "audit_unavailable",
+                                "tool": name,
+                                "risk": risk.value,
+                            },
+                            indent=2,
+                        ),
+                    )
+                ]
         try:
             result = handler(*args, **kwargs)
-        except Exception:
-            audit.record(name, risk.value, _bound_args(handler, args, kwargs), "error")
+        except BaseException:
+            audit.record(name, risk.value, bound, "error")
             raise
         outcome, code = classify_outcome(result)
-        audit.record(name, risk.value, _bound_args(handler, args, kwargs), outcome, code)
+        audit.record(name, risk.value, bound, outcome, code)
         return result
 
     return wrapper

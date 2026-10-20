@@ -183,6 +183,13 @@ class SecurityConfig(BaseModel):
             "JSON-lines audit file for write/destructive tool calls; None disables file audit"
         ),
     )
+    audit_fail_closed: bool = Field(
+        default=False,
+        description=(
+            "Refuse destructive calls (and write calls) when the audit intent record cannot "
+            "be written; requires audit_log_path"
+        ),
+    )
     http_auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
 
     @field_validator("audit_log_path")
@@ -201,6 +208,8 @@ class SecurityConfig(BaseModel):
             raise ValueError(
                 "security.allow_destructive requires security.allow_writes to be true"
             )
+        if self.audit_fail_closed and self.audit_log_path is None:
+            raise ValueError("security.audit_fail_closed requires security.audit_log_path")
         return self
 
 

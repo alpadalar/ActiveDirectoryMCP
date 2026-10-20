@@ -26,6 +26,7 @@ from typing import Collection, Iterable, List, Mapping, Optional, Tuple
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from .audit import audit_actor
 from .config.models import SecurityConfig
 
 logger = logging.getLogger("active-directory-mcp.auth")
@@ -77,6 +78,20 @@ class TokenVerifier:
             # Evaluate every digest; OR the results (no early return).
             matched |= hmac.compare_digest(presented, stored)
         return matched
+
+    def key_id(self, token: Optional[str]) -> Optional[str]:
+        """Short non-secret id (first 8 hex of the SHA-256) of the matching key, else None."""
+        if not token:
+            return None
+        try:
+            presented = _digest(token)
+        except Exception:
+            return None
+        found: Optional[str] = None
+        for stored in self._digests:
+            if hmac.compare_digest(presented, stored):
+                found = presented[:8].decode("ascii")
+        return found
 
 
 def resolve_auth(security: SecurityConfig, environ: Mapping[str, str]) -> Optional[TokenVerifier]:
@@ -173,8 +188,21 @@ class ApiKeyAuthMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         kind = scope["type"]
         if kind == "http":
-            if self._is_exempt(scope) or self.verifier.verify(self._extract(scope)):
+            if self._is_exempt(scope):
                 await self.app(scope, receive, send)
+                return
+            token = self._extract(scope)
+            if self.verifier.verify(token):
+                client = scope.get("client")
+                actor = {"key_id": self.verifier.key_id(token) or "-"}
+                if client:
+                    actor["client"] = str(client[0])
+                actor["request_id"] = str(scope.get("state", {}).get("request_id", "-"))
+                reset = audit_actor.set(actor)
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    audit_actor.reset(reset)
                 return
             await self._deny_http(scope, send)
             return
