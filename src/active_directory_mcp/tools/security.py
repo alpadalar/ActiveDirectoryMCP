@@ -337,12 +337,14 @@ class SecurityTools(BaseTool):
 
             max_pwd_age_raw = self._get_attr_value(domain_results[0]['attributes'], 'maxPwdAge', 0)
 
-            # Convert timedelta to FILETIME integer if needed
+            # Normalise timedelta / int / numeric string to a magnitude in 100-ns ticks.
+            # 0, -2**63, 2**63-1 and anything beyond the "never" threshold mean no max age.
             if isinstance(max_pwd_age_raw, timedelta):
-                # Convert timedelta to 100-nanosecond intervals (negative for AD)
-                max_pwd_age = int(max_pwd_age_raw.total_seconds() * 10000000)
+                max_pwd_age = abs((max_pwd_age_raw // timedelta(microseconds=1)) * 10)
             else:
-                max_pwd_age = max_pwd_age_raw if max_pwd_age_raw is not None else 0
+                max_pwd_age = abs(self._to_int(max_pwd_age_raw, 0))
+            if max_pwd_age > 10 ** 7 * 864000000000:
+                max_pwd_age = 0
 
             # Search for users
             user_results = self.ldap.search(

@@ -42,6 +42,9 @@ and enforced by the golden snapshots in `tests/golden/`.
 - Days since last logon and password age are computed correctly for the values real AD
   returns (timezone-aware datetimes, FILETIME integers, numeric strings) instead of
   silently becoming empty or -1.
+- `get_password_policy_violations` no longer fails with a TypeError when `maxPwdAge`
+  arrives as a numeric string, and the "never expires" values (`0`, `-2**63`) no longer
+  flag every `DONT_EXPIRE_PASSWORD` account as a violation.
 - Computers that never logged on are no longer reported as having logged on just now.
 - `audit_admin_accounts` no longer skips whole privileged groups when `lastLogon` is a
   datetime; its risk counts are correct and results are ordered by severity (high,

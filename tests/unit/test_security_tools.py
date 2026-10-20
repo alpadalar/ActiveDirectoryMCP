@@ -484,6 +484,42 @@ def test_password_policy_violations_datetime_values(security_tools, mock_ldap_ma
     assert by_name["nopwd"]["pwd_last_set"] == "Never"
 
 
+@pytest.mark.parametrize(
+    "raw, policy_set",
+    [
+        (str(-42 * 864000000000), True),
+        (-42 * 864000000000, True),
+        ("0", False),
+        (-(2 ** 63), False),
+        ("-9223372036854775808", False),
+        (None, False),
+    ],
+)
+def test_password_policy_violations_normalises_max_pwd_age(
+    security_tools, mock_ldap_manager, raw, policy_set
+):
+    domain = [ldap_entry(BASE, maxPwdAge=raw, minPwdAge=0)]
+    users = [
+        _user(
+            f"CN=noexp,{BASE}", "noexp", uac=512 | 0x10000,
+            pwdLastSet=_ago(200), accountExpires=0,
+        )
+    ]
+
+    def search(search_filter="", **_kw):
+        return domain if search_filter == "(objectClass=domain)" else users
+
+    mock_ldap_manager.search.side_effect = search
+    data = parse_response(security_tools.get_password_policy_violations())
+    assert "password_violations" in data
+    flagged = {v["sam_account_name"]: v["violations"] for v in data["password_violations"]}
+    if policy_set:
+        assert "Password set to never expire" in flagged["noexp"]
+        assert "Password expired" in flagged["noexp"]
+    else:
+        assert "noexp" not in flagged
+
+
 def test_password_policy_violations_ldap_failure(security_tools, mock_ldap_manager):
     mock_ldap_manager.search.side_effect = RuntimeError("boom")
     assert parse_response(security_tools.get_password_policy_violations())["success"] is False
