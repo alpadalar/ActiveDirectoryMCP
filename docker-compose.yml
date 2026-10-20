@@ -21,12 +21,12 @@ services:
       # --- Optional: Azure Key Vault (takes priority over AD_BIND_DN/AD_PASSWORD) ---
       # - AZURE_KEYVAULT_URL=https://your-keyvault-name.vault.azure.net/
       # - AZURE_KEYVAULT_SECRET_USERNAME=ad-bind-username
-      # - AZURE_KEYVAULT_SECRET_PASSWORD=ad-bind-password
+      # - AZURE_KEYVAULT_SECRET_PASSWORD=<secret-name-for-bind-password>
       # Authentication uses DefaultAzureCredential (managed identity, az login, or
       # a service principal via AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET).
       # - AZURE_TENANT_ID=your-azure-ad-tenant-id
       # - AZURE_CLIENT_ID=your-app-registration-client-id
-      # - AZURE_CLIENT_SECRET=your-app-registration-client-secret
+      # - AZURE_CLIENT_SECRET=<app-registration-client-secret>
       
       # Optional: Override config via environment variables
       # - AD_SERVER=ldap://your-ad-server.domain.com:389

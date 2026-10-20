@@ -10,7 +10,7 @@ CONFIG_DIR="$(mktemp -d)"
 CONFIG_FILE="$CONFIG_DIR/lab_config.json"
 
 # Throwaway password, generated per run and never written to the repo.
-LAB_LDAP_PASSWORD="$(python3 -c "import secrets; print(secrets.token_urlsafe(18))")"
+LAB_LDAP_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
 export LAB_LDAP_PASSWORD
 
 cleanup() {

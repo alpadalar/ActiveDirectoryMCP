@@ -76,17 +76,23 @@ def test_secret_scan_finds_historical_leak_without_printing_it(repo, tmp_path_fa
     baseline.write_text("", encoding="utf-8")
     res = _run_scan(repo, baseline, report)
     assert res.returncode == 1
-    assert f"{sha[:12]} cfg/app.json ldap-bind-password [REDACTED]" in res.stdout
+    assert f"{sha[:12]} cfg/app.json ldap-bind-password [REDACTED] fp=" in res.stdout
     assert "1 new" in res.stdout
     for blob in (res.stdout, res.stderr, report.read_text(encoding="utf-8")):
         assert LEAK not in blob
 
 
+def _fp(rule: str, path: str, value: str) -> str:
+    mod = _load("secret_scan")
+    return mod.fingerprint(rule, path, value)
+
+
 def test_secret_scan_baseline_absorbs_known_but_not_new_finding(repo, tmp_path_factory):
-    sha = _commit(repo, "cfg/app.json", _leak_line())
+    _commit(repo, "cfg/app.json", _leak_line())
     out = tmp_path_factory.mktemp("out")
     baseline = out / "baseline.txt"
-    baseline.write_text(f"# known\n{sha} cfg/app.json ldap-bind-password\n", encoding="utf-8")
+    fp = _fp("ldap-bind-password", "cfg/app.json", LEAK)
+    baseline.write_text(f"# known\n{fp} cfg/app.json ldap-bind-password\n", encoding="utf-8")
     assert _run_scan(repo, baseline).returncode == 0
     _commit(repo, "other/b.json", _leak_line("another" + "secretvalue"))
     res = _run_scan(repo, baseline)
@@ -95,13 +101,71 @@ def test_secret_scan_baseline_absorbs_known_but_not_new_finding(repo, tmp_path_f
     assert "secretvalue" not in res.stdout
 
 
-def test_secret_scan_stale_baseline_entry_is_only_a_warning(repo, tmp_path_factory):
+def test_secret_scan_baseline_does_not_cover_a_different_secret_in_the_same_file(
+    repo, tmp_path_factory
+):
+    """CR-02: a baselined (path, rule) must not hide a new credential in that file."""
+    _commit(repo, "cfg/app.json", _leak_line())
+    baseline = tmp_path_factory.mktemp("out") / "baseline.txt"
+    fp = _fp("ldap-bind-password", "cfg/app.json", LEAK)
+    baseline.write_text(f"{fp} cfg/app.json ldap-bind-password\n", encoding="utf-8")
+    assert _run_scan(repo, baseline).returncode == 0
+    new_value = "brandnew" + "credential9"
+    _commit(repo, "cfg/app.json", _leak_line(new_value))
+    res = _run_scan(repo, baseline)
+    assert res.returncode == 1
+    assert "1 new" in res.stdout
+    assert new_value not in res.stdout + res.stderr
+
+
+def test_secret_scan_rejects_legacy_baseline_lines(repo, tmp_path_factory):
     _commit(repo, "a.txt", "nothing\n")
     baseline = tmp_path_factory.mktemp("out") / "baseline.txt"
     baseline.write_text("deadbeef" * 5 + " gone.json ldap-bind-password\n", encoding="utf-8")
+    assert _run_scan(repo, baseline).returncode == 2
+
+
+def test_secret_scan_stale_baseline_entry_is_only_a_warning(repo, tmp_path_factory):
+    _commit(repo, "a.txt", "nothing\n")
+    baseline = tmp_path_factory.mktemp("out") / "baseline.txt"
+    baseline.write_text("0123456789abcdef gone.json ldap-bind-password\n", encoding="utf-8")
     res = _run_scan(repo, baseline)
     assert res.returncode == 0
     assert "stale baseline entry" in res.stdout
+
+
+def test_secret_scan_sees_credentials_introduced_only_in_a_merge(repo, tmp_path_factory):
+    """WR-02: ``git log -p`` shows no diff for merges; the scan must use -m."""
+    _commit(repo, "cfg/app.json", json.dumps({"mode": "a"}) + "\n", "base")
+    default = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "cfg/app.json", json.dumps({"mode": "side"}) + "\n", "side")
+    _git(repo, "checkout", "-q", default)
+    _commit(repo, "cfg/app.json", json.dumps({"mode": "main"}) + "\n", "main")
+    res = subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=T", "-c", "user.email=t@example.com",
+         "-c", "commit.gpgsign=false", "merge", "-q", "--no-commit", "side"],
+        capture_output=True, text=True,
+    )
+    assert res.returncode != 0  # conflict, resolved by hand below
+    (repo / "cfg" / "app.json").write_text(_leak_line(), encoding="utf-8")
+    _git(repo, "add", "cfg/app.json")
+    _git(repo, "commit", "-q", "-m", "merge side")
+    baseline = tmp_path_factory.mktemp("out") / "baseline.txt"
+    baseline.write_text("", encoding="utf-8")
+    res = _run_scan(repo, baseline)
+    assert res.returncode == 1
+    assert "cfg/app.json ldap-bind-password" in res.stdout
+    assert LEAK not in res.stdout + res.stderr
+
+
+def test_secret_scan_does_not_mistake_added_plus_lines_for_file_headers(repo, tmp_path_factory):
+    _commit(repo, "a.txt", "x\n")
+    _commit(repo, "cfg.ini", '++ password = "' + LEAK + '"\n')
+    baseline = tmp_path_factory.mktemp("out") / "baseline.txt"
+    baseline.write_text("", encoding="utf-8")
+    res = _run_scan(repo, baseline)
+    assert res.returncode == 1 and "cfg.ini" in res.stdout
 
 
 @pytest.mark.parametrize(
@@ -134,12 +198,99 @@ def test_secret_scan_flags_env_and_ldif_literals():
     ]
 
 
-def test_secret_scan_allows_lab_fixtures_only_on_their_paths():
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Example" + "2024!Prod",
+        "<x>" + "realsecret",
+        "${x}" + "realsecret",
+        "your-" + "secret-pw",
+        "Change" + "Me2024!",
+        "YourSecurePassword" + "1",
+        "REPLACE_WITH_X" + "realsecret",
+        "example",
+    ],
+)
+def test_secret_scan_allowlist_only_accepts_whole_value_placeholders(value):
+    """CR-01: a real password merely containing a placeholder word must still be flagged."""
     mod = _load("secret_scan")
     rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
-    line = "user" + "Password: {SSHA}Password" + "123!"
-    assert list(mod.scan_line(rules, "ldap-init/01-structure.ldif", line)) == []
-    assert list(mod.scan_line(rules, "docs/other.ldif", line)) == ["ldif-user-password"]
+    line = json.dumps({"password": value})
+    assert list(mod.scan_line(rules, "x/config.json", line)) == ["ldap-bind-password"]
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        ("c.yml", "password: " + "hunter2hunter2"),
+        ("c.json", "{'password': '" + "hunter2hunter2" + "'}"),
+        ("app.py", "password='" + "hunter2hunter2" + "'"),
+        ("c.json", json.dumps({"client_secret": "hunter2hunter2"})),
+        ("c.json", json.dumps({"api_key": "hunter2hunter2"})),
+        ("c.json", json.dumps({"ad_password": "hunter2hunter2"})),
+        ("c.json", json.dumps({"password": "two words here"})),
+        ("c.json", json.dumps({"password": "abc"})),
+        ("c.json", '{"password": "pa\\"ss' + 'word1"}'),
+        ("c.ini", "ad_password=" + "hunter2hunter2"),
+        ("docker-compose.yml", "      LDAP_ADMIN_PASSWORD: " + "hunter2hunter2"),
+        ("docker-compose.yml", "      - LDAP_ADMIN_PASSWORD=" + "hunter2hunter2"),
+        ("c.json", "ldap://svc:" + "hunter2hunter2" + "@dc.example.com"),
+        ("c.yml", "token: " + "hunter2hunter2"),
+    ],
+)
+def test_secret_scan_flags_widened_credential_shapes(path, line):
+    """WR-02: shapes the first rule set missed."""
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    assert list(mod.scan_line(rules, path, line)) != []
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        ("c.yml", "password: ${AD_PASSWORD}"),
+        ("c.yml", "AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:?set it (see README)}"),
+        ("c.yml", "      - AD_MCP_HTTP_API_KEY=${AD_MCP_HTTP_API_KEY:-}"),
+        ("README.md", 'export AD_MCP_HTTP_API_KEY="$(python3 -c \'import x\')"'),
+        ("c.json", json.dumps({"password": "${env:AD_PASSWORD}"})),
+        ("app.py", "password: Optional[str] = None"),
+    ],
+)
+def test_secret_scan_ignores_references_and_non_credential_code(path, line):
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    assert list(mod.scan_line(rules, path, line)) == []
+
+
+def test_secret_scan_has_no_blanket_path_allowlist_except_the_digest_fixture():
+    """CR-02: only the sha256 digest map may be path-exempt; LDIF and test support are scanned."""
+    mod = _load("secret_scan")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    line = "user" + "Password: realvalue1"
+    assert list(mod.scan_line(rules, "ldap-init/01-structure.ldif", line)) == [
+        "ldif-user-password"
+    ]
+    assert [p.pattern for p in rules.allow_paths] == [
+        r"^tests/golden/original_tools\.sha256\.json$"
+    ]
+
+
+def test_committed_baseline_holds_only_fingerprints():
+    mod = _load("secret_scan")
+    entries = mod.load_baseline(SCRIPTS / "secret_scan_baseline.txt")
+    assert entries
+    for fp, path, rule in entries:
+        assert len(fp) == 16 and path and rule
+
+
+def test_tracked_tree_secret_scan_is_clean_against_committed_baseline():
+    mod = _load("secret_scan")
+    if not (REPO_ROOT / ".git").exists():
+        pytest.skip("not inside a git checkout")
+    rules = mod.load_rules(REPO_ROOT / ".gitleaks.toml")
+    findings, _files = mod.tree_findings(REPO_ROOT, rules)
+    new, _stale = mod.compare(findings, mod.load_baseline(SCRIPTS / "secret_scan_baseline.txt"))
+    assert new == []
 
 
 # --- ai_residue_scan -------------------------------------------------------------------

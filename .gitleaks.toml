@@ -2,49 +2,83 @@
 #
 # One rule source for two consumers:
 #   * scripts/secret_scan.py (local full-history scan, stdlib only, no network)
-#   * the real gitleaks binary / action (CI)
+#   * the real gitleaks binary (run it yourself with --config .gitleaks.toml)
 #
-# Regexes are kept compatible with both Go RE2 and Python re: no lookarounds.
-# Placeholder exclusion is expressed through the allowlist, not the rules.
+# Regexes are kept compatible with both Go RE2 and Python re: no lookarounds and no
+# backreferences. Every rule captures the credential value as group 1 (secretGroup = 1),
+# and the allow-list is matched against that value only, anchored to the whole value.
+# A real password that merely contains a placeholder-looking word is therefore still flagged.
 
 title = "ActiveDirectoryMCP secret scan"
 
 [extend]
 useDefault = true
 
-[[rules]]
-id = "ldap-bind-password"
-description = "Literal LDAP/AD bind password in a JSON or YAML-style key"
-regex = '''(?i)(?:^|[^a-z0-9_])"?(?:password|bind_password|ad_password|bindpw|bind_pw)"?\s*[:=]\s*"[^"\s]{4,}"'''
-keywords = ["password", "bindpw", "bind_pw"]
+# Credential key names (shared by the generic rules below):
+#   <anything>password | passwd | bindpw | bind_pw | secret | api_key | token
 
 [[rules]]
 id = "ldap-env-password"
-description = "Literal password assigned to a known credential environment variable"
-regex = '''(?:^|[^A-Za-z0-9_])(?:AD_PASSWORD|LDAP_ADMIN_PASSWORD|LDAP_CONFIG_PASSWORD|LAB_LDAP_PASSWORD|AZURE_CLIENT_SECRET)\s*=\s*['"]?[^\s'"$<{][^\s'"]{3,}'''
+description = "Literal value assigned to a known credential environment variable (= or : separator)"
+regex = '''(?:^|[\s-])(?:AD_PASSWORD|LDAP_ADMIN_PASSWORD|LDAP_CONFIG_PASSWORD|LAB_LDAP_PASSWORD|AZURE_CLIENT_SECRET)\s*[:=]\s*(\$\{[^}]*\}|[^\s"'#$][^\s"'#]*|\$[^\s"'#{][^\s"'#]*)'''
+secretGroup = 1
 keywords = ["ad_password", "ldap_admin_password", "ldap_config_password", "lab_ldap_password", "azure_client_secret"]
 
 [[rules]]
 id = "ldif-user-password"
 description = "Literal userPassword value in an LDIF file"
-regex = '''(?i)userPassword::?\s+\S{4,}'''
+regex = '''(?i)userPassword::?\s+(\S+)'''
+secretGroup = 1
 keywords = ["userpassword"]
 
+[[rules]]
+id = "ldap-bind-password"
+description = "Literal credential in a double-quoted JSON/YAML/Python value"
+regex = '''(?i)(?:^|[^a-z0-9_])["']?[a-z0-9_.-]*(?:password|passwd|bindpw|bind_pw|secret|api_?key|token)["']?\s*[:=]\s*"((?:[^"\\]|\\.)+)"'''
+secretGroup = 1
+keywords = ["password", "passwd", "bindpw", "bind_pw", "secret", "apikey", "api_key", "token"]
+
+[[rules]]
+id = "credential-single-quoted"
+description = "Literal credential in a single-quoted value"
+regex = '''(?i)(?:^|[^a-z0-9_])["']?[a-z0-9_.-]*(?:password|passwd|bindpw|bind_pw|secret|api_?key|token)["']?\s*[:=]\s*'([^']+)\''''
+secretGroup = 1
+keywords = ["password", "passwd", "bindpw", "bind_pw", "secret", "apikey", "api_key", "token"]
+
+[[rules]]
+id = "credential-unquoted"
+description = "Literal credential assigned without quotes in a config, env, YAML or shell file"
+regex = '''(?i)(?:^|[\s-])[a-z0-9_.-]*(?:password|passwd|bindpw|bind_pw|secret|api_?key|token)\s*[:=]\s*(\$\{[^}]*\}|[^\s"'#,;(\[{][^\s"'#,;]*)'''
+path = '''(?i)(?:\.(?:ya?ml|env|ini|cfg|conf|properties|toml|sh|bat|cmd|ldif|txt|md)|\.env\.[a-z]+)$'''
+secretGroup = 1
+keywords = ["password", "passwd", "bindpw", "bind_pw", "secret", "apikey", "api_key", "token"]
+
+[[rules]]
+id = "ldap-url-credentials"
+description = "Password embedded in an ldap:// or ldaps:// URL"
+regex = '''(?i)ldaps?://[^/\s:@"']+:([^@\s/"']+)@'''
+secretGroup = 1
+keywords = ["ldap://", "ldaps://"]
+
+# The allow-list is matched against the captured credential value only (regexTarget =
+# "secret") and every entry is anchored to the entire value. Only these exact placeholder
+# shapes are accepted; there is no substring or "looks like an example" rule.
 [allowlist]
-description = "Placeholders and the known throwaway lab fixtures"
-regexTarget = "match"
+description = "Exact placeholder tokens (whole value only)"
+regexTarget = "secret"
 regexes = [
-  '''\$\{[^}]+\}''',
-  '''<[^>]+>''',
-  '''(?i)change_?me''',
-  '''YourSecurePassword''',
-  '''(?i)your-[a-z-]+''',
-  '''(?i)example''',
-  '''REPLACE_WITH_[A-Z_]+''',
-  '''="\$[A-Z_]+"''',
+  '''^\$\{(?:env:)?[A-Z_][A-Z0-9_]*(?::?-|:?\?[^}]*)?\}$''',
+  '''^\$\([^"`]*\)$''',
+  '''^\$[A-Z_][A-Z0-9_]*$''',
+  '''^<[^<>"' ]+>$''',
+  '''^(?i:change_?me)$''',
+  '''^YourSecurePassword$''',
+  '''^REPLACE_WITH_[A-Z_]+$''',
 ]
+
+# Whole-path exceptions are limited to files that provably contain no credential material.
+# tests/golden/original_tools.sha256.json maps tool names (several end in "_password") to
+# sha256 digests of their MCP schemas; it is frozen by tests/unit/test_golden_additive.py.
 paths = [
-  '''^ldap-init/01-structure\.ldif$''',
-  '''^tests/integration/conftest\.py$''',
-  '''^tests/support/''',
+  '''^tests/golden/original_tools\.sha256\.json$''',
 ]

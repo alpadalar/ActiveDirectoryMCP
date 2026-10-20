@@ -5,7 +5,7 @@
 # userAccountControl semantics, unicodePwd TLS rules, lastLogon replication or
 # AD ACLs, so green tests here do not prove AD behaviour.
 #
-# Usage: LAB_LDAP_PASSWORD=<any throwaway value> docker compose -f docker-compose-openldap.yml up -d openldap
+# Usage (any throwaway value): LAB_LDAP_PASSWORD=<value> docker compose -f docker-compose-openldap.yml up -d openldap
 # (scripts/run_tests_with_ldap.sh does this with a per-run random password.)
 
 services:
