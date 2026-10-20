@@ -198,3 +198,41 @@ and enforced by the golden snapshots in `tests/golden/`.
   skipped), and a signal-initiated stop exits with code 0.
 - The docker-compose healthcheck uses `GET /health` (the previous JSON-RPC POST check was
   also malformed YAML).
+
+### Security enforcement (breaking)
+
+- HTTP transport requires authentication by default. Set `AD_MCP_HTTP_API_KEY` or
+  `AD_MCP_HTTP_API_KEY_SHA256`, or `security.http_auth.api_key_sha256`; startup fails
+  without one. Opt out with `security.http_auth.required=false`. `/health` stays
+  unauthenticated; stdio is unaffected.
+- Write and destructive tools are refused by default. Enable them with
+  `security.allow_writes` and `security.allow_destructive` (destructive tools need both;
+  `delete_organizational_unit` is destructive).
+- `modify_user`, `modify_group`, `modify_computer` and `modify_organizational_unit` accept
+  only allow-listed attributes, and `create_*` `additional_attributes` are validated the
+  same way. `modify_user` no longer accepts a `password` key; use `reset_user_password`.
+- List and report tools are capped at `security.max_list_results` (default 1000, 0 =
+  unlimited); responses carry `truncated` and `result_limit`.
+- Password operations refuse non-TLS connections (`unicodePwd_requires_tls`).
+
+### Fixed (security enforcement)
+
+- `reset_computer_password` now actually sets the generated 120-character password
+  (`unicodePwd`, TLS required, `secrets`-based) and reports success only after the
+  directory accepted it. Previously it only wrote `pwdLastSet=0` and returned a password
+  that was never applied. The machine must be rejoined or re-synced afterwards.
+
+### Removed
+
+- Unregistered methods that returned fabricated sample data: `find_weak_passwords`,
+  `analyze_permissions`, `detect_privilege_escalation`, `check_service_accounts`,
+  `get_ou_permissions`, `delegate_ou_control`, `get_computer_status`,
+  `search_stale_computers`, `get_computer_groups`. None was a registered MCP tool.
+- `get_schema_info` for computers no longer names `search_stale_computers`
+  (it lists `get_stale_computers`).
+
+### Added (security enforcement)
+
+- `accuracy_note` on `get_inactive_users`, `get_stale_computers` and `audit_admin_accounts`
+  (and `list_users` with `lastLogon`): `lastLogon` is per-DC and not replicated, while
+  `lastLogonTimestamp` is replicated but can lag by up to 14 days.

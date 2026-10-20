@@ -460,6 +460,53 @@ resolved from any source.
 }
 ```
 
+## 🔐 Security configuration
+
+Write access and the HTTP transport are locked down by default. Example (placeholder values only):
+
+```json
+{
+    "security": {
+        "allow_writes": false,
+        "allow_destructive": false,
+        "max_list_results": 1000,
+        "http_auth": {
+            "required": true,
+            "api_key_sha256": ["0000000000000000000000000000000000000000000000000000000000000000"]
+        }
+    }
+}
+```
+
+- `allow_writes` enables create/modify/reset tools; `allow_destructive` additionally enables
+  delete tools (destructive tools need both). Refused calls return a structured error.
+- `max_list_results` caps list and report tools (0 = unlimited); responses include
+  `truncated` and `result_limit`.
+- Generate and hash an HTTP API key:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"      # the key
+python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" '<key>'
+```
+
+  Provide the key via `AD_MCP_HTTP_API_KEY`, or its digest via `AD_MCP_HTTP_API_KEY_SHA256` or
+  `security.http_auth.api_key_sha256`. The server refuses to start over HTTP without one.
+  Clients send either header (`/health` stays unauthenticated):
+
+```bash
+curl -H "Authorization: Bearer <your-api-key>" http://localhost:8813/activedirectory-mcp
+curl -H "X-API-Key: <your-api-key>" http://localhost:8813/activedirectory-mcp
+```
+
+- Password tools (`create_user` with a password, `reset_user_password`,
+  `reset_computer_password`) require an LDAPS or StartTLS connection and are refused otherwise.
+  `reset_user_password` and `reset_computer_password` return the new password in the response;
+  treat it as sensitive and do not log it client-side. `reset_computer_password` breaks the
+  machine's secure channel, so the machine must be rejoined or re-synced.
+- `modify_*` tools accept only allow-listed attributes (security-sensitive ones such as
+  `userAccountControl`, `servicePrincipalName` and `gPLink` are always rejected).
+- A full security policy document (SECURITY.md) is forthcoming.
+
 ## 🧪 Testing
 
 Three kinds of checks, described in detail in [TESTING_GUIDE.md](TESTING_GUIDE.md):
