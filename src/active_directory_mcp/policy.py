@@ -10,6 +10,7 @@ any LDAP call: a blocked call never reaches the underlying tool method.
 
 import functools
 import json
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
@@ -17,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional
 from mcp.types import TextContent as Content
 
 from .config.models import SecurityConfig
+
+logger = logging.getLogger("active-directory-mcp.policy")
 
 
 class Risk(str, Enum):
@@ -111,6 +114,8 @@ def guard(
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         blocked = policy.decide(name)
         if blocked is not None:
+            # Tool name and risk only: arguments may carry passwords or DNs.
+            logger.warning("policy blocked tool=%s risk=%s", name, blocked.get("risk"))
             payload: List[Content] = [
                 Content(type="text", text=json.dumps(blocked, indent=2))
             ]

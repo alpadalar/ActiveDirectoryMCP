@@ -289,3 +289,25 @@ def test_stdio_server_honours_allow_writes_config() -> None:
         server.user_tools.disable_user.assert_called_once_with("u")
         out = _stdio_call(server, "delete_user", {"username": "u"})
         assert out["error_code"] == "destructive_blocked"
+
+
+def test_blocked_call_is_logged_without_arguments(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    handler = Mock(return_value="ran")
+    wrapped = guard("delete_user", handler, ToolPolicy())
+    wrapped(username="secret-user", password="hunter2-secret")
+    handler.assert_not_called()
+    text = caplog.text
+    assert "policy blocked" in text and "delete_user" in text and "destructive" in text
+    assert "secret-user" not in text and "hunter2-secret" not in text
+
+
+def test_permitted_call_is_not_logged_as_blocked(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    wrapped = guard("get_user", Mock(return_value="ran"), ToolPolicy())
+    assert wrapped(username="u") == "ran"
+    assert "policy blocked" not in caplog.text
