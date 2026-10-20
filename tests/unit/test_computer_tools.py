@@ -552,6 +552,21 @@ def test_get_stale_computers_capped_with_accuracy_note(computer_tools, mock_ldap
     assert "lastLogonTimestamp" in data["accuracy_note"]
 
 
+def test_get_stale_computers_audits_beyond_cap_before_filtering(computer_tools, mock_ldap_manager):
+    mock_ldap_manager.security_config.max_list_results = 2
+    fresh = [
+        ldap_entry(f"CN=F{i},CN=Computers,DC=test,DC=local", sAMAccountName=f"F{i}$",
+                   userAccountControl=4096, lastLogon=_ago(1))
+        for i in range(4)
+    ]
+    stale = ldap_entry("CN=OLD,CN=Computers,DC=test,DC=local", sAMAccountName="OLD$",
+                       userAccountControl=4096, lastLogon=_ago(400))
+    mock_ldap_manager.search.return_value = fresh + [stale]
+    data = parse_response(computer_tools.get_stale_computers(30))
+    assert data["count"] == 1 and data["truncated"] is False
+    assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
 # ------------------------------------------- create_computer SPN source validation
 
 

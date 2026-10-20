@@ -532,7 +532,7 @@ class ComputerTools(BaseTool):
             search_filter = self._computer_filter()
             attributes = ['sAMAccountName', 'dNSHostName', 'lastLogon', 'pwdLastSet', 'operatingSystem', 'description']
 
-            results, truncated, limit = self._capped_search(
+            results = self._audit_scan(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=search_filter,
                 attributes=attributes
@@ -556,6 +556,7 @@ class ComputerTools(BaseTool):
                     }
                     stale_computers.append(computer_info)
 
+            stale_computers, truncated, limit = self._cap_findings(stale_computers)
             log_ldap_operation("get_stale_computers", self.ldap.ad_config.base_dn, True, f"Found {len(stale_computers)} stale computers")
             
             return self._format_response({

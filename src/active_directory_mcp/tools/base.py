@@ -405,6 +405,23 @@ class BaseTool(ABC):
         truncated = len(entries) > limit
         return entries[:limit], truncated, limit
 
+    def _audit_scan(self, **search_kwargs: Any) -> List[Dict[str, Any]]:
+        """Search for an audit report: never capped before the report's own filtering.
+
+        Audit tools test each entry client-side (age, UAC bits), so a pre-filter cap
+        would silently audit an arbitrary subset. Pair with :meth:`_cap_findings`.
+        """
+        return self.ldap.search(**search_kwargs)
+
+    def _cap_findings(
+        self, findings: List[Any]
+    ) -> Tuple[List[Any], bool, int]:
+        """Cap the findings an audit returns (after filtering) to security.max_list_results."""
+        limit = int(self.ldap.security_config.max_list_results)
+        if limit <= 0:
+            return findings, False, 0
+        return findings[:limit], len(findings) > limit, limit
+
     @staticmethod
     def _cap_metadata(truncated: bool, limit: int) -> Dict[str, Any]:
         """Response metadata describing result capping (limit 0 -> null)."""

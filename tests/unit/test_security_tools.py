@@ -619,7 +619,47 @@ def test_get_inactive_users_capped_with_accuracy_note(security_tools, mock_ldap_
     data = parse_response(security_tools.get_inactive_users())
     assert data["truncated"] is True and data["result_limit"] == 2 and data["count"] == 2
     assert "lastLogonTimestamp" in data["accuracy_note"]
-    assert mock_ldap_manager.search.call_args.kwargs["size_limit"] == 3
+    # audit scans are never capped before filtering; only the returned findings are
+    assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
+def test_get_inactive_users_audits_beyond_cap_before_filtering(security_tools, mock_ldap_manager):
+    from datetime import datetime, timezone
+
+    mock_ldap_manager.security_config.max_list_results = 2
+    recent = datetime.now(timezone.utc)
+    active = [
+        ldap_entry(f"CN=a{i},CN=Users,{BASE}", sAMAccountName=f"a{i}", userAccountControl=512,
+                   lastLogon=recent, pwdLastSet=recent)
+        for i in range(5)
+    ]
+    offender = ldap_entry(f"CN=old,CN=Users,{BASE}", sAMAccountName="old",
+                          userAccountControl=512, lastLogon=0, pwdLastSet=0)
+    mock_ldap_manager.search.return_value = active + [offender]
+    data = parse_response(security_tools.get_inactive_users())
+    assert data["count"] == 1 and data["truncated"] is False
+    assert data["inactive_users"][0]["sam_account_name"] == "old"
+
+
+def test_password_policy_violations_audits_beyond_cap_before_filtering(
+    security_tools, mock_ldap_manager
+):
+    from datetime import datetime, timezone
+
+    mock_ldap_manager.security_config.max_list_results = 2
+    now = datetime.now(timezone.utc)
+    healthy = [
+        ldap_entry(f"CN=h{i},CN=Users,{BASE}", sAMAccountName=f"h{i}", userAccountControl=512,
+                   pwdLastSet=now, accountExpires=0)
+        for i in range(4)
+    ]
+    bad = ldap_entry(f"CN=bad,CN=Users,{BASE}", sAMAccountName="bad",
+                     userAccountControl=512, pwdLastSet=0, accountExpires=0)
+    domain = ldap_entry(BASE, maxPwdAge=0, minPwdAge=0)
+    mock_ldap_manager.search.side_effect = [[domain], healthy + [bad]]
+    data = parse_response(security_tools.get_password_policy_violations())
+    assert data["count"] == 1 and data["truncated"] is False
+    assert data["password_violations"][0]["sam_account_name"] == "bad"
 
 
 def test_get_inactive_users_cap_opt_out(security_tools, mock_ldap_manager):

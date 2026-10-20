@@ -272,7 +272,7 @@ class SecurityTools(BaseTool):
                 )
             
             # Search for all users
-            results, truncated, limit = self._capped_search(
+            results = self._audit_scan(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=search_filter,
                 attributes=[
@@ -310,6 +310,7 @@ class SecurityTools(BaseTool):
             
             # Sort by days inactive (descending)
             inactive_users.sort(key=lambda x: x['days_inactive'] or 99999, reverse=True)
+            inactive_users, truncated, limit = self._cap_findings(inactive_users)
             
             log_ldap_operation("get_inactive_users", self.ldap.ad_config.base_dn, True, f"Found {len(inactive_users)} inactive users")
             
@@ -357,7 +358,7 @@ class SecurityTools(BaseTool):
                 max_pwd_age = 0
 
             # Search for users
-            user_results, truncated, limit = self._capped_search(
+            user_results = self._audit_scan(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(objectClass={self.ldap.ad_config.user_object_class})",
                 attributes=[
@@ -422,6 +423,7 @@ class SecurityTools(BaseTool):
 
                     violations.append(violation_info)
             
+            violations, truncated, limit = self._cap_findings(violations)
             log_ldap_operation("get_password_policy_violations", self.ldap.ad_config.base_dn, True, f"Found {len(violations)} violations")
             
             return self._format_response({
