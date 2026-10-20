@@ -1,0 +1,48 @@
+# Secret-scan rules for ActiveDirectoryMCP.
+#
+# One rule source for two consumers:
+#   * scripts/secret_scan.py (local full-history scan, stdlib only, no network)
+#   * the real gitleaks binary / action (CI)
+#
+# Regexes are kept compatible with both Go RE2 and Python re: no lookarounds.
+# Placeholder exclusion is expressed through the allowlist, not the rules.
+
+title = "ActiveDirectoryMCP secret scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ldap-bind-password"
+description = "Literal LDAP/AD bind password in a JSON or YAML-style key"
+regex = '''(?i)(?:^|[^a-z0-9_])"?(?:password|bind_password|ad_password|bindpw|bind_pw)"?\s*[:=]\s*"[^"\s]{4,}"'''
+keywords = ["password", "bindpw", "bind_pw"]
+
+[[rules]]
+id = "ldap-env-password"
+description = "Literal password assigned to a known credential environment variable"
+regex = '''(?:^|[^A-Za-z0-9_])(?:AD_PASSWORD|LDAP_ADMIN_PASSWORD|LDAP_CONFIG_PASSWORD|LAB_LDAP_PASSWORD|AZURE_CLIENT_SECRET)\s*=\s*['"]?[^\s'"$<{][^\s'"]{3,}'''
+keywords = ["ad_password", "ldap_admin_password", "ldap_config_password", "lab_ldap_password", "azure_client_secret"]
+
+[[rules]]
+id = "ldif-user-password"
+description = "Literal userPassword value in an LDIF file"
+regex = '''(?i)userPassword::?\s+\S{4,}'''
+keywords = ["userpassword"]
+
+[allowlist]
+description = "Placeholders and the known throwaway lab fixtures"
+regexTarget = "match"
+regexes = [
+  '''\$\{[^}]+\}''',
+  '''<[^>]+>''',
+  '''(?i)change_?me''',
+  '''YourSecurePassword''',
+  '''(?i)your-[a-z-]+''',
+  '''(?i)example''',
+]
+paths = [
+  '''^ldap-init/01-structure\.ldif$''',
+  '''^tests/integration/conftest\.py$''',
+  '''^tests/support/''',
+]
