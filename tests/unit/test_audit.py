@@ -121,6 +121,59 @@ def test_bad_path_raises_config_error(tmp_path: Path) -> None:
         AuditLogger(str(tmp_path))  # a directory
 
 
+def test_existing_loose_file_is_tightened_to_0600(tmp_path: Path) -> None:
+    path = tmp_path / "loose.log"
+    path.write_text("")
+    os.chmod(path, 0o644)
+    AuditLogger(str(path))
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def test_symlink_is_refused(tmp_path: Path) -> None:
+    target = tmp_path / "victim.txt"
+    target.write_text("keep")
+    link = tmp_path / "audit.log"
+    link.symlink_to(target)
+    with pytest.raises(AuditConfigError):
+        AuditLogger(str(link))
+    assert target.read_text() == "keep"
+
+
+def test_fifo_is_refused(tmp_path: Path) -> None:
+    fifo = tmp_path / "pipe.log"
+    os.mkfifo(fifo)
+    with pytest.raises(AuditConfigError):
+        AuditLogger(str(fifo))
+
+
+def test_rotation_by_rename_is_followed(tmp_path: Path) -> None:
+    path = tmp_path / "r.log"
+    log = AuditLogger(str(path))
+    log.record("create_user", "write", {"username": "a"}, "success")
+    rotated = tmp_path / "r.log.1"
+    os.rename(path, rotated)
+    log.record("create_user", "write", {"username": "b"}, "success")
+    assert [r["target"]["username"] for r in _lines(rotated)] == ["a"]
+    assert [r["target"]["username"] for r in _lines(path)] == ["b"]
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def test_deleted_file_is_recreated(tmp_path: Path) -> None:
+    path = tmp_path / "d.log"
+    log = AuditLogger(str(path))
+    os.unlink(path)
+    log.record("create_user", "write", {"username": "a"}, "success")
+    assert len(_lines(path)) == 1
+
+
+def test_failed_writes_are_counted(tmp_path: Path) -> None:
+    log = AuditLogger(str(tmp_path / "c.log"))
+    assert log.failed_writes == 0 and log.healthy
+    log.close()
+    log.record("create_user", "write", {}, "success")
+    assert log.failed_writes == 1 and not log.healthy
+
+
 def test_record_never_raises_when_write_fails(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
