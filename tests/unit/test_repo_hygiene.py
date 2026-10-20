@@ -714,3 +714,14 @@ def test_example_host_check_rejects_lookalike_registrable_domains(host):
 @pytest.mark.parametrize("host", ["dc.example.com", "example.com", "dc1.domain.com", "localhost"])
 def test_example_host_check_accepts_reserved_and_subdomain_hosts(host):
     assert _host_allowed(host)
+
+
+def test_version_agreement():
+    import tomllib
+
+    import active_directory_mcp
+
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["version"] == active_directory_mcp.__version__
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## [{active_directory_mcp.__version__}]" in changelog

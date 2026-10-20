@@ -12,9 +12,16 @@ uv sync --all-extras
 uv run pytest
 ```
 
-- Located in `tests/unit/`.
+- Located in `tests/unit/` (plus the in-process server tests in `tests/e2e/`).
 - ldap3 is mocked; no directory server is needed.
 - Tests marked `integration` are deselected by default.
+- The golden files in `tests/golden/` pin the exposed tool surface (45 tools, names and parameters). A surface change must be intentional: regenerate the goldens and review the diff.
+
+### Security behaviour under test
+
+- Write tools are refused unless the config sets `security.allow_writes: true`; delete tools additionally need `security.allow_destructive: true`. Tests that exercise a write path build their configuration with these flags, for example `directory.security_config(allow_writes=True)`.
+- The HTTP transport requires an API key by default. The e2e tests install a per-run random key through `AD_MCP_HTTP_API_KEY` and send it as `Authorization: Bearer <key>`.
+- `tests/unit/test_repo_hygiene.py` guards the repository itself: no tracked real config, placeholder-only examples, no AI or tooling residue in tracked files, a clean secret scan against the committed baseline. The same scans can be run by hand: `uv run python scripts/secret_scan.py --history --tree` and `uv run python scripts/ai_residue_scan.py`.
 
 ### Mocked-LDAP harness
 
@@ -72,9 +79,9 @@ scripts/run_tests_with_ldap.sh          # runs `pytest -m integration`
 scripts/run_tests_with_ldap.sh -k user  # extra arguments go to pytest
 ```
 
-The script generates a throwaway lab password per run, starts the `openldap` service from `docker-compose-openldap.yml`, writes a temporary config, runs `uv run --locked pytest -m integration`, and always tears everything down. It needs Docker and free ports 389 and 636.
+The lab config template is `ad-config/openldap-lab.example.json`; it reads the bind password from `${LAB_LDAP_PASSWORD}`. The script generates a throwaway lab password per run, starts the `openldap` service from `docker-compose-openldap.yml`, writes a temporary config, runs `uv run --locked pytest -m integration`, and always tears everything down. It needs Docker and free ports 389 and 636.
 
-You can also run the tests against a lab you started yourself by setting `AD_MCP_CONFIG` to a config file and running `uv run pytest -m integration`. Without `AD_MCP_CONFIG` the integration tests skip.
+To start the lab by hand, export `LAB_LDAP_PASSWORD` (any throwaway value) first; the compose file refuses to start without it. You can also run the tests against a lab you started yourself by setting `AD_MCP_CONFIG` to a config file and running `uv run pytest -m integration`. Without `AD_MCP_CONFIG` the integration tests skip.
 
 ### Lab limitations
 
@@ -94,7 +101,7 @@ Integration fixtures only create and delete a uuid-named temporary OU. Do not po
 Located in `tests/manual/` and never collected by pytest:
 
 ```bash
-uv run python tests/manual/http_server_smoke.py [URL]   # needs a running HTTP server
+uv run python tests/manual/http_server_smoke.py [URL]   # needs a running HTTP server and AD_MCP_HTTP_API_KEY set to its key
 uv run python tests/manual/real_ad_smoke.py             # needs AD_MCP_CONFIG
 ```
 
