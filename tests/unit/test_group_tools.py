@@ -369,3 +369,44 @@ class TestGroupEnforcement:
         data = parse_response(group_tools.list_groups())
         assert data["count"] == 1500 and data["truncated"] is False
         assert "size_limit" not in mock_ldap_manager.search.call_args.kwargs
+
+
+class TestPrivilegedTargetProtection:
+    """WR-02: membership changes on privileged groups need an explicit opt-out."""
+
+    PRIVILEGED = [
+        "Domain Admins", "Enterprise Admins", "Schema Admins", "Administrators",
+        "Account Operators", "Backup Operators", "Server Operators", "Print Operators",
+        "domain admins", "  Domain Admins ",
+    ]
+
+    @pytest.mark.parametrize("name", PRIVILEGED)
+    @pytest.mark.parametrize("op", ["add_member", "remove_member"])
+    def test_privileged_group_refused(self, group_tools, mock_ldap_manager, name, op):
+        mock_ldap_manager.search.return_value = [
+            ldap_entry(GROUP_DN, sAMAccountName=name.strip(), member=[MEMBER])
+        ]
+        data = parse_response(getattr(group_tools, op)(name, MEMBER))
+        assert data["success"] is False
+        assert data["error_code"] == "protected_target"
+        assert data["setting"] == "security.protect_privileged_targets"
+        mock_ldap_manager.modify.assert_not_called()
+
+    @pytest.mark.parametrize("op", ["add_member", "remove_member"])
+    def test_admincount_group_refused(self, group_tools, mock_ldap_manager, op):
+        _group(mock_ldap_manager, member=[MEMBER], adminCount=1)
+        data = parse_response(getattr(group_tools, op)("Sales", MEMBER))
+        assert data["error_code"] == "protected_target"
+        mock_ldap_manager.modify.assert_not_called()
+
+    def test_admincount_zero_is_not_protected(self, group_tools, mock_ldap_manager):
+        _group(mock_ldap_manager, member=[], adminCount=0)
+        assert parse_response(group_tools.add_member("Sales", MEMBER))["success"] is True
+
+    def test_opt_out_allows_privileged_group(self, group_tools, mock_ldap_manager):
+        mock_ldap_manager.security_config.protect_privileged_targets = False
+        mock_ldap_manager.search.return_value = [
+            ldap_entry(GROUP_DN, sAMAccountName="Domain Admins", member=[])
+        ]
+        assert parse_response(group_tools.add_member("Domain Admins", MEMBER))["success"] is True
+        mock_ldap_manager.modify.assert_called_once()

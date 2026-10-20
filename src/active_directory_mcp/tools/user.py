@@ -489,7 +489,7 @@ class UserTools(BaseTool):
             user_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.user_object_class})(sAMAccountName={self._escape_ldap_filter(username)}))",
-                attributes=['sAMAccountName']  # DN is always returned separately, not as an attribute
+                attributes=['sAMAccountName', 'adminCount']  # DN is always returned separately, not as an attribute
             )
 
             if not user_results:
@@ -500,6 +500,14 @@ class UserTools(BaseTool):
                 }, "reset_password")
             
             user_dn = user_results[0]['dn']
+
+            refusal = self._protected_target_refusal(
+                "reset_password",
+                [username, self._get_attr_value(user_results[0]['attributes'], 'sAMAccountName', '')],
+                self._get_attr_value(user_results[0]['attributes'], 'adminCount'),
+            )
+            if refusal is not None:
+                return refusal
             
             # Generate password if not provided
             if new_password is None:

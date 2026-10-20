@@ -661,6 +661,7 @@ def test_security_defaults_are_read_only_and_authenticated():
     assert sec.allow_writes is False
     assert sec.allow_destructive is False
     assert sec.max_list_results == 1000
+    assert sec.protect_privileged_targets is True
     assert sec.http_auth.required is True
     assert sec.http_auth.api_key_sha256 == []
     assert _cfg().security.allow_writes is False

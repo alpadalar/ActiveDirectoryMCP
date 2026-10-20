@@ -21,6 +21,19 @@ FILETIME_TICKS_PER_MICROSECOND = 10
 FILETIME_NEVER = 9223372036854775807  # 0x7FFFFFFFFFFFFFFF, "never expires"
 
 
+# sAMAccountNames of built-in privileged groups and well-known accounts (compared
+# case-insensitively). adminCount=1 additionally protects anything AD has marked as
+# protected (AdminSDHolder), when the tool can read it from the lookup it already does.
+PRIVILEGED_TARGET_NAMES = frozenset(
+    name.lower()
+    for name in (
+        "Domain Admins", "Enterprise Admins", "Schema Admins", "Administrators",
+        "Account Operators", "Backup Operators", "Server Operators", "Print Operators",
+        "krbtgt", "Administrator",
+    )
+)
+
+
 class BaseTool(ABC):
     """Base class for all Active Directory tools."""
     
@@ -363,6 +376,42 @@ class BaseTool(ABC):
                 operation,
             )
         return None
+
+    def _protected_target_refusal(
+        self, operation: str, names: List[str], admin_count: Any = None
+    ) -> Optional[List[Content]]:
+        """Refuse a privilege-sensitive change to a privileged group or account.
+
+        ``names`` are the sAMAccountNames involved (requested and as read back);
+        ``admin_count`` is the target's adminCount when it was fetched. Returns None
+        when permitted. ``security.protect_privileged_targets: false`` opts out.
+        """
+        if not self.ldap.security_config.protect_privileged_targets:
+            return None
+        matched = next(
+            (n for n in names if isinstance(n, str) and n.strip().lower() in PRIVILEGED_TARGET_NAMES),
+            None,
+        )
+        marked = self._to_int(admin_count, 0) == 1
+        if matched is None and not marked:
+            return None
+        target = (matched or (names[-1] if names else "")).strip()
+        self.logger.warning(f"{operation}: refused privileged target '{target}'")
+        return self._format_response(
+            {
+                "success": False,
+                "error_code": "protected_target",
+                "error": (
+                    f"'{target}' is a privileged group or account (built-in privileged name "
+                    "or adminCount=1). Set security.protect_privileged_targets to false in "
+                    "the server configuration to permit changes to it."
+                ),
+                "operation": operation,
+                "target": target,
+                "setting": "security.protect_privileged_targets",
+            },
+            operation,
+        )
 
     def _require_secure_channel(self, operation: str) -> Optional[List[Content]]:
         """Pre-flight for password writes; call BEFORE any mutation.

@@ -169,6 +169,14 @@ class SecurityConfig(BaseModel):
             "Maximum entries a list/search tool returns; 0 means unlimited (explicit opt-out)"
         ),
     )
+    protect_privileged_targets: bool = Field(
+        default=True,
+        description=(
+            "Refuse add/remove group member and reset password on privileged groups and "
+            "accounts (Domain/Enterprise/Schema Admins, Administrators, operator groups, "
+            "krbtgt, Administrator, adminCount=1); false is an explicit opt-out"
+        ),
+    )
     http_auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
 
     @model_validator(mode="after")

@@ -608,3 +608,35 @@ class TestListUsersCap:
         assert "lastLogonTimestamp" in with_ll["accuracy_note"]
         without = parse_response(user_tools.list_users(attributes=["mail"]))
         assert "accuracy_note" not in without
+
+
+class TestPrivilegedTargetProtection:
+    """WR-02: password resets on privileged accounts need an explicit opt-out."""
+
+    @pytest.fixture(autouse=True)
+    def _secure(self, mock_ldap_manager):
+        mock_ldap_manager.is_secure_channel.return_value = True
+
+    @pytest.mark.parametrize("name", ["krbtgt", "Administrator", "ADMINISTRATOR"])
+    def test_well_known_account_refused(self, user_tools, mock_ldap_manager, name):
+        mock_ldap_manager.search.return_value = [ldap_entry(USER_DN, sAMAccountName=name)]
+        data = parse_response(user_tools.reset_password(name, "Zq9!rUntimeSecret"))
+        assert data["success"] is False and data["error_code"] == "protected_target"
+        assert data["setting"] == "security.protect_privileged_targets"
+        assert "Zq9!rUntimeSecret" not in str(data)
+        mock_ldap_manager.modify.assert_not_called()
+
+    def test_admincount_account_refused(self, user_tools, mock_ldap_manager):
+        _found(mock_ldap_manager, adminCount=1)
+        data = parse_response(user_tools.reset_password("jdoe", "Zq9!rUntimeSecret"))
+        assert data["error_code"] == "protected_target"
+        mock_ldap_manager.modify.assert_not_called()
+
+    def test_ordinary_user_allowed(self, user_tools, mock_ldap_manager):
+        _found(mock_ldap_manager, adminCount=0)
+        assert parse_response(user_tools.reset_password("jdoe", "Zq9!rUntimeSecret"))["success"]
+
+    def test_opt_out_allows_administrator(self, user_tools, mock_ldap_manager):
+        mock_ldap_manager.security_config.protect_privileged_targets = False
+        mock_ldap_manager.search.return_value = [ldap_entry(USER_DN, sAMAccountName="krbtgt")]
+        assert parse_response(user_tools.reset_password("krbtgt", "Zq9!rUntimeSecret"))["success"]

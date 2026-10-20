@@ -404,7 +404,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['member']
+                attributes=['member', 'sAMAccountName', 'adminCount']
             )
             
             if not group_results:
@@ -416,6 +416,14 @@ class GroupTools(BaseTool):
             
             group_dn = group_results[0]['dn']
             current_members = group_results[0]['attributes'].get('member', [])
+
+            refusal = self._protected_target_refusal(
+                "add_member",
+                [group_name, self._get_attr_value(group_results[0]['attributes'], 'sAMAccountName', '')],
+                self._get_attr_value(group_results[0]['attributes'], 'adminCount'),
+            )
+            if refusal is not None:
+                return refusal
             
             # Check if member is already in group
             if member_dn in current_members:
@@ -470,7 +478,7 @@ class GroupTools(BaseTool):
             group_results = self.ldap.search(
                 search_base=self.ldap.ad_config.base_dn,
                 search_filter=f"(&(objectClass={self.ldap.ad_config.group_object_class})(sAMAccountName={self._escape_ldap_filter(group_name)}))",
-                attributes=['member']
+                attributes=['member', 'sAMAccountName', 'adminCount']
             )
             
             if not group_results:
@@ -482,6 +490,14 @@ class GroupTools(BaseTool):
             
             group_dn = group_results[0]['dn']
             current_members = group_results[0]['attributes'].get('member', [])
+
+            refusal = self._protected_target_refusal(
+                "remove_member",
+                [group_name, self._get_attr_value(group_results[0]['attributes'], 'sAMAccountName', '')],
+                self._get_attr_value(group_results[0]['attributes'], 'adminCount'),
+            )
+            if refusal is not None:
+                return refusal
             
             # Check if member is in group
             if member_dn not in current_members:
