@@ -40,6 +40,8 @@ regexes = [
   '''YourSecurePassword''',
   '''(?i)your-[a-z-]+''',
   '''(?i)example''',
+  '''REPLACE_WITH_[A-Z_]+''',
+  '''="\$[A-Z_]+"''',
 ]
 paths = [
   '''^ldap-init/01-structure\.ldif$''',
