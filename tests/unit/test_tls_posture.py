@@ -76,17 +76,40 @@ def test_validation_and_tls_flags(tools, mock_ldap_manager):
     assert data["configured"]["validate_certificate"] is False
 
 
-def test_connect_failure_redacted(tools, mock_ldap_manager):
-    clear_secrets()
-    register_secret("hunter2-secret")
-    try:
-        mock_ldap_manager.connect.side_effect = LDAPSocketOpenError("bind hunter2-secret failed")
-        data = parse_response(tools.get_tls_posture())
-    finally:
-        clear_secrets()
-    assert data["live"]["connected"] is False
-    assert "hunter2-secret" not in data["live"]["error"]
-    assert "channel" not in data["live"]
+def test_connect_failure_returns_fixed_code_and_finding(tools, mock_ldap_manager):
+    mock_ldap_manager.connect.side_effect = LDAPSocketOpenError(
+        "dc01.corp.example (10.1.2.3):636 cn=svc,dc=corp bind hunter2-secret failed"
+    )
+    data = parse_response(tools.get_tls_posture())
+    text = json.dumps(data)
+    assert data["live"] == {"connected": False, "error": "connect_failed"}
+    for leak in ("dc01", "10.1.2.3", "svc", "hunter2-secret"):
+        assert leak not in text
+    finding = next(f for f in data["findings"] if f["code"] == "connection_failed")
+    assert finding["severity"] == "high"
+
+
+def test_probe_does_not_retry_binds(tools, mock_ldap_manager):
+    tools.get_tls_posture()
+    mock_ldap_manager.connect.assert_called_once_with(max_attempts=1)
+
+
+@pytest.mark.parametrize("version", ["TLSv1", "TLSv1.1", "SSLv3"])
+def test_weak_tls_version_flagged(tools, mock_ldap_manager, version):
+    sock = Mock()
+    sock.version.return_value = version
+    sock.cipher.return_value = ("X", version, 128)
+    mock_ldap_manager.connect.return_value = _connection(ssl=True, sock=sock)
+    data = parse_response(tools.get_tls_posture())
+    assert "weak_tls_version" in _codes(data)
+
+
+def test_modern_tls_version_not_flagged(tools, mock_ldap_manager):
+    sock = Mock()
+    sock.version.return_value = "TLSv1.3"
+    sock.cipher.return_value = ("X", "TLSv1.3", 256)
+    mock_ldap_manager.connect.return_value = _connection(ssl=True, sock=sock)
+    assert "weak_tls_version" not in _codes(parse_response(tools.get_tls_posture()))
 
 
 def test_no_secrets_or_paths_in_output(tools, mock_ldap_manager):

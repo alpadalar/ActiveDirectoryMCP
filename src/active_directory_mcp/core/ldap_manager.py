@@ -117,10 +117,14 @@ class LDAPManager:
             logger.error(f"Error setting up LDAP servers: {e}")
             raise
     
-    def connect(self) -> Connection:
+    def connect(self, max_attempts: Optional[int] = None) -> Connection:
         """
         Establish LDAP connection with retry logic.
-        
+
+        Args:
+            max_attempts: Override ``performance.max_retries`` for this call (for
+                passive probes that must not repeat failed binds).
+
         Returns:
             Connection: Active LDAP connection
             
@@ -132,8 +136,9 @@ class LDAPManager:
                 return self._connection
             
             last_error = None
+            attempts = max_attempts if max_attempts is not None else self.performance_config.max_retries
             
-            for attempt in range(self.performance_config.max_retries):
+            for attempt in range(attempts):
                 try:
                     # Try each server in the pool
                     for server in self._server_pool:
@@ -169,19 +174,19 @@ class LDAPManager:
                             continue
                     
                     # If we get here, all servers failed for this attempt
-                    if attempt < self.performance_config.max_retries - 1:
-                        logger.info(f"Retry {attempt + 1}/{self.performance_config.max_retries} after {self.performance_config.retry_delay}s")
+                    if attempt < attempts - 1:
+                        logger.info(f"Retry {attempt + 1}/{attempts} after {self.performance_config.retry_delay}s")
                         time.sleep(self.performance_config.retry_delay)
                     
                 except Exception as e:
                     logger.error(f"Unexpected error during connection attempt {attempt + 1}: {e}")
                     last_error = e
                     
-                    if attempt < self.performance_config.max_retries - 1:
+                    if attempt < attempts - 1:
                         time.sleep(self.performance_config.retry_delay)
             
             # All attempts failed
-            error_msg = f"Failed to connect to any LDAP server after {self.performance_config.max_retries} attempts"
+            error_msg = f"Failed to connect to any LDAP server after {attempts} attempts"
             if last_error:
                 error_msg += f". Last error: {redact(str(last_error))}"
             

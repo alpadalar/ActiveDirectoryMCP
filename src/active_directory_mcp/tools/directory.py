@@ -36,6 +36,8 @@ ROOTDSE_ATTRIBUTES = (
 _FORBIDDEN_NAME_CHARS = frozenset("\x00")
 _MAX_NAME_LENGTH = 256
 
+WEAK_TLS_VERSIONS = frozenset({"SSLv2", "SSLv3", "TLSv1", "TLSv1.1"})
+
 # The IN_CHAIN query is evaluated by the DC over the whole base DN. Bound the work even
 # when security.max_list_results is 0 (unlimited) or larger than this ceiling.
 HARD_MAX_RESULTS = 10000
@@ -191,20 +193,24 @@ class DirectoryTools(BaseTool):
 
     def get_tls_posture(self) -> List[Any]:
         """Report configured TLS settings and the live channel state (fixed allow-list)."""
-        security = self.ldap.security_config
-        ad = self.ldap.ad_config
-        configured = {
-            "use_ssl": bool(ad.use_ssl),
-            "ssl_port": ad.ssl_port,
-            "enable_tls": bool(security.enable_tls),
-            "validate_certificate": bool(security.validate_certificate),
-            "ca_cert_file_set": bool(security.ca_cert_file),
-            "require_secure_connection": bool(security.require_secure_connection),
-        }
         findings: List[Dict[str, str]] = []
         live: Dict[str, Any] = {"connected": False}
         try:
-            connection = self.ldap.connect()
+            security = self.ldap.security_config
+            ad = self.ldap.ad_config
+            configured = {
+                "use_ssl": bool(ad.use_ssl),
+                "ssl_port": ad.ssl_port,
+                "enable_tls": bool(security.enable_tls),
+                "validate_certificate": bool(security.validate_certificate),
+                "ca_cert_file_set": bool(security.ca_cert_file),
+                "require_secure_connection": bool(security.require_secure_connection),
+            }
+        except Exception as exc:
+            return self._handle_ldap_error(exc, "get_tls_posture")
+        try:
+            # One attempt only: a passive check must not repeat failed binds (lockout risk).
+            connection = self.ldap.connect(max_attempts=1)
             ssl_server = bool(getattr(connection.server, "ssl", False))
             starttls = bool(getattr(connection, "tls_started", False))
             channel = "ldaps" if ssl_server else "starttls" if starttls else "plaintext"
@@ -220,6 +226,14 @@ class DirectoryTools(BaseTool):
                 value = version()
                 if isinstance(value, str):
                     live["tls_version"] = value
+                    if value in WEAK_TLS_VERSIONS:
+                        findings.append(
+                            {
+                                "severity": "high",
+                                "code": "weak_tls_version",
+                                "message": f"The negotiated protocol {value} is deprecated",
+                            }
+                        )
             if callable(cipher):
                 value = cipher()
                 if isinstance(value, (tuple, list)) and value and isinstance(value[0], str):
@@ -233,7 +247,18 @@ class DirectoryTools(BaseTool):
                     }
                 )
         except Exception as exc:
-            live = {"connected": False, "error": redact(str(exc))}
+            # Fixed code only: ldap3/socket text can carry hosts, ports and bind DNs.
+            self.logger.warning(
+                "get_tls_posture: connect failed (%s): %s", type(exc).__name__, redact(str(exc))
+            )
+            live = {"connected": False, "error": "connect_failed"}
+            findings.append(
+                {
+                    "severity": "high",
+                    "code": "connection_failed",
+                    "message": "Could not establish the LDAP connection to inspect the channel",
+                }
+            )
         if not configured["validate_certificate"]:
             findings.append(
                 {
