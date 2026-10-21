@@ -398,6 +398,10 @@ settings.
 
 Some LLM clients degrade when many tools are in context; that is a client limit, not a server one.
 
+## Multiple domains
+
+One server instance talks to one domain (one LDAP server and one base DN). To work with several domains, run one instance per domain with its own config file. An LDAP proxy exposing each domain as a subtree is a community workaround, but it is untested here and AD-specific schema checks may not work through it.
+
 ## Configuration reference
 
 ### Credentials
