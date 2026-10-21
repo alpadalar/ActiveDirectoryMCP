@@ -43,7 +43,7 @@ def ldap_connection(ad_config):
     conn = Connection(
         server,
         user=ad_config.active_directory.bind_dn,
-        password=ad_config.active_directory.password,
+        password=ad_config.active_directory.password.get_secret_value(),
         auto_bind=True,
     )
     yield conn
