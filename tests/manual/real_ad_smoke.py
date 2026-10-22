@@ -7,7 +7,7 @@ Requires actual AD connection and credentials.
 import json
 import os
 
-from active_directory_mcp.config.loader import load_config
+from active_directory_mcp.config.loader import load_server_config
 from active_directory_mcp.core.ldap_manager import LDAPManager
 from active_directory_mcp.tools.user import UserTools
 
@@ -26,10 +26,21 @@ def run_real_ad_connection():
         return False
 
     try:
-        # Load configuration
-        config = load_config(config_path)
-        print(f"✅ Config loaded: {config.active_directory.server}")
+        # Load configuration (a single-domain or a multi-domain file)
+        server_config = load_server_config(config_path)
+        print(f"✅ Config loaded: {', '.join(server_config.domains)}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
 
+    results = [_check_domain(name, config) for name, config in server_config.domains.items()]
+    return all(results)
+
+
+def _check_domain(name, config):
+    """Connect to one configured domain and list a few users."""
+    print(f"\n🌐 Domain '{name}': {config.active_directory.server}")
+    try:
         # Initialize LDAP manager
         ldap_manager = LDAPManager(
             config.active_directory,

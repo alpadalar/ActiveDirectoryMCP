@@ -24,7 +24,7 @@ Note: the server now also exposes an unauthenticated `GET /health` liveness rout
 
 ## real_ad_smoke.py
 
-Connects to a real directory using the config named by `AD_MCP_CONFIG` and lists a few users. It never prints the bind password.
+Connects to a real directory using the config named by `AD_MCP_CONFIG` and lists a few users. With a multi-domain config it checks every domain in turn. It never prints the bind password.
 
 ```bash
 export AD_MCP_CONFIG=ad-config/config.json   # copy from ad-config/config.example.json
