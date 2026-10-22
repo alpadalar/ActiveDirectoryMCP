@@ -400,7 +400,30 @@ Some LLM clients degrade when many tools are in context; that is a client limit,
 
 ## Multiple domains
 
-One server instance talks to one domain (one LDAP server and one base DN). To work with several domains, run one instance per domain with its own config file. An LDAP proxy exposing each domain as a subtree is a community workaround, but it is untested here and AD-specific schema checks may not work through it.
+One server instance can serve several domains. Point `AD_MCP_CONFIG` at a file with a `domains`
+object instead of a single-domain config (see
+[`ad-config/multi.example.json`](ad-config/multi.example.json)):
+
+- Each value under `domains` is either a path to an existing single-domain config file (relative
+  paths are resolved against the multi-domain file) or the same config inline.
+- `default_domain` names the domain used when a call does not pass one (default: the first).
+- `logging` and `http_auth` are set once at the top level and apply to the whole instance.
+- Every other setting stays per domain, including `security`: write and destructive tools can be
+  allowed in one domain and refused in another, and audit records carry the domain name.
+
+With more than one domain, every tool takes an optional `domain` argument and a read-only
+`list_domains` tool reports the configured domains, the default and their write settings. The
+number of tools does not grow with the number of domains. With one domain the tool surface is
+unchanged.
+
+The process-wide credential variables (`AD_BIND_DN`, `AD_PASSWORD` and the `AZURE_KEYVAULT_*`
+variables) would apply to every domain, so startup refuses them when several domains are
+configured. Give each domain its own `password` placeholder (for example
+`"password": "${CORP_AD_PASSWORD}"`) or its own `key_vault` section.
+
+For an LDAP proxy that does not publish the directory schema, set `"skip_schema": true` in that
+domain's `active_directory` section (the `AD_MCP_SKIP_SCHEMA` environment variable still sets the
+default for every domain).
 
 ## Configuration reference
 

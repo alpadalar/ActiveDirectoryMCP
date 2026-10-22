@@ -15,7 +15,7 @@ uv run pytest
 - Located in `tests/unit/` (plus the in-process server tests in `tests/e2e/`).
 - ldap3 is mocked; no directory server is needed.
 - Tests marked `integration` are deselected by default.
-- The golden files in `tests/golden/` pin the exposed tool surface (45 tools, names and parameters). A surface change must be intentional: regenerate the goldens and review the diff.
+- The golden files in `tests/golden/` pin the exposed tool surface (45 tools, names and parameters). A surface change must be intentional: regenerate the goldens and review the diff. `tool_surface_multi_{stdio,http}.json` pin the surface of a two-domain configuration: the same tools, each with an optional `domain` argument, plus `list_domains`.
 
 ### Security behaviour under test
 

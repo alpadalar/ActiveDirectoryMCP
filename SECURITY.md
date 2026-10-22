@@ -41,9 +41,10 @@ recommends.
 
 ## Threat model: what can this server do to your domain
 
-The server binds to the directory with exactly one service account. Every tool call, whoever or
-whatever triggered it, runs with that account's rights. The server's reach therefore equals the
-rights of that account, and the server's own controls can only narrow it further.
+The server binds to each configured domain with exactly one service account (one domain unless a
+multi-domain configuration is used). Every tool call, whoever or whatever triggered it, runs with
+the rights of the account of the domain it targets. The server's reach therefore equals the rights
+of those accounts, and the server's own controls, set per domain, can only narrow it further.
 
 What each risk class can do (the full per-tool table is generated below):
 
@@ -74,7 +75,7 @@ Write and destructive tools are refused by default.
 
 ### What the server does not do
 
-- No per-user delegation or impersonation: callers share the one bind account.
+- No per-user delegation or impersonation: callers share the bind account of each domain.
 - No rate limiting or request quotas (a search of the source finds none). Put limits in front of the
   server if you need them. Result sizes are capped by `security.max_list_results`.
 - No TLS termination for the HTTP transport: it serves plain HTTP. Run it behind a TLS-terminating

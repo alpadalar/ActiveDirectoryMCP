@@ -49,8 +49,8 @@ need one to the default suite.
   3. classify it in `RISK_CLASSIFICATION` in `src/active_directory_mcp/policy.py`
      (read, write or destructive; unknown tools fail closed as destructive);
   4. regenerate the goldens with
-     `UPDATE_GOLDEN=1 .venv/bin/pytest tests/unit/test_tool_surface.py -q`, check that the
-     diff only adds entries, add the tool to `ADDITIVE_TOOLS` in
+     `UPDATE_GOLDEN=1 .venv/bin/pytest tests/unit/test_tool_surface.py -q` (this rewrites the
+     single-domain and the multi-domain snapshots), check that the diff only adds entries, add the tool to `ADDITIVE_TOOLS` in
      `tests/unit/test_golden_additive.py`, and record it in `CHANGELOG.md`;
   5. add unit tests, including the policy gate behavior.
 - All LDAP filters, DNs and attribute names that come from tool arguments must pass through

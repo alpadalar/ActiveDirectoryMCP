@@ -56,8 +56,10 @@ located at or below the single configured `active_directory.base_dn`.
 - Malformed DNs are rejected with "Invalid DN format"; well-formed DNs outside the base
   are rejected with "DN is outside the configured base DN". No LDAP call is made in
   either case.
-- Multi-root deployments (several unrelated base DNs, or a forest-wide search) are not
-  supported in this release. Run one server instance per base DN.
+- A single domain has a single base DN; forest-wide searches are not supported. To serve
+  several base DNs from one instance, configure them as separate domains (see "Multiple
+  domains" in the README): each domain is confined to its own `base_dn`, and the `domain`
+  argument selects which one a call runs against.
 - `get_members` skips nested group members that are outside `base_dn`.
 
 ## RDN escaping for `create_*`

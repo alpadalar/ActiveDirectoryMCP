@@ -9,7 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The MCP tool names and parameters of the 42 original tools are unchanged in this release.
 They are frozen and enforced by the golden snapshots in `tests/golden/`. Three additive
-read-only tools were added (see Added). For vulnerability reporting and the supported
+read-only tools were added (see Added). A configuration with several domains adds an optional
+`domain` argument to every tool and a read-only `list_domains` tool; with one domain the tool
+surface is exactly the frozen one. For vulnerability reporting and the supported
 security model, see [SECURITY.md](SECURITY.md).
 
 ### Breaking changes (read before upgrading)
@@ -61,6 +63,16 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
   read-only tools. The golden snapshots changed additively only: the original 42 entries
   are byte-identical (enforced by a fingerprint test, `tests/unit/test_golden_additive.py`);
   the only altered existing line is `tool_count`.
+- One server instance can serve several Active Directory domains. A config file with a
+  `domains` object lists each domain as a path to a single-domain config or inline, plus
+  `default_domain`, top-level `logging` and `http_auth`. With more than one domain every tool
+  takes an optional `domain` argument and the read-only `list_domains` tool reports the
+  configured domains; the number of tools does not grow with the number of domains. Each domain
+  keeps its own `security` settings (write policy, audit trail), and audit records carry the
+  domain name. The multi-domain tool surface has its own golden snapshots
+  (`tests/golden/tool_surface_multi_*.json`).
+- `active_directory.skip_schema` turns schema-less mode on per domain. `AD_MCP_SKIP_SCHEMA`
+  still sets the default.
 - New option `security.audit_fail_closed` (default `false`, requires `audit_log_path`):
   refuse write and destructive calls with `audit_unavailable` when the intent record cannot
   be written.
@@ -86,6 +98,9 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Changed
 
+- With several domains configured, startup refuses `AD_BIND_DN`, `AD_PASSWORD` and the
+  `AZURE_KEYVAULT_*` variables, because they would overwrite every domain's credentials. Set
+  credentials per domain (`${VAR}` placeholders or `key_vault`).
 - `fastmcp` is now `>=3.2,<4` and `mcp` is `>=1.28,<2`. The fastmcp import-fallback shim
   was removed.
 - Azure Key Vault packages (`azure-identity`, `azure-keyvault-secrets`) moved to the
