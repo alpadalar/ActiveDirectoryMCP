@@ -10,6 +10,7 @@ frozen HTTP tool surface recorded in ``tests/golden/tool_surface_http.json``;
 do not tidy them without regenerating and reviewing that golden file.
 """
 
+import copy
 import inspect
 import json
 import logging
@@ -23,7 +24,12 @@ from mcp.types import TextContent as Content
 from .audit import AuditLogger
 from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
 from .redaction import redact
-from .tools.definitions import TOOL_DESCRIPTIONS, TOOL_INPUT_SCHEMAS
+from .tools.definitions import (
+    MULTI_DOMAIN_TOOL_DESCRIPTIONS,
+    MULTI_DOMAIN_TOOL_INPUT_SCHEMAS,
+    TOOL_DESCRIPTIONS,
+    TOOL_INPUT_SCHEMAS,
+)
 from .tools.directory import DirectoryTools
 
 logger = logging.getLogger("active-directory-mcp.registry")
@@ -434,6 +440,123 @@ def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
 def register_tools(ctx: ToolContext, sink: ToolSink) -> None:
     """Register the full tool surface on any sink (the single call both servers make)."""
     for spec in build_tool_specs(ctx):
+        sink.add(spec)
+
+
+# --------------------------------------------------------------------------
+# Several domains in one instance
+# --------------------------------------------------------------------------
+
+# Tools that exist only when several domains are configured.
+MULTI_DOMAIN_TOOLS = frozenset(MULTI_DOMAIN_TOOL_DESCRIPTIONS)
+
+
+def _routed_spec(
+    tool: str, per_domain: Dict[str, Dict[str, ToolSpec]], default_domain: str
+) -> ToolSpec:
+    """One spec for ``tool`` whose extra ``domain`` argument picks the domain's handler."""
+    names = list(per_domain)
+    base = per_domain[default_domain][tool]
+
+    def routed(**kwargs: Any) -> Any:
+        domain = kwargs.pop("domain", None) or default_domain
+        specs = per_domain.get(domain)
+        if specs is None:
+            # Never fall back to the default domain: a write could land in the wrong one.
+            return format_json_response(
+                {
+                    "success": False,
+                    "error": f"Unknown domain: {domain}",
+                    "available_domains": names,
+                },
+                tool,
+            )
+        return specs[tool].handler(**kwargs)
+
+    # The signature defines the HTTP schema and the stdio argument filter, so it
+    # must carry ``domain`` explicitly (functools.wraps would hide it).
+    signature = inspect.signature(base.handler)
+    domain_param = inspect.Parameter(
+        "domain", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=Optional[str]
+    )
+    routed.__name__ = tool
+    routed.__doc__ = base.handler.__doc__
+    routed.__annotations__ = {
+        **getattr(base.handler, "__annotations__", {}),
+        "domain": Optional[str],
+    }
+    routed.__signature__ = signature.replace(  # type: ignore[attr-defined]
+        parameters=[*signature.parameters.values(), domain_param]
+    )
+
+    schema = copy.deepcopy(base.input_schema)
+    schema.setdefault("properties", {})["domain"] = {
+        "type": "string",
+        "enum": names,
+        "description": f"Domain to run against (default: {default_domain}); see list_domains",
+    }
+    return ToolSpec(name=tool, description=base.description, input_schema=schema, handler=routed)
+
+
+def _list_domains_spec(contexts: Dict[str, ToolContext], default_domain: str) -> ToolSpec:
+    def list_domains() -> Any:
+        domains = []
+        for name, ctx in contexts.items():
+            ad = ctx.ldap_manager.ad_config
+            security = ctx.ldap_manager.security_config
+            domains.append(
+                {
+                    "name": name,
+                    "domain": ad.domain,
+                    "base_dn": ad.base_dn,
+                    "server": ad.server,
+                    "default": name == default_domain,
+                    "allow_writes": security.allow_writes,
+                    "allow_destructive": security.allow_destructive,
+                }
+            )
+        return format_json_response(
+            {"default_domain": default_domain, "domains": domains}, "list_domains"
+        )
+
+    # Not tied to a domain, so it carries the policy of none: it is read-only and
+    # performs no LDAP I/O, which the READ classification lets every policy run.
+    policy = ToolPolicy(False, False)
+    return ToolSpec(
+        name="list_domains",
+        description=MULTI_DOMAIN_TOOL_DESCRIPTIONS["list_domains"],
+        input_schema=MULTI_DOMAIN_TOOL_INPUT_SCHEMAS["list_domains"],
+        handler=guard("list_domains", list_domains, policy),
+    )
+
+
+def build_multi_domain_specs(
+    contexts: Dict[str, ToolContext], default_domain: str
+) -> List[ToolSpec]:
+    """Every tool once, with a ``domain`` argument, plus ``list_domains``.
+
+    Each domain keeps its own policy and audit trail (built from its own config).
+    """
+    per_domain = {
+        name: {spec.name: spec for spec in build_tool_specs(ctx)} for name, ctx in contexts.items()
+    }
+    specs = [_routed_spec(tool, per_domain, default_domain) for tool in per_domain[default_domain]]
+    specs.append(_list_domains_spec(contexts, default_domain))
+    return specs
+
+
+def register_domain_tools(
+    contexts: Dict[str, ToolContext], default_domain: str, sink: ToolSink
+) -> None:
+    """Register tools for one or more domains.
+
+    With a single domain the surface is exactly the frozen one (no ``domain``
+    argument); with several, every tool gains ``domain`` and ``list_domains`` exists.
+    """
+    if len(contexts) == 1:
+        register_tools(contexts[default_domain], sink)
+        return
+    for spec in build_multi_domain_specs(contexts, default_domain):
         sink.add(spec)
 
 

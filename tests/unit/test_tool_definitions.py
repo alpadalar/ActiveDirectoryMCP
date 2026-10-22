@@ -33,7 +33,8 @@ def test_every_desc_constant_is_used_once() -> None:
         for key, value in vars(definitions).items()
         if key.endswith("_DESC") and isinstance(value, str)
     }
-    assert sorted(constants.values()) == sorted(TOOL_DESCRIPTIONS.values())
+    used = [*TOOL_DESCRIPTIONS.values(), *definitions.MULTI_DOMAIN_TOOL_DESCRIPTIONS.values()]
+    assert sorted(constants.values()) == sorted(used)
 
 
 def test_input_schemas_cover_exactly_the_golden_tools() -> None:

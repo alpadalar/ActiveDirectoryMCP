@@ -1,0 +1,34 @@
+{
+    "default_domain": "corp",
+    "logging": {
+        "level": "INFO"
+    },
+    "http_auth": {
+        "required": true
+    },
+    "domains": {
+        "corp": {
+            "active_directory": {
+                "server": "ldaps://dc.corp.example.com:636",
+                "domain": "corp.example.com",
+                "base_dn": "DC=corp,DC=example,DC=com",
+                "bind_dn": "CN=service-account,OU=Service Accounts,DC=corp,DC=example,DC=com",
+                "password": "${CORP_AD_PASSWORD}"
+            },
+            "security": {
+                "allow_writes": true,
+                "audit_log_path": "/var/log/active-directory-mcp/corp-audit.jsonl"
+            }
+        },
+        "branch": {
+            "active_directory": {
+                "server": "ldaps://dc.branch.example.com:636",
+                "domain": "branch.example.com",
+                "base_dn": "DC=branch,DC=example,DC=com",
+                "bind_dn": "CN=service-account,OU=Service Accounts,DC=branch,DC=example,DC=com",
+                "password": "${BRANCH_AD_PASSWORD}",
+                "skip_schema": true
+            }
+        }
+    }
+}

@@ -129,6 +129,7 @@ Generated from `RISK_CLASSIFICATION` in `src/active_directory_mcp/policy.py` by
 | `get_user_permissions` | read | always enabled | no |
 | `health` | read | always enabled | no |
 | `list_computers` | read | always enabled | no |
+| `list_domains` | read | always enabled | no |
 | `list_groups` | read | always enabled | no |
 | `list_organizational_units` | read | always enabled | no |
 | `list_users` | read | always enabled | no |

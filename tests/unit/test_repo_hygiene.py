@@ -580,16 +580,22 @@ def _walk(node, path=""):
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda p: p.name)
 def test_example_configs_are_placeholder_only(example, monkeypatch):
+    from active_directory_mcp.config.models import Config, MultiDomainFile
+
     data = json.loads(example.read_text(encoding="utf-8"))
     for where, value in _walk(data):
         assert value in (None, "") or re.fullmatch(r"\$\{[A-Z_][A-Z0-9_]*\}", str(value)), where
-    ad = data["active_directory"]
-    for server in [ad["server"], *ad.get("server_pool", [])]:
-        host = server.split("://", 1)[-1].split(":")[0]
-        assert _host_allowed(host), server
-    from active_directory_mcp.config.models import Config
-
-    assert Config(**data)
+    if "domains" in data:  # multi-domain example: every domain is an inline config
+        assert MultiDomainFile(**data)
+        configs = list(data["domains"].values())
+    else:
+        configs = [data]
+    for config in configs:
+        ad = config["active_directory"]
+        for server in [ad["server"], *ad.get("server_pool", [])]:
+            host = server.split("://", 1)[-1].split(":")[0]
+            assert _host_allowed(host), server
+        assert Config(**config)
 
 
 def test_env_and_compose_files_hold_no_literal_credentials():
@@ -680,10 +686,16 @@ def test_every_example_config_passes_startup_validation_as_shipped(example, monk
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(loader, "get_secret", lambda _url, _name: "placeholder-pw")
-    config = loader.load_config(str(example))
-    loader.validate_config(config)
-    # A shipped path to a file the repository does not provide fails at connect time.
-    assert not config.security.ca_cert_file or Path(config.security.ca_cert_file).exists()
+    if "domains" in json.loads(example.read_text(encoding="utf-8")):
+        # Several domains refuse the process-wide credential variables.
+        monkeypatch.delenv("AD_BIND_DN")
+        monkeypatch.delenv("AD_PASSWORD")
+        monkeypatch.setenv("CORP_AD_PASSWORD", "placeholder-pw")
+        monkeypatch.setenv("BRANCH_AD_PASSWORD", "placeholder-pw")
+    for config in loader.load_server_config(str(example)).domains.values():
+        loader.validate_config(config)
+        # A shipped path to a file the repository does not provide fails at connect time.
+        assert not config.security.ca_cert_file or Path(config.security.ca_cert_file).exists()
 
 
 def test_production_example_is_secure_by_default():

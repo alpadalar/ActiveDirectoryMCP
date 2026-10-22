@@ -55,10 +55,10 @@ def test_no_per_tool_registration_code(path: Path) -> None:
                 assert not (isinstance(target, ast.Attribute) and target.attr == "tool"), (
                     f"{path.name}:{node.lineno} uses a .tool decorator"
                 )
-    assert "register_tools" in _called_attr_names(tree) or any(
-        isinstance(n, ast.Call) and getattr(n.func, "id", None) == "register_tools"
+    assert "register_domain_tools" in _called_attr_names(tree) or any(
+        isinstance(n, ast.Call) and getattr(n.func, "id", None) == "register_domain_tools"
         for n in ast.walk(tree)
-    ), f"{path.name} does not call register_tools"
+    ), f"{path.name} does not call register_domain_tools"
 
 
 def test_http_app_called_only_in_http_app_module() -> None:
@@ -146,29 +146,29 @@ def test_serve_hands_build_http_app_object_to_uvicorn() -> None:
     assert recorded[0].app is built[0]
     assert recorded[0].host == server.host and recorded[0].port == server.port
     assert recorded[0].lifespan == "on"
-    assert servers[0].on_shutdown == server.ldap_manager.disconnect
+    assert servers[0].on_shutdown == server._disconnect_all
 
 
 def test_run_awaits_serve_once_and_disconnects() -> None:
     with _offline_env(HTTP_MOD):
         server = _http_server()
         server.serve = AsyncMock()
-        server.ldap_manager = MagicMock()
+        server._disconnect_all = MagicMock()
         server.run()
         server.serve.assert_awaited_once()
-        server.ldap_manager.disconnect.assert_called_once()
+        server._disconnect_all.assert_called_once()
 
 
 def test_run_exits_nonzero_and_disconnects_when_serve_fails() -> None:
     with _offline_env(HTTP_MOD):
         server = _http_server()
         server.serve = AsyncMock(side_effect=RuntimeError("boom"))
-        server.ldap_manager = MagicMock()
+        server._disconnect_all = MagicMock()
         server.logger = MagicMock()
         with pytest.raises(SystemExit) as exc:
             server.run()
         assert exc.value.code == 1
-        server.ldap_manager.disconnect.assert_called_once()
+        server._disconnect_all.assert_called_once()
         assert server.logger.error.called
 
 
@@ -178,7 +178,7 @@ def test_stdio_registers_once_with_44_tools_and_error_shape() -> None:
     import active_directory_mcp.server as mod
 
     with _offline_env(STDIO_MOD):
-        with patch.object(mod, "register_tools", wraps=mod.register_tools) as spy:
+        with patch.object(mod, "register_domain_tools", wraps=mod.register_domain_tools) as spy:
             server = mod.ActiveDirectoryMCPServer()
         spy.assert_called_once()
         assert len(server._tools) == 45
@@ -248,7 +248,7 @@ def test_http_server_auth_opt_out_serves_unauthenticated(
 
     import active_directory_mcp.server_http as mod
 
-    real_load = mod.load_config
+    real_load = mod.load_server_config
 
     def load(path: Optional[str] = None) -> Any:
         config = real_load(path)
@@ -258,7 +258,7 @@ def test_http_server_auth_opt_out_serves_unauthenticated(
     caplog.set_level(logging.WARNING)
     with _offline_env(HTTP_MOD):
         os.environ.pop("AD_MCP_HTTP_API_KEY", None)
-        with patch.object(mod, "load_config", load):
+        with patch.object(mod, "load_server_config", load):
             server = _http_server()
         assert "DISABLED" in caplog.text
         with TestClient(server.build_app()) as client:
@@ -292,7 +292,7 @@ def test_http_default_policy_blocks_writes_and_allow_writes_passes() -> None:
         server = _http_server()
         assert _call(server, "create_user", CREATE_ARGS)["error_code"] == "write_blocked"
 
-    real_load = mod.load_config
+    real_load = mod.load_server_config
 
     def load(path: Optional[str] = None) -> Any:
         config = real_load(path)
@@ -300,7 +300,7 @@ def test_http_default_policy_blocks_writes_and_allow_writes_passes() -> None:
         return config
 
     with _offline_env(HTTP_MOD):
-        with patch.object(mod, "load_config", load):
+        with patch.object(mod, "load_server_config", load):
             server = _http_server()
         server.user_tools.create_user = MagicMock(return_value={"success": True})
         result = _call(server, "create_user", CREATE_ARGS)

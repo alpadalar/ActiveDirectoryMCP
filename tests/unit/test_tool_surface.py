@@ -1,7 +1,8 @@
 """Tool-surface contract tests (STAB-06).
 
 The tool names, parameter names, canonical types, defaults and required sets of
-both transports are frozen in tests/golden/tool_surface_{stdio,http}.json.
+both transports are frozen in tests/golden/tool_surface_{stdio,http}.json, and for a
+two-domain configuration in tests/golden/tool_surface_multi_{stdio,http}.json.
 Tool descriptions are deliberately not part of the contract.
 
 Intentional surface change: regenerate the golden files with
@@ -29,6 +30,8 @@ from tests.support.tool_surface import (
 GOLDEN_DIR = Path(__file__).resolve().parent.parent / "golden"
 STDIO_GOLDEN = GOLDEN_DIR / "tool_surface_stdio.json"
 HTTP_GOLDEN = GOLDEN_DIR / "tool_surface_http.json"
+MULTI_STDIO_GOLDEN = GOLDEN_DIR / "tool_surface_multi_stdio.json"
+MULTI_HTTP_GOLDEN = GOLDEN_DIR / "tool_surface_multi_http.json"
 UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
 
 
@@ -148,6 +151,16 @@ def http_bytes() -> bytes:
     return serialize_surface(build_http_surface())
 
 
+@pytest.fixture(scope="module")
+def multi_stdio_bytes() -> bytes:
+    return serialize_surface(build_stdio_surface(domains=2))
+
+
+@pytest.fixture(scope="module")
+def multi_http_bytes() -> bytes:
+    return serialize_surface(build_http_surface(domains=2))
+
+
 def _compare(actual: bytes, golden: Path) -> None:
     if UPDATE:
         golden.parent.mkdir(parents=True, exist_ok=True)
@@ -181,9 +194,34 @@ def test_http_surface_matches_golden(http_bytes):
     _compare(http_bytes, HTTP_GOLDEN)
 
 
-def test_transport_parity(stdio_bytes, http_bytes):
-    stdio = json.loads(stdio_bytes)["tools"]
-    http = json.loads(http_bytes)["tools"]
+def test_multi_stdio_surface_matches_golden(multi_stdio_bytes):
+    _compare(multi_stdio_bytes, MULTI_STDIO_GOLDEN)
+
+
+def test_multi_http_surface_matches_golden(multi_http_bytes):
+    _compare(multi_http_bytes, MULTI_HTTP_GOLDEN)
+
+
+@pytest.mark.parametrize("transport", ["stdio", "http"])
+def test_multi_surface_is_single_surface_plus_domain(
+    transport, stdio_bytes, http_bytes, multi_stdio_bytes, multi_http_bytes
+):
+    """Several domains add only an optional ``domain`` argument and ``list_domains``."""
+    single = json.loads(stdio_bytes if transport == "stdio" else http_bytes)["tools"]
+    multi = json.loads(multi_stdio_bytes if transport == "stdio" else multi_http_bytes)["tools"]
+    assert set(multi) == set(single) | {"list_domains"}
+    assert multi["list_domains"] == {"params": {}, "required": []}
+    domain = multi["get_user"]["params"]["domain"]
+    assert domain["type"] == "string" and domain.get("default", None) is None
+    for name, entry in single.items():
+        expected = {"params": {**entry["params"], "domain": domain}, "required": entry["required"]}
+        assert multi[name] == expected, name
+
+
+@pytest.mark.parametrize("domains", [1, 2], ids=["single", "multi"])
+def test_transport_parity(domains, stdio_bytes, http_bytes, multi_stdio_bytes, multi_http_bytes):
+    stdio = json.loads(stdio_bytes if domains == 1 else multi_stdio_bytes)["tools"]
+    http = json.loads(http_bytes if domains == 1 else multi_http_bytes)["tools"]
     problems = []
     for name in sorted(set(stdio) ^ set(http)):
         problems.append(f"{name}: only on {'stdio' if name in stdio else 'http'}")
@@ -195,7 +233,11 @@ def test_transport_parity(stdio_bytes, http_bytes):
     assert not problems, "Transport drift in tools: " + "; ".join(problems)
 
 
-@pytest.mark.parametrize("golden", [STDIO_GOLDEN, HTTP_GOLDEN], ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "golden",
+    [STDIO_GOLDEN, HTTP_GOLDEN, MULTI_STDIO_GOLDEN, MULTI_HTTP_GOLDEN],
+    ids=lambda p: p.name,
+)
 def test_golden_files_are_canonical(golden, stdio_bytes, http_bytes):
     data = golden.read_bytes()
     assert serialize_surface(json.loads(data)) == data

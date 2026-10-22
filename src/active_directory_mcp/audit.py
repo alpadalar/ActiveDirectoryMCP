@@ -156,9 +156,10 @@ class AuditLogger:
     unlinked inode. Destructive records are fsynced.
     """
 
-    def __init__(self, path: str, fail_closed: bool = False) -> None:
+    def __init__(self, path: str, fail_closed: bool = False, domain: Optional[str] = None) -> None:
         self.path = path
         self.fail_closed = fail_closed
+        self.domain = domain  # set when one server serves several domains
         self.failed_writes = 0
         self.healthy = True
         self._closed = False
@@ -225,7 +226,9 @@ class AuditLogger:
         self._file, self._ident = self._open()
 
     @classmethod
-    def from_security(cls, security: SecurityConfig) -> Optional["AuditLogger"]:
+    def from_security(
+        cls, security: SecurityConfig, domain: Optional[str] = None
+    ) -> Optional["AuditLogger"]:
         """Build the logger from config; None when no path is set."""
         if security.audit_log_path is None:
             if security.allow_writes:
@@ -234,7 +237,7 @@ class AuditLogger:
                     "mutating tools run without an audit trail"
                 )
             return None
-        return cls(security.audit_log_path, fail_closed=security.audit_fail_closed)
+        return cls(security.audit_log_path, fail_closed=security.audit_fail_closed, domain=domain)
 
     def record(
         self,
@@ -246,7 +249,10 @@ class AuditLogger:
     ) -> bool:
         """Append one record. Never raises; returns False when the write failed."""
         try:
-            line = _dumps(build_record(tool, risk, args, outcome, error_code))
+            record = build_record(tool, risk, args, outcome, error_code)
+            if self.domain:
+                record["domain"] = self.domain
+            line = _dumps(record)
             with self._lock:
                 if self._closed:
                     raise ValueError("audit logger is closed")

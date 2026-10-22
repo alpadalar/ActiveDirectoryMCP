@@ -908,3 +908,24 @@ TOOL_INPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
     "health": {"type": "object", "properties": {}},
     "get_schema_info": {"type": "object", "properties": {}},
 }
+
+
+# Tools registered only when the server is configured with several domains. They are
+# kept out of TOOL_DESCRIPTIONS / TOOL_INPUT_SCHEMAS, which define the frozen
+# single-domain surface.
+LIST_DOMAINS_DESC = """List the Active Directory domains this server is connected to.
+
+Returns each domain's name (the value to pass as 'domain' to any other tool), its AD
+domain, base DN and server, whether it is the default, and whether write and
+destructive tools are allowed in it. Takes no input; performs no LDAP call.
+
+Example:
+- list_domains()"""
+
+MULTI_DOMAIN_TOOL_DESCRIPTIONS = {
+    "list_domains": LIST_DOMAINS_DESC,
+}
+
+MULTI_DOMAIN_TOOL_INPUT_SCHEMAS = {
+    "list_domains": {"type": "object", "properties": {}},
+}

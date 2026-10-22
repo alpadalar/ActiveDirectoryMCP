@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
@@ -314,3 +314,60 @@ class Config(BaseModel):
         merged = OrganizationalUnitsConfig.defaults_for(base_dn).model_dump()
         merged.update({k: v for k, v in given.items() if v is not None})
         return {**data, "organizational_units": merged}
+
+
+_DOMAIN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+class MultiDomainFile(BaseModel):
+    """Top level of a multi-domain configuration file (``{"domains": {...}}``).
+
+    Each domain value is either a path to a single-domain config file (relative
+    to this file) or that single-domain config inline.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    domains: Dict[str, Any] = Field(..., min_length=1, description="Domain name -> config")
+    default_domain: Optional[str] = Field(
+        default=None, description="Domain used when a tool call omits 'domain' (default: first)"
+    )
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    http_auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
+
+    @field_validator("domains")
+    @classmethod
+    def _valid_names(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        for name, value in v.items():
+            if not _DOMAIN_NAME.match(name):
+                raise ValueError(f"invalid domain name {name!r}: use letters, digits, '_.-'")
+            if not isinstance(value, (str, dict)):
+                raise ValueError(f"domain {name!r} must be a config path or an inline object")
+        return v
+
+    @model_validator(mode="after")
+    def _default_exists(self) -> "MultiDomainFile":
+        if self.default_domain is None:
+            self.default_domain = next(iter(self.domains))
+        elif self.default_domain not in self.domains:
+            raise ValueError(f"default_domain {self.default_domain!r} is not in domains")
+        return self
+
+
+class ServerConfig(BaseModel):
+    """What a server instance runs with: one or more domains plus transport settings."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    domains: Dict[str, Config]
+    default_domain: str
+    logging: LoggingConfig
+    security: SecurityConfig  # transport-level settings (HTTP auth) only
+
+    @property
+    def multi(self) -> bool:
+        return len(self.domains) > 1
+
+    @property
+    def default(self) -> Config:
+        return self.domains[self.default_domain]

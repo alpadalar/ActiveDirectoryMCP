@@ -16,6 +16,7 @@ from active_directory_mcp.policy import (
     guard,
 )
 from active_directory_mcp.registry import (
+    MULTI_DOMAIN_TOOLS,
     FastMCPToolSink,
     StdioToolSink,
     build_tool_specs,
@@ -67,7 +68,7 @@ def _any_tool_called(ctx: Any) -> bool:
 
 def test_classification_covers_exactly_the_registered_tools() -> None:
     names = {spec.name for spec in build_tool_specs(make_ctx())}
-    assert set(RISK_CLASSIFICATION) == names
+    assert set(RISK_CLASSIFICATION) == names | MULTI_DOMAIN_TOOLS
     assert len(names) == 45
     assert all(isinstance(r, Risk) for r in RISK_CLASSIFICATION.values())
 
@@ -276,17 +277,17 @@ def test_stdio_server_honours_allow_writes_config() -> None:
     from active_directory_mcp.config.models import SecurityConfig
 
     with _offline_env("active_directory_mcp.server"):
-        original = mod.load_config
+        original = mod.load_server_config
 
         def load_with_writes(path: Any = None) -> Any:
             cfg = original(path)
-            cfg.security = SecurityConfig(allow_writes=True)
+            cfg.default.security = SecurityConfig(allow_writes=True)
             return cfg
 
         mod_load = Mock(side_effect=load_with_writes)
         from unittest.mock import patch
 
-        with patch.object(mod, "load_config", mod_load):
+        with patch.object(mod, "load_server_config", mod_load):
             server = mod.ActiveDirectoryMCPServer()
         server.user_tools.disable_user = Mock(return_value={"success": True})
         out = _stdio_call(server, "disable_user", {"username": "u"})
@@ -354,16 +355,16 @@ def test_stdio_server_fails_to_start_on_unwritable_audit_path(tmp_path: Any) -> 
     from active_directory_mcp.config.models import SecurityConfig
 
     with _offline_env("active_directory_mcp.server"):
-        original = mod.load_config
+        original = mod.load_server_config
 
         def load_bad(path: Any = None) -> Any:
             cfg = original(path)
-            cfg.security = SecurityConfig(
+            cfg.default.security = SecurityConfig(
                 allow_writes=True, audit_log_path=str(tmp_path / "nope" / "a.log")
             )
             return cfg
 
-        with patch.object(mod, "load_config", Mock(side_effect=load_bad)):
+        with patch.object(mod, "load_server_config", Mock(side_effect=load_bad)):
             with pytest.raises(AuditConfigError):
                 mod.ActiveDirectoryMCPServer()
 
@@ -375,4 +376,5 @@ def test_new_directory_tools_are_classified_read_and_exactly_three_were_added() 
     assert ADDITIVE_TOOLS == {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
     for name in ADDITIVE_TOOLS:
         assert RISK_CLASSIFICATION[name] is Risk.READ
-    assert sum(1 for r in RISK_CLASSIFICATION.values() if r is Risk.READ) == 24
+    # 24 single-domain read tools plus list_domains (registered only with several domains)
+    assert sum(1 for r in RISK_CLASSIFICATION.values() if r is Risk.READ) == 25

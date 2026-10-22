@@ -11,7 +11,7 @@ import pytest
 
 from active_directory_mcp.config.models import SecurityConfig
 from active_directory_mcp.policy import RISK_CLASSIFICATION, Risk
-from active_directory_mcp.registry import build_tool_specs
+from active_directory_mcp.registry import MULTI_DOMAIN_TOOLS, build_tool_specs
 from tests.unit.test_registry import make_ctx
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,7 +75,7 @@ def test_committed_table_matches_fresh_render():
 def test_table_tool_set_equals_registry():
     registered = {spec.name for spec in build_tool_specs(make_ctx())}
     listed = {n for n, _ in _table_tools(_committed_region())}
-    assert listed == registered
+    assert listed == registered | MULTI_DOMAIN_TOOLS
 
 
 def test_table_risk_values_are_known():

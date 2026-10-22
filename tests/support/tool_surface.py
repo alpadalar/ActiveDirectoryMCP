@@ -113,10 +113,15 @@ def serialize_surface(surface: Dict[str, Any]) -> bytes:
 
 
 @contextmanager
-def _offline_env(module: str) -> Iterator[None]:
-    """Temporary config + dummy password, LDAPManager patched at its import site."""
+def _offline_env(module: str, domains: int = 1) -> Iterator[None]:
+    """Temporary config + dummy password, LDAPManager patched at its import site.
+
+    ``domains > 1`` writes a multi-domain file whose domains share the single-domain
+    settings; their passwords come from ``${SURFACE_PASSWORD}`` because several
+    domains refuse ``AD_PASSWORD``.
+    """
     with tempfile.TemporaryDirectory(prefix="tool-surface-") as tmp:
-        config = {
+        config: Dict[str, Any] = {
             "active_directory": {
                 "server": "ldaps://dc.test.local",
                 "domain": "test.local",
@@ -131,17 +136,22 @@ def _offline_env(module: str) -> Iterator[None]:
             },
             "logging": {"level": "WARNING", "file": None},
         }
-        path = Path(tmp) / "config.json"
-        path.write_text(json.dumps(config), encoding="utf-8")
         env = {
-            "AD_MCP_CONFIG": str(path),
             "AD_PASSWORD": "dummy-password",
             "AD_MCP_HTTP_API_KEY": "offline-surface-key-0123456789abcdef",
         }
+        if domains > 1:
+            config["active_directory"]["password"] = "${SURFACE_PASSWORD}"
+            config = {"domains": {f"d{index}": config for index in range(1, domains + 1)}}
+            env["SURFACE_PASSWORD"] = env.pop("AD_PASSWORD")
+        path = Path(tmp) / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        env["AD_MCP_CONFIG"] = str(path)
         manager = MagicMock()
         manager.test_connection.return_value = {"connected": False}
         with patch.dict(os.environ, env), patch(f"{module}.LDAPManager", return_value=manager):
             for var in (
+                *(() if domains == 1 else ("AD_PASSWORD",)),
                 "AD_BIND_DN",
                 "AZURE_KEYVAULT_URL",
                 "AZURE_KEYVAULT_SECRET_USERNAME",
@@ -161,16 +171,16 @@ def _schema_of(tool: Any) -> Dict[str, Any]:
     )
 
 
-def build_stdio_surface() -> Dict[str, Any]:
-    with _offline_env("active_directory_mcp.server"):
+def build_stdio_surface(domains: int = 1) -> Dict[str, Any]:
+    with _offline_env("active_directory_mcp.server", domains):
         from active_directory_mcp.server import ActiveDirectoryMCPServer
 
         server = ActiveDirectoryMCPServer()
         return _surface({tool.name: _schema_of(tool) for tool in server._tools})
 
 
-def build_http_surface() -> Dict[str, Any]:
-    with _offline_env("active_directory_mcp.server_http"):
+def build_http_surface(domains: int = 1) -> Dict[str, Any]:
+    with _offline_env("active_directory_mcp.server_http", domains):
         from active_directory_mcp.server_http import ActiveDirectoryMCPHTTPServer
 
         server = ActiveDirectoryMCPHTTPServer()

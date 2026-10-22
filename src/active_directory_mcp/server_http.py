@@ -11,19 +11,19 @@ import logging
 import os
 import socket
 import sys
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import uvicorn
 from fastmcp import FastMCP
 
 from .audit import AuditLogger
 from .auth import resolve_auth
-from .config.loader import load_config, validate_config
+from .config.loader import load_server_config, validate_config
 from .core.ldap_manager import LDAPManager
 from .core.logging import setup_logging
 from .http_app import build_http_app
 from .policy import ToolPolicy
-from .registry import FastMCPToolSink, ToolContext, register_tools
+from .registry import FastMCPToolSink, ToolContext, register_domain_tools
 from .tools.computer import ComputerTools
 from .tools.group import GroupTools
 from .tools.organizational_unit import OrganizationalUnitTools
@@ -89,73 +89,93 @@ class ActiveDirectoryMCPHTTPServer:
             port: Server port
             path: HTTP path for MCP endpoint
         """
-        # Load and validate configuration
-        self.config = load_config(config_path)
-        validate_config(self.config)
+        # Load and validate configuration (one or more domains)
+        self.server_config = load_server_config(config_path)
+        for name, domain_config in self.server_config.domains.items():
+            try:
+                validate_config(domain_config)
+            except ValueError as exc:
+                raise ValueError(f"domain '{name}': {exc}") from None
 
         # Fail fast (before any LDAP connection) when no credential is configured.
-        self._verifier = resolve_auth(self.config.security, os.environ)
+        self._verifier = resolve_auth(self.server_config.security, os.environ)
 
         # Setup logging
-        self.logger = setup_logging(self.config.logging)
+        self.logger = setup_logging(self.server_config.logging)
 
         self.host = host
         self.port = port
         self.path = path
 
-        # Initialize LDAP manager
-        self.ldap_manager = LDAPManager(
-            self.config.active_directory,
-            self.config.security,
-            self.config.performance,
-            self.config.organizational_units,
-        )
+        # One LDAP manager and tool set per domain
+        self.domains: Dict[str, ToolContext] = {}
+        multi = self.server_config.multi
+        for name, domain_config in self.server_config.domains.items():
+            manager = LDAPManager(
+                domain_config.active_directory,
+                domain_config.security,
+                domain_config.performance,
+                domain_config.organizational_units,
+            )
+            self.domains[name] = ToolContext(
+                user_tools=UserTools(manager),
+                group_tools=GroupTools(manager),
+                computer_tools=ComputerTools(manager),
+                ou_tools=OrganizationalUnitTools(manager),
+                security_tools=SecurityTools(manager),
+                ldap_manager=manager,
+                server_name="ActiveDirectoryMCP-HTTP",
+                endpoint=f"http://{host}:{port}{path}",
+                policy=ToolPolicy.from_security(domain_config.security),
+                audit=AuditLogger.from_security(
+                    domain_config.security, domain=name if multi else None
+                ),
+            )
+
+        # The default domain keeps the single-domain attributes available
+        self.config = self.server_config.default
+        default = self.domains[self.server_config.default_domain]
+        self.ldap_manager = default.ldap_manager
+        self.user_tools = default.user_tools
+        self.group_tools = default.group_tools
+        self.computer_tools = default.computer_tools
+        self.ou_tools = default.ou_tools
+        self.security_tools = default.security_tools
 
         # Test connection on startup
         self._test_initial_connection()
 
-        # Initialize tools
-        self.user_tools = UserTools(self.ldap_manager)
-        self.group_tools = GroupTools(self.ldap_manager)
-        self.computer_tools = ComputerTools(self.ldap_manager)
-        self.ou_tools = OrganizationalUnitTools(self.ldap_manager)
-        self.security_tools = SecurityTools(self.ldap_manager)
-
-        # Initialize FastMCP
+        # Initialize FastMCP and register tools (declared once in registry.py)
         self.mcp = FastMCP("ActiveDirectoryMCP-HTTP")
-
-        # Register tools (declared once in registry.py)
-        ctx = ToolContext(
-            user_tools=self.user_tools,
-            group_tools=self.group_tools,
-            computer_tools=self.computer_tools,
-            ou_tools=self.ou_tools,
-            security_tools=self.security_tools,
-            ldap_manager=self.ldap_manager,
-            server_name="ActiveDirectoryMCP-HTTP",
-            endpoint=f"http://{host}:{port}{path}",
-            policy=ToolPolicy.from_security(self.config.security),
-            audit=AuditLogger.from_security(self.config.security),
+        register_domain_tools(
+            self.domains, self.server_config.default_domain, FastMCPToolSink(self.mcp)
         )
-        register_tools(ctx, FastMCPToolSink(self.mcp))
         self._uvicorn_server: Optional[uvicorn.Server] = None
 
     def _test_initial_connection(self) -> None:
-        """Test initial LDAP connection."""
-        try:
-            self.logger.info("Testing initial LDAP connection...")
-            connection_info = self.ldap_manager.test_connection()
+        """Test the initial LDAP connection of every domain (failures are only logged)."""
+        for name, ctx in self.domains.items():
+            try:
+                self.logger.info(f"Testing initial LDAP connection for domain '{name}'...")
+                connection_info = ctx.ldap_manager.test_connection()
 
-            if connection_info.get("connected"):
-                self.logger.info(
-                    f"Successfully connected to {connection_info.get('server')}:"
-                    f"{connection_info.get('port')}"
-                )
-            else:
-                self.logger.error(f"Initial connection failed: {connection_info.get('error')}")
+                if connection_info.get("connected"):
+                    self.logger.info(
+                        f"Successfully connected to {connection_info.get('server')}:"
+                        f"{connection_info.get('port')}"
+                    )
+                else:
+                    self.logger.error(
+                        f"Initial connection failed for domain '{name}': "
+                        f"{connection_info.get('error')}"
+                    )
 
-        except Exception as e:
-            self.logger.error(f"Connection test error: {e}")
+            except Exception as e:
+                self.logger.error(f"Connection test error for domain '{name}': {e}")
+
+    def _disconnect_all(self) -> None:
+        for ctx in self.domains.values():
+            ctx.ldap_manager.disconnect()
 
     def build_app(self) -> Any:
         """Build the ASGI app to serve (the only place the served app is created)."""
@@ -164,7 +184,7 @@ class ActiveDirectoryMCPHTTPServer:
             path=self.path,
             auth=self._verifier,
             allow_unauthenticated=(
-                self._verifier is None and not self.config.security.http_auth.required
+                self._verifier is None and not self.server_config.security.http_auth.required
             ),
         )
 
@@ -183,7 +203,7 @@ class ActiveDirectoryMCPHTTPServer:
             lifespan="on",
             timeout_graceful_shutdown=2,
         )
-        server = _ShutdownHookServer(config, on_shutdown=self.ldap_manager.disconnect)
+        server = _ShutdownHookServer(config, on_shutdown=self._disconnect_all)
         self._uvicorn_server = server
         await server.serve(sockets=sockets)
 
@@ -205,15 +225,16 @@ class ActiveDirectoryMCPHTTPServer:
             self.logger.info(
                 f"Starting Active Directory MCP HTTP server on {self.host}:{self.port}{self.path}"
             )
-            self.logger.info(f"Connected to: {self.config.active_directory.server}")
-            self.logger.info(f"Domain: {self.config.active_directory.domain}")
+            for name, domain_config in self.server_config.domains.items():
+                ad = domain_config.active_directory
+                self.logger.info(f"Domain '{name}': {ad.domain} at {ad.server}")
 
             asyncio.run(self.serve())
         except Exception as e:
             self.logger.error(f"HTTP server error: {e}")
             sys.exit(1)
         finally:
-            self.ldap_manager.disconnect()
+            self._disconnect_all()
 
 
 class ActiveDirectoryMCPCommand:

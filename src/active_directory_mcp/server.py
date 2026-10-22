@@ -31,11 +31,11 @@ from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
 from .audit import AuditLogger
-from .config.loader import load_config, validate_config
+from .config.loader import load_server_config, validate_config
 from .core.ldap_manager import LDAPManager
 from .core.logging import setup_logging
 from .policy import ToolPolicy
-from .registry import StdioToolSink, ToolContext, register_tools
+from .registry import StdioToolSink, ToolContext, register_domain_tools
 from .tools.computer import ComputerTools
 from .tools.group import GroupTools
 from .tools.organizational_unit import OrganizationalUnitTools
@@ -59,30 +59,55 @@ class ActiveDirectoryMCPServer:
             level=logging.WARNING, format="%(levelname)s - %(message)s", stream=sys.stderr
         )
 
-        # Load and validate configuration
-        self.config = load_config(config_path)
-        validate_config(self.config)
+        # Load and validate configuration (one or more domains)
+        self.server_config = load_server_config(config_path)
+        for name, domain_config in self.server_config.domains.items():
+            try:
+                validate_config(domain_config)
+            except ValueError as exc:
+                raise ValueError(f"domain '{name}': {exc}") from None
 
         # Setup logging (replaces basic config with full logging)
-        self.logger = setup_logging(self.config.logging)
+        self.logger = setup_logging(self.server_config.logging)
 
-        # Initialize LDAP manager
-        self.ldap_manager = LDAPManager(
-            self.config.active_directory,
-            self.config.security,
-            self.config.performance,
-            self.config.organizational_units,
-        )
+        # One LDAP manager and tool set per domain
+        self.domains: Dict[str, ToolContext] = {}
+        multi = self.server_config.multi
+        for name, domain_config in self.server_config.domains.items():
+            manager = LDAPManager(
+                domain_config.active_directory,
+                domain_config.security,
+                domain_config.performance,
+                domain_config.organizational_units,
+            )
+            self.domains[name] = ToolContext(
+                user_tools=UserTools(manager),
+                group_tools=GroupTools(manager),
+                computer_tools=ComputerTools(manager),
+                ou_tools=OrganizationalUnitTools(manager),
+                security_tools=SecurityTools(manager),
+                ldap_manager=manager,
+                server_name="ActiveDirectoryMCP",
+                endpoint=None,
+                health_extras=self._health_extras,
+                policy=ToolPolicy.from_security(domain_config.security),
+                audit=AuditLogger.from_security(
+                    domain_config.security, domain=name if multi else None
+                ),
+            )
+
+        # The default domain keeps the single-domain attributes available
+        self.config = self.server_config.default
+        default = self.domains[self.server_config.default_domain]
+        self.ldap_manager = default.ldap_manager
+        self.user_tools = default.user_tools
+        self.group_tools = default.group_tools
+        self.computer_tools = default.computer_tools
+        self.ou_tools = default.ou_tools
+        self.security_tools = default.security_tools
 
         # Test connection on startup
         self._test_initial_connection()
-
-        # Initialize tools
-        self.user_tools = UserTools(self.ldap_manager)
-        self.group_tools = GroupTools(self.ldap_manager)
-        self.computer_tools = ComputerTools(self.ldap_manager)
-        self.ou_tools = OrganizationalUnitTools(self.ldap_manager)
-        self.security_tools = SecurityTools(self.ldap_manager)
 
         # Initialize MCP server (using low-level API)
         self.mcp = Server("ActiveDirectoryMCP")
@@ -92,25 +117,33 @@ class ActiveDirectoryMCPServer:
         self._setup_handlers()
 
     def _test_initial_connection(self) -> None:
-        """Test initial LDAP connection."""
-        try:
-            self.logger.info("Testing initial LDAP connection...")
-            connection_info = self.ldap_manager.test_connection()
+        """Test the initial LDAP connection of every domain (failures are only logged)."""
+        for name, ctx in self.domains.items():
+            try:
+                self.logger.info(f"Testing initial LDAP connection for domain '{name}'...")
+                connection_info = ctx.ldap_manager.test_connection()
 
-            if connection_info.get("connected"):
-                self.logger.info(
-                    f"Successfully connected to {connection_info.get('server')}:"
-                    f"{connection_info.get('port')}"
-                )
-                if connection_info.get("search_test"):
-                    self.logger.info("LDAP search test passed")
+                if connection_info.get("connected"):
+                    self.logger.info(
+                        f"Successfully connected to {connection_info.get('server')}:"
+                        f"{connection_info.get('port')}"
+                    )
+                    if connection_info.get("search_test"):
+                        self.logger.info("LDAP search test passed")
+                    else:
+                        self.logger.warning("LDAP search test failed")
                 else:
-                    self.logger.warning("LDAP search test failed")
-            else:
-                self.logger.error(f"Initial connection failed: {connection_info.get('error')}")
+                    self.logger.error(
+                        f"Initial connection failed for domain '{name}': "
+                        f"{connection_info.get('error')}"
+                    )
 
-        except Exception as e:
-            self.logger.error(f"Connection test error: {e}")
+            except Exception as e:
+                self.logger.error(f"Connection test error for domain '{name}': {e}")
+
+    def _disconnect_all(self) -> None:
+        for ctx in self.domains.values():
+            ctx.ldap_manager.disconnect()
 
     def _setup_handlers(self) -> None:
         """
@@ -123,21 +156,8 @@ class ActiveDirectoryMCPServer:
         - Organizational Unit tools
         - Security and audit tools
         """
-        ctx = ToolContext(
-            user_tools=self.user_tools,
-            group_tools=self.group_tools,
-            computer_tools=self.computer_tools,
-            ou_tools=self.ou_tools,
-            security_tools=self.security_tools,
-            ldap_manager=self.ldap_manager,
-            server_name="ActiveDirectoryMCP",
-            endpoint=None,
-            health_extras=self._health_extras,
-            policy=ToolPolicy.from_security(self.config.security),
-            audit=AuditLogger.from_security(self.config.security),
-        )
         sink = StdioToolSink()
-        register_tools(ctx, sink)
+        register_domain_tools(self.domains, self.server_config.default_domain, sink)
         self._tools = sink.tools
         self._tool_handlers = sink.handlers
 
@@ -201,7 +221,7 @@ class ActiveDirectoryMCPServer:
 
         def signal_handler(signum: int, frame: Optional[FrameType]) -> None:
             self.logger.info("Received signal to shutdown...")
-            self.ldap_manager.disconnect()
+            self._disconnect_all()
             sys.exit(0)
 
         # Set up signal handlers
@@ -238,15 +258,17 @@ class ActiveDirectoryMCPServer:
                     self.logger.info("Startup tests passed.")
 
             self.logger.info("Starting Active Directory MCP server...")
-            self.logger.info(f"Connected to: {self.config.active_directory.server}")
-            self.logger.info(f"Domain: {self.config.active_directory.domain}")
-            self.logger.info(f"Base DN: {self.config.active_directory.base_dn}")
+            for name, domain_config in self.server_config.domains.items():
+                ad = domain_config.active_directory
+                self.logger.info(
+                    f"Domain '{name}': {ad.domain} at {ad.server} (base DN {ad.base_dn})"
+                )
 
             asyncio.run(self._run_server())
 
         except Exception as e:
             self.logger.error(f"Server error: {e}")
-            self.ldap_manager.disconnect()
+            self._disconnect_all()
             sys.exit(1)
 
 

@@ -314,5 +314,9 @@ def test_alias_wrappers_only_delegate():
 def test_servers_validate_config_right_after_load(module):
     source = (SRC / module).read_text(encoding="utf-8")
     lines = [ln.strip() for ln in source.splitlines()]
-    load_idx = next(i for i, ln in enumerate(lines) if "= load_config(" in ln)
-    assert lines[load_idx + 1].startswith("validate_config(")
+    load_idx = next(i for i, ln in enumerate(lines) if "= load_server_config(" in ln)
+    # Every loaded domain is validated in the loop right after the load.
+    assert lines[load_idx + 1].startswith("for name, domain_config in")
+    assert any(
+        ln.startswith("validate_config(domain_config)") for ln in lines[load_idx + 2 : load_idx + 5]
+    )

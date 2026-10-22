@@ -1,0 +1,874 @@
+{
+  "tool_count": 46,
+  "tools": {
+    "add_group_member": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        },
+        "member_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name",
+        "member_dn"
+      ]
+    },
+    "audit_admin_accounts": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "create_computer": {
+      "params": {
+        "additional_attributes": {
+          "type": "object"
+        },
+        "computer_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "dns_hostname": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "create_group": {
+      "params": {
+        "additional_attributes": {
+          "type": "object"
+        },
+        "description": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        },
+        "group_scope": {
+          "default": "Global",
+          "type": "string"
+        },
+        "group_type": {
+          "default": "Security",
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "create_organizational_unit": {
+      "params": {
+        "additional_attributes": {
+          "type": "object"
+        },
+        "description": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "managed_by": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent_ou": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "create_user": {
+      "params": {
+        "additional_attributes": {
+          "type": "object"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "first_name": {
+          "type": "string"
+        },
+        "last_name": {
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "first_name",
+        "last_name",
+        "password",
+        "username"
+      ]
+    },
+    "delete_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "delete_group": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "delete_organizational_unit": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "force": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "delete_user": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "disable_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "disable_user": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "enable_computer": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "enable_user": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_computer": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "get_domain_info": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_group": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "get_group_members": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        },
+        "recursive": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "get_inactive_users": {
+      "params": {
+        "days": {
+          "default": 90,
+          "type": "integer"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "include_disabled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "get_nested_group_members": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name"
+      ]
+    },
+    "get_organizational_unit": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "get_organizational_unit_contents": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "object_types": {
+          "type": "array<string>"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ou_dn"
+      ]
+    },
+    "get_password_policy_violations": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_privileged_groups": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_rootdse_info": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_schema_info": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_stale_computers": {
+      "params": {
+        "days": {
+          "default": 90,
+          "type": "integer"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_tls_posture": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "get_user": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_user_groups": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "get_user_permissions": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "health": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "list_computers": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "filter_criteria": {
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "list_domains": {
+      "params": {},
+      "required": []
+    },
+    "list_groups": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "filter_criteria": {
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "list_organizational_units": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "filter_criteria": {
+          "type": "string"
+        },
+        "parent_ou": {
+          "type": "string"
+        },
+        "recursive": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "list_users": {
+      "params": {
+        "attributes": {
+          "type": "array<string>"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "filter_criteria": {
+          "type": "string"
+        },
+        "ou": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "modify_computer": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "computer_name"
+      ]
+    },
+    "modify_group": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "group_name"
+      ]
+    },
+    "modify_organizational_unit": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "ou_dn"
+      ]
+    },
+    "modify_user": {
+      "params": {
+        "attributes": {
+          "type": "object"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attributes",
+        "username"
+      ]
+    },
+    "move_organizational_unit": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "new_parent_dn": {
+          "type": "string"
+        },
+        "ou_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "new_parent_dn",
+        "ou_dn"
+      ]
+    },
+    "remove_group_member": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "group_name": {
+          "type": "string"
+        },
+        "member_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_name",
+        "member_dn"
+      ]
+    },
+    "reset_computer_password": {
+      "params": {
+        "computer_name": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "computer_name"
+      ]
+    },
+    "reset_user_password": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        },
+        "force_change": {
+          "default": true,
+          "type": "boolean"
+        },
+        "new_password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ]
+    },
+    "test_connection": {
+      "params": {
+        "domain": {
+          "enum": [
+            "d1",
+            "d2"
+          ],
+          "type": "string"
+        }
+      },
+      "required": []
+    }
+  }
+}

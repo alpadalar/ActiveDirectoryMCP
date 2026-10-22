@@ -55,6 +55,7 @@ _READ = (
     "get_nested_group_members",
     "get_rootdse_info",
     "get_tls_posture",
+    "list_domains",  # only registered when several domains are configured
 )
 _WRITE = (
     "create_user",
