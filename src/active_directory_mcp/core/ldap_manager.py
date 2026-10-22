@@ -2,7 +2,6 @@
 
 import base64
 import logging
-import os
 import ssl
 import time
 from threading import Lock
@@ -31,8 +30,6 @@ _SCOPE_BY_INT: Dict[int, Literal["BASE", "LEVEL", "SUBTREE"]] = {
     1: LEVEL,
     2: SUBTREE,
 }
-
-SKIP_SCHEMA = os.environ.get("AD_MCP_SKIP_SCHEMA", "").lower() in ("1", "true", "yes")
 
 
 class _CIDict(dict):
@@ -113,7 +110,7 @@ class LDAPManager:
             # Create primary server
             primary_server = Server(
                 self.ad_config.server,
-                get_info=ldap3.NONE if SKIP_SCHEMA else ALL,
+                get_info=ldap3.NONE if self.ad_config.skip_schema else ALL,
                 tls=tls_config,
                 connect_timeout=self.ad_config.timeout,
             )
@@ -125,7 +122,7 @@ class LDAPManager:
                 for server_url in self.ad_config.server_pool:
                     server = Server(
                         server_url,
-                        get_info=ldap3.NONE if SKIP_SCHEMA else ALL,
+                        get_info=ldap3.NONE if self.ad_config.skip_schema else ALL,
                         tls=tls_config,
                         connect_timeout=self.ad_config.timeout,
                     )
@@ -180,7 +177,7 @@ class LDAPManager:
                                 auto_bind=self.ad_config.auto_bind,
                                 receive_timeout=self.ad_config.receive_timeout,
                                 authentication=ldap3.SIMPLE,
-                                check_names=not SKIP_SCHEMA,
+                                check_names=not self.ad_config.skip_schema,
                                 raise_exceptions=True,
                             )
 
@@ -361,7 +358,9 @@ class LDAPManager:
                     entry_dict = {
                         "dn": entry.entry_dn,
                         "attributes": (
-                            _CIDict(normalized_attributes) if SKIP_SCHEMA else normalized_attributes
+                            _CIDict(normalized_attributes)
+                            if self.ad_config.skip_schema
+                            else normalized_attributes
                         ),
                     }
 

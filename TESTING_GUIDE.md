@@ -30,7 +30,7 @@ uv run pytest
 ```python
 directory = MockDirectory()
 directory.add_user("alice", displayName="Alice")
-with directory.patch():  # patch(schema_less=True) mirrors AD_MCP_SKIP_SCHEMA
+with directory.patch():  # patch(schema_less=True) mirrors active_directory.skip_schema
     manager = directory.make_manager(page_size=2)
     UserTools(manager).disable_user("alice")
     directory.search(

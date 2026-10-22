@@ -159,17 +159,20 @@ class MockDirectory:
     def patch(self, schema_less: bool = False) -> Iterator["MockDirectory"]:
         """Patch ``Server`` and ``Connection`` where LDAPManager looks them up.
 
-        ``schema_less=True`` mirrors production ``AD_MCP_SKIP_SCHEMA`` mode: the
-        module flag is switched on and the server carries no schema, so attribute
-        names are not checked (and integer attributes come back stringified).
+        ``schema_less=True`` mirrors production ``skip_schema`` mode: managers made
+        inside the block get ``skip_schema=True`` and the server carries no schema,
+        so attribute names are not checked (and integer attributes come back
+        stringified).
         """
         self._schema_less = schema_less
-        with (
-            patch(f"{_SEAM}.Server", side_effect=self._build_server),
-            patch(f"{_SEAM}.Connection", side_effect=self._build_connection),
-            patch(f"{_SEAM}.SKIP_SCHEMA", schema_less),
-        ):
-            yield self
+        try:
+            with (
+                patch(f"{_SEAM}.Server", side_effect=self._build_server),
+                patch(f"{_SEAM}.Connection", side_effect=self._build_connection),
+            ):
+                yield self
+        finally:
+            self._schema_less = False
 
     # ------------------------------------------------------------------ configs
 
@@ -180,6 +183,7 @@ class MockDirectory:
             base_dn=self.base_dn,
             bind_dn=self.bind_dn,
             password=self.bind_password,
+            skip_schema=self._schema_less,
         )
         values.update(overrides)
         return ActiveDirectoryConfig(**values)

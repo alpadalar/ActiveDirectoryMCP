@@ -191,7 +191,7 @@ class TestSearch:
         conn = conn_cls.return_value
         conn.search.return_value = False
         conn.result = {"result": 0}
-        monkeypatch.setattr(lm, "SKIP_SCHEMA", True)
+        monkeypatch.setattr(manager.ad_config, "skip_schema", True)
         assert manager.search("DC=x", "(cn=*)") == []
 
     def test_skip_schema_nonzero_result_still_raises(self, manager, ldap3_seam, monkeypatch):
@@ -199,7 +199,7 @@ class TestSearch:
         conn = conn_cls.return_value
         conn.search.return_value = False
         conn.result = {"result": 50}
-        monkeypatch.setattr(lm, "SKIP_SCHEMA", True)
+        monkeypatch.setattr(manager.ad_config, "skip_schema", True)
         with pytest.raises(LDAPException):
             manager.search("DC=x", "(cn=*)")
 
@@ -208,7 +208,7 @@ class TestSearch:
         conn = conn_cls.return_value
         conn.search.return_value = True
         _page(conn, [_entry("CN=a", samaccountname="a")])
-        monkeypatch.setattr(lm, "SKIP_SCHEMA", True)
+        monkeypatch.setattr(manager.ad_config, "skip_schema", True)
         attrs = manager.search("DC=x", "(cn=*)")[0]["attributes"]
         assert isinstance(attrs, _CIDict)
         assert attrs["sAMAccountName"] == ["a"]

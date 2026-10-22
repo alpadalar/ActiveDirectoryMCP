@@ -74,9 +74,7 @@ def test_patch_restores_after_exception(directory):
             raise RuntimeError("boom")
     assert ldap_manager_module.Server is ldap3.Server
     assert ldap_manager_module.Connection is ldap3.Connection
-    assert ldap_manager_module.SKIP_SCHEMA is False or isinstance(
-        ldap_manager_module.SKIP_SCHEMA, bool
-    )
+    assert directory._schema_less is False
 
 
 def test_harness_opens_no_sockets(seeded, monkeypatch):
@@ -242,8 +240,8 @@ def test_schema_less_mode_group_membership_and_creates(seeded):
         assert parse_response(computers.create_computer("WS09"))["success"] is True
         assert seeded.search("(sAMAccountName=WS09$)")
 
-    # Schema-less mode flips the module flag back after the context exits.
-    assert ldap_manager_module.SKIP_SCHEMA is False
+    # Schema-less mode is switched off again after the context exits.
+    assert seeded._schema_less is False
 
 
 def test_schema_less_mode_stringifies_integers(seeded):

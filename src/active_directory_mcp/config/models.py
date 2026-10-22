@@ -1,5 +1,6 @@
 """Configuration models for Active Directory MCP."""
 
+import os
 import re
 from typing import Any, List, Optional
 
@@ -41,6 +42,15 @@ class ActiveDirectoryConfig(BaseModel):
     )
     computer_object_class: str = Field(
         default="computer", description="Bilgisayar nesneleri için objectClass"
+    )
+    skip_schema: bool = Field(
+        default_factory=lambda: (
+            os.environ.get("AD_MCP_SKIP_SCHEMA", "").lower() in ("1", "true", "yes")
+        ),
+        description=(
+            "Do not read the server schema (for LDAP proxies that do not expose it). "
+            "Defaults to the AD_MCP_SKIP_SCHEMA environment variable."
+        ),
     )
 
     @field_validator("user_object_class", "group_object_class", "computer_object_class")
