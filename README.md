@@ -319,7 +319,10 @@ Plaintext keys are never read from the config file. Clients send `Authorization:
 
 45 tools. The risk column is what `security.allow_writes` and `security.allow_destructive`
 enforce: read tools always run, write tools need `allow_writes`, destructive tools need both
-settings.
+settings. Each tool also advertises its risk to the client as MCP tool annotations: read tools
+carry `readOnlyHint: true`, destructive tools `destructiveHint: true`, write tools neither. A
+client can use them to group tools or to ask before a change; the server-side settings above
+remain what is enforced.
 
 ### Users
 

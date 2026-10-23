@@ -216,6 +216,18 @@ def test_stdio_surface_gains_domain_and_list_domains(tmp_path: Path) -> None:
     assert "password" not in json.dumps(listed)
 
 
+def test_multi_domain_tools_carry_annotations(tmp_path: Path) -> None:
+    from active_directory_mcp.server import ActiveDirectoryMCPServer
+
+    with _server_env(tmp_path, STDIO_MOD, TWO_DOMAINS):
+        server = ActiveDirectoryMCPServer()
+    tools = {tool.name: tool.annotations for tool in server._tools}
+    assert tools["list_domains"].readOnlyHint is True
+    assert tools["get_user"].readOnlyHint is True
+    assert tools["disable_user"].readOnlyHint is False
+    assert tools["delete_user"].destructiveHint is True
+
+
 def test_single_domain_surface_has_no_domain_argument(tmp_path: Path) -> None:
     from active_directory_mcp.server import ActiveDirectoryMCPServer
 
