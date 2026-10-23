@@ -22,7 +22,7 @@ from mcp import types
 from mcp.types import TextContent as Content
 
 from .audit import AuditLogger
-from .policy import RISK_CLASSIFICATION, ToolPolicy, guard
+from .policy import RISK_CLASSIFICATION, Risk, ToolPolicy, guard
 from .redaction import redact
 from .tools.definitions import (
     MULTI_DOMAIN_TOOL_DESCRIPTIONS,
@@ -56,19 +56,34 @@ class ToolContext:
     audit: Optional[AuditLogger] = None  # None disables the write/destructive audit trail
 
 
+def tool_annotations(name: str) -> types.ToolAnnotations:
+    """MCP behaviour hints derived from the tool's risk class (unknown tools count as destructive).
+
+    Clients may use them to group tools and to ask before a call; the server-side
+    policy gate stays the enforcement point.
+    """
+    risk = RISK_CLASSIFICATION.get(name, Risk.DESTRUCTIVE)
+    return types.ToolAnnotations(
+        readOnlyHint=risk is Risk.READ,
+        destructiveHint=risk is Risk.DESTRUCTIVE,
+    )
+
+
 @dataclass(frozen=True)
 class ToolSpec:
-    """One registered tool: name, description, stdio schema and typed handler."""
+    """One registered tool: name, description, stdio schema, typed handler and hints."""
 
     name: str
     description: str
     input_schema: Dict[str, Any]
     handler: Callable[..., Any]
     parameters: Tuple[str, ...] = field(init=False, default=())
+    annotations: types.ToolAnnotations = field(init=False)
 
     def __post_init__(self) -> None:
         names = tuple(inspect.signature(self.handler).parameters)
         object.__setattr__(self, "parameters", names)
+        object.__setattr__(self, "annotations", tool_annotations(self.name))
 
 
 class ToolSink(Protocol):
@@ -580,6 +595,7 @@ class FastMCPToolSink:
             name=spec.name,
             description=spec.description,
             output_schema=None,
+            annotations=spec.annotations,
         )
         self._mcp.add_tool(tool)
 
@@ -597,6 +613,7 @@ class StdioToolSink:
                 name=spec.name,
                 description=spec.description,
                 inputSchema=spec.input_schema,
+                annotations=spec.annotations,
             )
         )
         self.handlers[spec.name] = spec
