@@ -47,7 +47,8 @@ need one to the default suite.
   1. implement it in the matching module under `src/active_directory_mcp/tools/`;
   2. add its description to `tools/definitions.py` and register it in `registry.py`;
   3. classify it in `RISK_CLASSIFICATION` in `src/active_directory_mcp/policy.py`
-     (read, write or destructive; unknown tools fail closed as destructive);
+     (read, write or destructive; unknown tools fail closed as destructive). The tool's MCP
+     annotations (`readOnlyHint`, `destructiveHint`) are derived from it;
   4. regenerate the goldens with
      `UPDATE_GOLDEN=1 .venv/bin/pytest tests/unit/test_tool_surface.py -q` (this rewrites the
      single-domain and the multi-domain snapshots), check that the diff only adds entries, add the tool to `ADDITIVE_TOOLS` in
