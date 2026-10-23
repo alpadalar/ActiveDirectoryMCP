@@ -11,6 +11,7 @@ import logging
 import os
 import socket
 import sys
+import threading
 from typing import Any, Callable, Dict, List, Optional
 
 import uvicorn
@@ -153,25 +154,34 @@ class ActiveDirectoryMCPHTTPServer:
         self._uvicorn_server: Optional[uvicorn.Server] = None
 
     def _test_initial_connection(self) -> None:
-        """Test the initial LDAP connection of every domain (failures are only logged)."""
+        """Probe every domain in the background (failures are only logged).
+
+        An unreachable domain controller can take the full connect timeout and its
+        retries; probing in the background keeps it from delaying the MCP handshake
+        and the other domains.
+        """
         for name, ctx in self.domains.items():
-            try:
-                self.logger.info(f"Testing initial LDAP connection for domain '{name}'...")
-                connection_info = ctx.ldap_manager.test_connection()
+            threading.Thread(
+                target=self._probe_domain, args=(name, ctx), name=f"ldap-probe-{name}", daemon=True
+            ).start()
 
-                if connection_info.get("connected"):
-                    self.logger.info(
-                        f"Successfully connected to {connection_info.get('server')}:"
-                        f"{connection_info.get('port')}"
-                    )
-                else:
-                    self.logger.error(
-                        f"Initial connection failed for domain '{name}': "
-                        f"{connection_info.get('error')}"
-                    )
+    def _probe_domain(self, name: str, ctx: ToolContext) -> None:
+        try:
+            self.logger.info(f"Testing initial LDAP connection for domain '{name}'...")
+            connection_info = ctx.ldap_manager.test_connection()
 
-            except Exception as e:
-                self.logger.error(f"Connection test error for domain '{name}': {e}")
+            if connection_info.get("connected"):
+                self.logger.info(
+                    f"Successfully connected to {connection_info.get('server')}:"
+                    f"{connection_info.get('port')}"
+                )
+            else:
+                self.logger.error(
+                    f"Initial connection failed for domain '{name}': {connection_info.get('error')}"
+                )
+
+        except Exception as e:
+            self.logger.error(f"Connection test error for domain '{name}': {e}")
 
     def _disconnect_all(self) -> None:
         for ctx in self.domains.values():

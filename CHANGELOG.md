@@ -98,6 +98,8 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Changed
 
+- The startup LDAP connection check runs in the background, one probe per domain, so an
+  unreachable domain controller no longer delays the MCP handshake or the other domains.
 - With several domains configured, startup refuses `AD_BIND_DN`, `AD_PASSWORD` and the
   `AZURE_KEYVAULT_*` variables, because they would overwrite every domain's credentials. Set
   credentials per domain (`${VAR}` placeholders or `key_vault`).

@@ -242,6 +242,34 @@ def test_each_domain_keeps_its_own_write_policy(tmp_path: Path) -> None:
     }
 
 
+def test_unreachable_domain_does_not_delay_startup(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    from active_directory_mcp.server import ActiveDirectoryMCPServer
+
+    release = threading.Event()
+
+    def hanging_manager(ad: Any, security: Any, performance: Any, ous: Any) -> MagicMock:
+        manager = _fake_manager(ad, security, performance, ous)
+        if ad.domain == "beta.example.com":  # a DC that only answers after its timeout
+            manager.test_connection.side_effect = lambda: release.wait(5) and {}
+        return manager
+
+    env = {"AD_MCP_CONFIG": _write(tmp_path / "multi.json", TWO_DOMAINS)}
+    started = time.monotonic()
+    with (
+        patch.dict(os.environ, env),
+        patch(f"{STDIO_MOD}.LDAPManager", side_effect=hanging_manager),
+    ):
+        server = ActiveDirectoryMCPServer()
+    try:
+        assert time.monotonic() - started < 2
+        assert len(server._tools) == 46
+    finally:
+        release.set()
+
+
 def test_shutdown_disconnects_every_domain(tmp_path: Path) -> None:
     from active_directory_mcp.server import ActiveDirectoryMCPServer
 
