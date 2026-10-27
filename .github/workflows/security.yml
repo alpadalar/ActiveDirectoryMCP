@@ -79,6 +79,9 @@ jobs:
           tags: activedirectorymcp:ci-scan
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # A cached runtime stage keeps the OS packages of its first build, so the scan
+          # would never see Debian security fixes; the builder stage stays cached.
+          no-cache-filters: runtime
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

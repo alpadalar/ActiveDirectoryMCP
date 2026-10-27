@@ -197,6 +197,9 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- Docker images (release and the CI container scan) rebuild the runtime stage instead of
+  reusing it from the build cache, so they pick up current Debian security fixes; the
+  dependency stage is still cached.
 - Release workflow: the pyproject version check also covers non-dry-run dispatches, the
   tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
   and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.
