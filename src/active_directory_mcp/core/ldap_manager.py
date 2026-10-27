@@ -146,7 +146,12 @@ class LDAPManager:
             raise
 
     def _build_servers(self) -> List[Server]:
-        """``Server`` objects for the primary and pool URLs."""
+        """Fresh ``Server`` objects for the primary and pool URLs.
+
+        A failed open makes ldap3 remember the address as unusable, so every later
+        attempt on the same object fails with "invalid server address" instead of
+        retrying; each connection attempt therefore gets new objects.
+        """
         urls = [self.ad_config.server, *(self.ad_config.server_pool or [])]
         return [
             Server(
@@ -176,6 +181,7 @@ class LDAPManager:
             if self._connection and self._connection.bound:
                 return self._connection
 
+            first_error: Optional[Exception] = None
             last_error: Optional[Exception] = None
             attempts = (
                 max_attempts if max_attempts is not None else self.performance_config.max_retries
@@ -183,6 +189,7 @@ class LDAPManager:
 
             for attempt in range(attempts):
                 try:
+                    self._server_pool = self._build_servers()
                     # Try each server in the pool
                     for server in self._server_pool or []:
                         try:
@@ -215,6 +222,7 @@ class LDAPManager:
 
                         except (LDAPSocketOpenError, LDAPBindError) as e:
                             logger.warning(f"Connection failed to {server.host}:{server.port}: {e}")
+                            first_error = first_error or e
                             last_error = e
                             continue
 
@@ -228,6 +236,7 @@ class LDAPManager:
 
                 except Exception as e:
                     logger.error(f"Unexpected error during connection attempt {attempt + 1}: {e}")
+                    first_error = first_error or e
                     last_error = e
 
                     if attempt < attempts - 1:
@@ -235,6 +244,10 @@ class LDAPManager:
 
             # All attempts failed
             error_msg = f"Failed to connect to any LDAP server after {attempts} attempts"
+            # The first failure carries the real cause (TLS, DNS, refused connection);
+            # later ones may only echo it.
+            if first_error is not None and str(first_error) != str(last_error):
+                error_msg += f". First error: {redact(str(first_error))}"
             if last_error:
                 error_msg += f". Last error: {redact(str(last_error))}"
 

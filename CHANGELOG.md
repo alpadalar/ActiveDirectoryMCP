@@ -204,6 +204,10 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- A failed LDAP connection no longer hides its cause: every retry uses fresh `Server` objects
+  (ldap3 marks a server whose first open failed as unusable, so later retries only reported
+  `invalid server address`), and the final error names the first failure (`First error: ...`)
+  as well as the last one.
 - Release workflow: the pyproject version check also covers non-dry-run dispatches, the
   tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
   and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.

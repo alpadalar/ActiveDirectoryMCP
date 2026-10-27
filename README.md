@@ -538,7 +538,8 @@ Manual smoke scripts live in `tests/manual/` (`http_server_smoke.py` needs a run
   set `security.allow_writes` (and `security.allow_destructive` for deletes) deliberately.
 - Errors mentioning a DN outside the base DN: the DN passed to a tool must be inside
   `active_directory.base_dn`.
-- LDAPS certificate errors: check the chain with `openssl s_client -connect dc.example.com:636
+- LDAPS certificate errors (`CERTIFICATE_VERIFY_FAILED` in the `First error` part of the
+  connection error): check the chain with `openssl s_client -connect dc.example.com:636
   -showcerts` and point `security.ca_cert_file` at your CA.
 - Connectivity: `ldapsearch -H ldaps://dc.example.com -D "<bind DN>" -W -b "<base DN>"
   "(objectClass=domain)"`, then the `test_connection` and `get_tls_posture` tools.

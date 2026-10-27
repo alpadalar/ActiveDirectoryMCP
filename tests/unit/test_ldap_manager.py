@@ -149,6 +149,32 @@ class TestConnect:
         assert conn_cls.call_count == 3
         assert sleep.call_count == 2  # no sleep after the final attempt
 
+    def test_summary_keeps_the_first_real_cause(self, manager, ldap3_seam):
+        server_cls, conn_cls = ldap3_seam
+        conn_cls.side_effect = [
+            LDAPSocketOpenError("[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer"),
+            LDAPSocketOpenError("invalid server address"),
+            LDAPSocketOpenError("invalid server address"),
+        ]
+        built_before = server_cls.call_count
+        with patch.object(lm.time, "sleep"):
+            with pytest.raises(LDAPException) as exc:
+                manager.connect()
+        message = str(exc.value)
+        assert "First error: [SSL: CERTIFICATE_VERIFY_FAILED]" in message
+        assert "Last error: invalid server address" in message
+        # every attempt runs on fresh Server objects, not the one ldap3 marked unusable
+        assert server_cls.call_count - built_before == 3
+
+    def test_repeated_identical_error_is_reported_once(self, manager, ldap3_seam):
+        _, conn_cls = ldap3_seam
+        conn_cls.side_effect = LDAPBindError("bad creds")
+        with patch.object(lm.time, "sleep"):
+            with pytest.raises(LDAPException) as exc:
+                manager.connect()
+        assert "First error" not in str(exc.value)
+        assert str(exc.value).endswith("Last error: bad creds")
+
     def test_unexpected_error_is_retried_then_wrapped(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
         conn_cls.side_effect = RuntimeError("weird")
