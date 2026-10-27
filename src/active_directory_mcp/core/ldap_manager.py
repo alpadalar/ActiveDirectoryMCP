@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import os
 import ssl
 import time
 from threading import Lock
@@ -56,6 +57,33 @@ class _CIDict(dict):
 logger = logging.getLogger("active-directory-mcp.ldap_manager")
 
 
+def _default_ca_locations() -> Dict[str, Any]:
+    """CA locations for ``ldap3.Tls`` when no ``security.ca_cert_file`` is configured.
+
+    ldap3 hands these to ``create_default_context``, which skips the system store as
+    soon as any location is given, so certifi's bundle is combined with the system
+    file and directory: public roots missing from the system store (and private CAs
+    present only there) both verify. Without certifi, OpenSSL's defaults apply.
+    """
+    try:
+        import certifi
+    except ImportError:
+        return {}
+    paths = ssl.get_default_verify_paths()
+    system_pem: Optional[str] = None
+    if paths.cafile and os.path.isfile(paths.cafile):
+        try:
+            with open(paths.cafile, encoding="ascii", errors="ignore") as handle:
+                system_pem = handle.read() or None
+        except OSError as exc:
+            logger.debug("system CA file unreadable: %s", exc)
+    return {
+        "ca_certs_file": certifi.where(),
+        "ca_certs_path": paths.capath if paths.capath and os.path.isdir(paths.capath) else None,
+        "ca_certs_data": system_pem,
+    }
+
+
 class LDAPManager:
     """
     LDAP connection manager for Active Directory operations.
@@ -95,46 +123,45 @@ class LDAPManager:
         self._setup_servers()
 
     def _setup_servers(self) -> None:
-        """Setup LDAP servers and server pool."""
+        """Setup TLS and the LDAP server pool."""
         try:
-            # Setup TLS configuration
-            tls_config = None
+            self._tls_config: Optional[ldap3.Tls] = None
             if self.security_config.enable_tls:
-                tls_config = ldap3.Tls(
+                locations: Dict[str, Any] = (
+                    {"ca_certs_file": self.security_config.ca_cert_file}
+                    if self.security_config.ca_cert_file
+                    else _default_ca_locations()
+                )
+                self._tls_config = ldap3.Tls(
                     validate=ssl.CERT_REQUIRED
                     if self.security_config.validate_certificate
                     else ssl.CERT_NONE,
-                    ca_certs_file=self.security_config.ca_cert_file,
+                    **locations,
                 )
-
-            # Create primary server
-            primary_server = Server(
-                self.ad_config.server,
-                get_info=ldap3.NONE if self.ad_config.skip_schema else ALL,
-                tls=tls_config,
-                connect_timeout=self.ad_config.timeout,
-            )
-
-            servers = [primary_server]
-
-            # Add additional servers from pool
-            if self.ad_config.server_pool:
-                for server_url in self.ad_config.server_pool:
-                    server = Server(
-                        server_url,
-                        get_info=ldap3.NONE if self.ad_config.skip_schema else ALL,
-                        tls=tls_config,
-                        connect_timeout=self.ad_config.timeout,
-                    )
-                    servers.append(server)
-
-            # Create server pool for failover
-            self._server_pool = servers
-            logger.info(f"Configured {len(servers)} LDAP servers")
+            self._server_pool = self._build_servers()
+            logger.info(f"Configured {len(self._server_pool)} LDAP servers")
 
         except Exception as e:
             logger.error(f"Error setting up LDAP servers: {e}")
             raise
+
+    def _build_servers(self) -> List[Server]:
+        """Fresh ``Server`` objects for the primary and pool URLs.
+
+        A failed open makes ldap3 remember the address as unusable, so every later
+        attempt on the same object fails with "invalid server address" instead of
+        retrying; each connection attempt therefore gets new objects.
+        """
+        urls = [self.ad_config.server, *(self.ad_config.server_pool or [])]
+        return [
+            Server(
+                url,
+                get_info=ldap3.NONE if self.ad_config.skip_schema else ALL,
+                tls=self._tls_config,
+                connect_timeout=self.ad_config.timeout,
+            )
+            for url in urls
+        ]
 
     def connect(self, max_attempts: Optional[int] = None) -> Connection:
         """
@@ -154,6 +181,7 @@ class LDAPManager:
             if self._connection and self._connection.bound:
                 return self._connection
 
+            first_error: Optional[Exception] = None
             last_error: Optional[Exception] = None
             attempts = (
                 max_attempts if max_attempts is not None else self.performance_config.max_retries
@@ -161,6 +189,7 @@ class LDAPManager:
 
             for attempt in range(attempts):
                 try:
+                    self._server_pool = self._build_servers()
                     # Try each server in the pool
                     for server in self._server_pool or []:
                         try:
@@ -193,6 +222,7 @@ class LDAPManager:
 
                         except (LDAPSocketOpenError, LDAPBindError) as e:
                             logger.warning(f"Connection failed to {server.host}:{server.port}: {e}")
+                            first_error = first_error or e
                             last_error = e
                             continue
 
@@ -206,6 +236,7 @@ class LDAPManager:
 
                 except Exception as e:
                     logger.error(f"Unexpected error during connection attempt {attempt + 1}: {e}")
+                    first_error = first_error or e
                     last_error = e
 
                     if attempt < attempts - 1:
@@ -213,6 +244,10 @@ class LDAPManager:
 
             # All attempts failed
             error_msg = f"Failed to connect to any LDAP server after {attempts} attempts"
+            # The first failure carries the real cause (TLS, DNS, refused connection);
+            # later ones may only echo it.
+            if first_error is not None and str(first_error) != str(last_error):
+                error_msg += f". First error: {redact(str(first_error))}"
             if last_error:
                 error_msg += f". Last error: {redact(str(last_error))}"
 

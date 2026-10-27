@@ -98,6 +98,13 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Changed
 
+- Without `security.ca_cert_file`, LDAPS now trusts certifi's public roots together with the
+  system CA store (`certifi` is a direct dependency). Previously only OpenSSL's default bundle
+  was used, which on macOS lacks some public roots (for example Sectigo Public Server
+  Authentication Root R46) and failed with `CERTIFICATE_VERIFY_FAILED`.
+- `security.ca_cert_file` expands `~`, resolves a relative path against the directory of the
+  config file that sets it (previously the working directory), and a missing file now fails
+  at startup instead of on the first connection.
 - The startup LDAP connection check runs in the background, one probe per domain, so an
   unreachable domain controller no longer delays the MCP handshake or the other domains.
 - With several domains configured, startup refuses `AD_BIND_DN`, `AD_PASSWORD` and the
@@ -197,6 +204,10 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- A failed LDAP connection no longer hides its cause: every retry uses fresh `Server` objects
+  (ldap3 marks a server whose first open failed as unusable, so later retries only reported
+  `invalid server address`), and the final error names the first failure (`First error: ...`)
+  as well as the last one.
 - Release workflow: the pyproject version check also covers non-dry-run dispatches, the
   tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
   and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.

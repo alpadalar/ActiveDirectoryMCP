@@ -82,7 +82,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
     logger.info(f"Loading configuration from: {config_path}")
-    return _build_config(_read_json(config_file))
+    return _build_config(_read_json(config_file), base_dir=config_file.parent)
 
 
 def _read_json(config_file: Path) -> Any:
@@ -94,8 +94,24 @@ def _read_json(config_file: Path) -> Any:
         raise
 
 
-def _build_config(config_data: Any, env_credentials: bool = True) -> Config:
-    """Validate one single-domain config and resolve its bind credentials."""
+def _resolve_ca_cert_file(config: Config, base_dir: Optional[Path]) -> None:
+    """Expand ``~``, resolve a relative ``security.ca_cert_file`` against the config file's
+    directory and fail at startup when the file does not exist."""
+    value = config.security.ca_cert_file
+    if not value:
+        return
+    path = Path(value).expanduser()
+    if not path.is_absolute() and base_dir is not None:
+        path = base_dir / path
+    if not path.is_file():
+        raise ValueError(f"security.ca_cert_file: CA certificate file not found: {path}")
+    config.security.ca_cert_file = str(path)
+
+
+def _build_config(
+    config_data: Any, env_credentials: bool = True, base_dir: Optional[Path] = None
+) -> Config:
+    """Validate one single-domain config and resolve its CA file and bind credentials."""
     try:
         config_data = _resolve_env_placeholders(config_data)
 
@@ -104,6 +120,8 @@ def _build_config(config_data: Any, env_credentials: bool = True) -> Config:
             config = Config(**config_data)
         except ValidationError as exc:
             raise ValueError(_sanitize_validation_error(exc)) from None
+
+        _resolve_ca_cert_file(config, base_dir)
 
         # Resolve bind username/password securely (Azure Key Vault, env vars, or file)
         _resolve_credentials(config, env_credentials)
@@ -158,7 +176,7 @@ def load_server_config(config_path: Optional[str] = None) -> ServerConfig:
     logger.info(f"Loading configuration from: {config_path}")
     data = _read_json(config_file)
     if not (isinstance(data, dict) and "domains" in data):
-        config = _build_config(data)
+        config = _build_config(data, base_dir=config_file.parent)
         name = config.active_directory.domain
         return ServerConfig(
             domains={name: config},
@@ -184,6 +202,7 @@ def load_server_config(config_path: Optional[str] = None) -> ServerConfig:
     domains = {}
     for name, value in top.domains.items():
         try:
+            base_dir = config_file.parent
             if isinstance(value, str):
                 path = Path(value)
                 if not path.is_absolute():
@@ -191,7 +210,8 @@ def load_server_config(config_path: Optional[str] = None) -> ServerConfig:
                 if not path.exists():
                     raise FileNotFoundError(f"Configuration file not found: {value}")
                 value = _read_json(path)
-            domains[name] = _build_config(value, env_credentials=not multi)
+                base_dir = path.parent
+            domains[name] = _build_config(value, env_credentials=not multi, base_dir=base_dir)
         except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
             raise ValueError(f"domain '{name}': {exc}") from None
     return ServerConfig(

@@ -472,8 +472,17 @@ is passed. It is optional: missing entries default to the built-in containers un
 }
 ```
 
-Keep certificate validation on. Use `ca_cert_file` for an internal CA. `get_tls_posture` reports the
-effective settings of a running server.
+Keep certificate validation on. `ca_cert_file` is optional:
+
+- Set it to a PEM file with your CA (for an internal CA). Only that file is then trusted. `~` is
+  expanded and a relative path is resolved against the directory of the config file that sets it;
+  startup fails if the file does not exist.
+- Leave it unset to trust the public roots shipped with `certifi` together with the system CA
+  store. This covers domain controllers whose public root is missing from the operating system's
+  bundle (macOS `/etc/ssl/cert.pem`, minimal container images) as well as private CAs that are
+  installed only in the system store.
+
+`get_tls_posture` reports the effective settings of a running server.
 
 ### Performance
 
@@ -521,14 +530,16 @@ Manual smoke scripts live in `tests/manual/` (`http_server_smoke.py` needs a run
   digest variable) as shown above.
 - `Secure connection required but server URL is not ldaps://`: use an `ldaps://` server URL or, for
   a lab only, set `security.require_secure_connection` to false.
-- `invalid CA public key file`: `security.ca_cert_file` points at a missing file; fix or remove it.
+- `security.ca_cert_file: CA certificate file not found`: the configured path does not exist
+  (relative paths are resolved against the config file's directory); fix or remove it.
 - Failed to retrieve a secret from Key Vault: configure the vault correctly or delete the
   `key_vault` section when using `AD_BIND_DN` and `AD_PASSWORD`.
 - `write_blocked` or `destructive_blocked` in a tool response: the server is read-only by default;
   set `security.allow_writes` (and `security.allow_destructive` for deletes) deliberately.
 - Errors mentioning a DN outside the base DN: the DN passed to a tool must be inside
   `active_directory.base_dn`.
-- LDAPS certificate errors: check the chain with `openssl s_client -connect dc.example.com:636
+- LDAPS certificate errors (`CERTIFICATE_VERIFY_FAILED` in the `First error` part of the
+  connection error): check the chain with `openssl s_client -connect dc.example.com:636
   -showcerts` and point `security.ca_cert_file` at your CA.
 - Connectivity: `ldapsearch -H ldaps://dc.example.com -D "<bind DN>" -W -b "<base DN>"
   "(objectClass=domain)"`, then the `test_connection` and `get_tls_posture` tools.

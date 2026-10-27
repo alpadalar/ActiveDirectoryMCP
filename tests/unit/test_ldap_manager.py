@@ -73,6 +73,48 @@ class TestServerPool:
         assert m._server_pool[0].kw["tls"] is tls.return_value
 
 
+class TestTlsTrust:
+    def _tls_kwargs(self, make_manager, security):
+        with patch.object(lm.ldap3, "Tls") as tls:
+            make_manager(security)
+        tls.assert_called_once()
+        return tls.call_args.kwargs
+
+    def test_certifi_bundle_is_the_default(self, make_manager):
+        import ssl
+
+        import certifi
+
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert kwargs["validate"] == ssl.CERT_REQUIRED
+        assert kwargs["ca_certs_file"] == certifi.where()
+
+    def test_default_keeps_the_system_store_alongside_certifi(self, make_manager, monkeypatch):
+        import ssl
+
+        paths = ssl.get_default_verify_paths()
+        fake = paths._replace(cafile=__file__, capath=None)
+        monkeypatch.setattr(lm.ssl, "get_default_verify_paths", lambda: fake)
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert kwargs["ca_certs_data"] == open(__file__, encoding="ascii", errors="ignore").read()
+
+    def test_configured_ca_file_takes_precedence(self, make_manager, tmp_path):
+        ca = tmp_path / "corp-ca.pem"
+        ca.write_text("placeholder", encoding="ascii")
+        kwargs = self._tls_kwargs(
+            make_manager, SecurityConfig(enable_tls=True, ca_cert_file=str(ca))
+        )
+        assert kwargs["ca_certs_file"] == str(ca)
+        assert "ca_certs_data" not in kwargs and "ca_certs_path" not in kwargs
+
+    def test_without_certifi_openssl_defaults_apply(self, make_manager, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "certifi", None)  # import raises ImportError
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert set(kwargs) == {"validate"}
+
+
 class TestConnect:
     def test_success_and_reuse(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
@@ -106,6 +148,32 @@ class TestConnect:
                 manager.connect()
         assert conn_cls.call_count == 3
         assert sleep.call_count == 2  # no sleep after the final attempt
+
+    def test_summary_keeps_the_first_real_cause(self, manager, ldap3_seam):
+        server_cls, conn_cls = ldap3_seam
+        conn_cls.side_effect = [
+            LDAPSocketOpenError("[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer"),
+            LDAPSocketOpenError("invalid server address"),
+            LDAPSocketOpenError("invalid server address"),
+        ]
+        built_before = server_cls.call_count
+        with patch.object(lm.time, "sleep"):
+            with pytest.raises(LDAPException) as exc:
+                manager.connect()
+        message = str(exc.value)
+        assert "First error: [SSL: CERTIFICATE_VERIFY_FAILED]" in message
+        assert "Last error: invalid server address" in message
+        # every attempt runs on fresh Server objects, not the one ldap3 marked unusable
+        assert server_cls.call_count - built_before == 3
+
+    def test_repeated_identical_error_is_reported_once(self, manager, ldap3_seam):
+        _, conn_cls = ldap3_seam
+        conn_cls.side_effect = LDAPBindError("bad creds")
+        with patch.object(lm.time, "sleep"):
+            with pytest.raises(LDAPException) as exc:
+                manager.connect()
+        assert "First error" not in str(exc.value)
+        assert str(exc.value).endswith("Last error: bad creds")
 
     def test_unexpected_error_is_retried_then_wrapped(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
