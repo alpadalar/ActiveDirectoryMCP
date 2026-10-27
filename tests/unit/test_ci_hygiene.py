@@ -229,6 +229,21 @@ def test_security_workflow_gates():
     assert checkout_depths == [0], "gitleaks job must check out with fetch-depth: 0"
 
 
+def test_image_builds_never_reuse_a_cached_runtime_stage():
+    """OS packages come from the runtime stage; a cached one would hide security fixes."""
+    stages = re.findall(r"(?m)^FROM \S+ AS (\w+)$", (ROOT / "Dockerfile").read_text("utf-8"))
+    assert "runtime" in stages
+    for name in ("security.yml", "release.yml"):
+        builds = [
+            s
+            for _, s in _steps(_load(name))
+            if str(s.get("uses", "")).startswith("docker/build-push-action")
+        ]
+        assert builds, f"{name}: no image build"
+        for step in builds:
+            assert "runtime" in str(step["with"].get("no-cache-filters", "")).split(","), name
+
+
 # 6. Test and lint workflows ----------------------------------------------------------
 
 

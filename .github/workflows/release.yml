@@ -113,3 +113,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Ship current Debian security fixes: rebuild the runtime stage, reuse the builder.
+          no-cache-filters: runtime
