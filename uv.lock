@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -15,6 +15,7 @@ name = "active-directory-mcp"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "cryptography" },
     { name = "fastmcp" },
     { name = "ldap3" },
@@ -47,6 +48,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.15.0,<2.0.0" },
     { name = "azure-keyvault-secrets", marker = "extra == 'azure'", specifier = ">=4.7.0,<5.0.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.9" },
+    { name = "certifi", specifier = ">=2024.2.2" },
     { name = "cryptography", specifier = ">=42.0.0" },
     { name = "fastmcp", specifier = ">=3.2,<4" },
     { name = "ldap3", specifier = ">=2.9.1,<3.0.0" },

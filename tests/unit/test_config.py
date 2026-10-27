@@ -732,3 +732,26 @@ def test_audit_log_path_default_and_validation() -> None:
         SecurityConfig(audit_log_path="   ")
     with pytest.raises(ValueError):
         SecurityConfig(unknown_field=1)  # extra="forbid" still holds
+
+
+# --- security.ca_cert_file resolution ---
+
+
+def test_ca_cert_file_relative_to_the_config_file(tmp_path, monkeypatch):
+    (tmp_path / "certs").mkdir()
+    (tmp_path / "certs" / "ca.pem").write_text("placeholder", encoding="ascii")
+    monkeypatch.chdir(tempfile.gettempdir())  # the working directory must not matter
+    config = load_config(_write(tmp_path, security={"ca_cert_file": "certs/ca.pem"}))
+    assert config.security.ca_cert_file == str(tmp_path / "certs" / "ca.pem")
+
+
+def test_ca_cert_file_expands_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "ca.pem").write_text("placeholder", encoding="ascii")
+    config = load_config(_write(tmp_path, security={"ca_cert_file": "~/ca.pem"}))
+    assert config.security.ca_cert_file == str(tmp_path / "ca.pem")
+
+
+def test_missing_ca_cert_file_fails_at_startup(tmp_path):
+    with pytest.raises(ValueError, match="CA certificate file not found: .*missing.pem"):
+        load_config(_write(tmp_path, security={"ca_cert_file": "missing.pem"}))

@@ -98,6 +98,13 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Changed
 
+- Without `security.ca_cert_file`, LDAPS now trusts certifi's public roots together with the
+  system CA store (`certifi` is a direct dependency). Previously only OpenSSL's default bundle
+  was used, which on macOS lacks some public roots (for example Sectigo Public Server
+  Authentication Root R46) and failed with `CERTIFICATE_VERIFY_FAILED`.
+- `security.ca_cert_file` expands `~`, resolves a relative path against the directory of the
+  config file that sets it (previously the working directory), and a missing file now fails
+  at startup instead of on the first connection.
 - The startup LDAP connection check runs in the background, one probe per domain, so an
   unreachable domain controller no longer delays the MCP handshake or the other domains.
 - With several domains configured, startup refuses `AD_BIND_DN`, `AD_PASSWORD` and the

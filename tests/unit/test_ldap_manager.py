@@ -73,6 +73,48 @@ class TestServerPool:
         assert m._server_pool[0].kw["tls"] is tls.return_value
 
 
+class TestTlsTrust:
+    def _tls_kwargs(self, make_manager, security):
+        with patch.object(lm.ldap3, "Tls") as tls:
+            make_manager(security)
+        tls.assert_called_once()
+        return tls.call_args.kwargs
+
+    def test_certifi_bundle_is_the_default(self, make_manager):
+        import ssl
+
+        import certifi
+
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert kwargs["validate"] == ssl.CERT_REQUIRED
+        assert kwargs["ca_certs_file"] == certifi.where()
+
+    def test_default_keeps_the_system_store_alongside_certifi(self, make_manager, monkeypatch):
+        import ssl
+
+        paths = ssl.get_default_verify_paths()
+        fake = paths._replace(cafile=__file__, capath=None)
+        monkeypatch.setattr(lm.ssl, "get_default_verify_paths", lambda: fake)
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert kwargs["ca_certs_data"] == open(__file__, encoding="ascii", errors="ignore").read()
+
+    def test_configured_ca_file_takes_precedence(self, make_manager, tmp_path):
+        ca = tmp_path / "corp-ca.pem"
+        ca.write_text("placeholder", encoding="ascii")
+        kwargs = self._tls_kwargs(
+            make_manager, SecurityConfig(enable_tls=True, ca_cert_file=str(ca))
+        )
+        assert kwargs["ca_certs_file"] == str(ca)
+        assert "ca_certs_data" not in kwargs and "ca_certs_path" not in kwargs
+
+    def test_without_certifi_openssl_defaults_apply(self, make_manager, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "certifi", None)  # import raises ImportError
+        kwargs = self._tls_kwargs(make_manager, SecurityConfig(enable_tls=True))
+        assert set(kwargs) == {"validate"}
+
+
 class TestConnect:
     def test_success_and_reuse(self, manager, ldap3_seam):
         _, conn_cls = ldap3_seam
