@@ -302,6 +302,9 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Security
 
+- `uv.lock` pins `pyasn1` 0.6.5 (from 0.6.4, pulled in by `ldap3`), fixing the denial-of-service
+  issues CVE-2026-119194, CVE-2026-119195, CVE-2026-119196 and CVE-2026-119197 that fail the
+  container scan.
 - Release secret scan: the allow-list now matches the whole captured value against exact
   placeholder shapes instead of any substring, the baseline stores per-value fingerprints so a new
   credential in an already-baselined file is reported, merge-commit diffs are scanned, and the
