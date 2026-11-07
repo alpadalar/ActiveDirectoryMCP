@@ -1,7 +1,7 @@
 # ActiveDirectoryMCP
 
 A Model Context Protocol (MCP) server that exposes Active Directory (LDAP) administration and
-auditing to MCP clients such as Claude Desktop, Claude Code and Cursor. It offers 45 tools for
+auditing to MCP clients such as Claude Desktop, Claude Code and Cursor. It offers 46 tools for
 users, groups, computers, organizational units, domain security reporting and server diagnostics,
 over stdio or authenticated HTTP.
 
@@ -317,7 +317,7 @@ Plaintext keys are never read from the config file. Clients send `Authorization:
 
 ## Tools
 
-45 tools. The risk column is what `security.allow_writes` and `security.allow_destructive`
+46 tools. The risk column is what `security.allow_writes` and `security.allow_destructive`
 enforce: read tools always run, write tools need `allow_writes`, destructive tools need both
 settings.
 
@@ -373,6 +373,7 @@ settings.
 | `create_organizational_unit` | write | Create an OU |
 | `modify_organizational_unit` | write | Modify OU attributes |
 | `move_organizational_unit` | write | Move an OU to a new parent |
+| `move_object` | write | Move a user, group, computer or contact to another OU or container |
 | `delete_organizational_unit` | destructive | Delete an OU (also when empty) |
 
 ### Security and audit

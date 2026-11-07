@@ -9,9 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The MCP tool names and parameters of the 42 original tools are unchanged in this release.
 They are frozen and enforced by the golden snapshots in `tests/golden/`. Three additive
-read-only tools were added (see Added). A configuration with several domains adds an optional
-`domain` argument to every tool and a read-only `list_domains` tool; with one domain the tool
-surface is exactly the frozen one. For vulnerability reporting and the supported
+read-only tools and one additive write tool, `move_object`, were added (see Added). A
+configuration with several domains adds an optional `domain` argument to every tool and a
+read-only `list_domains` tool; with one domain the tool surface is exactly the frozen one. For vulnerability reporting and the supported
 security model, see [SECURITY.md](SECURITY.md).
 
 ### Breaking changes (read before upgrading)
@@ -52,6 +52,13 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Added
 
+- New write tool `move_object`: move a user, group, computer or contact to another OU or
+  container, for example a new computer from the default `Computers` container into its OU.
+  Until now only whole OUs could be moved (`move_organizational_unit`). Both DNs are confined
+  to `base_dn` and validated before any LDAP call, the target may not be the object itself or
+  beneath it, privileged targets are refused like other privilege-sensitive changes
+  (`security.protect_privileged_targets`), and the tool is classified as a write
+  (`security.allow_writes`, audit trail).
 - Audit trail: every write and destructive tool call is recorded as one JSON line
   (timestamp, tool, risk, target, outcome, redacted arguments) in the file set by the new
   `security.audit_log_path` option (opened in append mode, mode `0600`; passwords are never stored).
@@ -59,8 +66,8 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
   server-side chain query), `get_rootdse_info` (allow-listed rootDSE attributes) and
   `get_tls_posture` (configured TLS settings, live channel ldaps/starttls/plaintext, TLS
   version and cipher when available, and findings; no secrets or paths are returned).
-- The tool count goes from 42 to 45: the 42 original tools unchanged plus 3 additive
-  read-only tools. The golden snapshots changed additively only: the original 42 entries
+- The tool count goes from 42 to 46: the 42 original tools unchanged plus 3 additive
+  read-only tools and the additive write tool `move_object`. The golden snapshots changed additively only: the original 42 entries
   are byte-identical (enforced by a fingerprint test, `tests/unit/test_golden_additive.py`);
   the only altered existing line is `tool_count`.
 - One server instance can serve several Active Directory domains. A config file with a

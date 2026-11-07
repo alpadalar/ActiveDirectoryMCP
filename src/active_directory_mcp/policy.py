@@ -75,6 +75,7 @@ _WRITE = (
     "create_organizational_unit",
     "modify_organizational_unit",
     "move_organizational_unit",
+    "move_object",
 )
 # delete_organizational_unit is destructive for force=True and force=False alike:
 # even deleting an empty OU is irreversible.

@@ -24,7 +24,12 @@ FINGERPRINTS = GOLDEN_DIR / "original_tools.sha256.json"
 TRANSPORTS = ("http", "stdio")
 
 # Tools added after the original 42 (plans 04.1-02 and 04.1-03).
-ADDITIVE_TOOLS = {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
+ADDITIVE_TOOLS = {
+    "get_nested_group_members",
+    "get_rootdse_info",
+    "get_tls_posture",
+    "move_object",
+}
 
 
 def _load_golden(transport: str) -> Dict[str, Any]:

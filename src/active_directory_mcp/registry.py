@@ -323,6 +323,9 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
     def move_organizational_unit(ou_dn: str, new_parent_dn: str) -> Any:
         return ous.move_ou(ou_dn, new_parent_dn)
 
+    def move_object(object_dn: str, new_parent_dn: str) -> Any:
+        return ous.move_object(object_dn, new_parent_dn)
+
     def get_organizational_unit_contents(ou_dn: str, object_types: Optional[list] = None) -> Any:
         return ous.get_ou_contents(ou_dn, object_types)
 
@@ -398,6 +401,7 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
         modify_organizational_unit,
         delete_organizational_unit,
         move_organizational_unit,
+        move_object,
         get_organizational_unit_contents,
         get_domain_info,
         get_privileged_groups,
@@ -416,7 +420,7 @@ def _handlers(ctx: ToolContext) -> Dict[str, Callable[..., Any]]:
 
 
 def build_tool_specs(ctx: ToolContext) -> List[ToolSpec]:
-    """Return the 45 tool specs in a stable order (KeyError if a definition is missing).
+    """Return the 46 tool specs in a stable order (KeyError if a definition is missing).
 
     Every handler is wrapped by the policy gate; a tool without a risk
     classification is a build-time error (fail closed).

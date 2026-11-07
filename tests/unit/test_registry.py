@@ -57,7 +57,7 @@ def ctx() -> ToolContext:
 
 def test_specs_cover_golden_set_in_stable_order(ctx: ToolContext) -> None:
     specs = build_tool_specs(ctx)
-    assert len(specs) == 45
+    assert len(specs) == 46
     assert {spec.name for spec in specs} == TOOL_NAMES
     assert [s.name for s in specs] == [s.name for s in build_tool_specs(ctx)]
     for spec in specs:
@@ -79,7 +79,7 @@ async def test_register_tools_on_fastmcp(ctx: ToolContext) -> None:
     mcp = FastMCP("test")
     assert register_tools(ctx, FastMCPToolSink(mcp)) is None
     tools = await mcp.list_tools()
-    assert len(tools) == 45
+    assert len(tools) == 46
     assert {t.name for t in tools} == TOOL_NAMES
     for tool in tools:
         assert tool.output_schema is None
@@ -97,20 +97,20 @@ async def test_registering_twice_on_one_fastmcp_is_recorded(ctx: ToolContext) ->
         outcome = "raises"
     else:
         outcome = "replaces"
-    assert len(await mcp.list_tools()) == 45
+    assert len(await mcp.list_tools()) == 46
     assert outcome in {"raises", "replaces"}
 
 
 def test_register_tools_calls_sink_once_per_spec(ctx: ToolContext) -> None:
     sink = MagicMock()
     assert register_tools(ctx, sink) is None
-    assert sink.add.call_count == 45
+    assert sink.add.call_count == 46
 
 
 def test_stdio_sink_matches_stdio_golden(ctx: ToolContext) -> None:
     sink = StdioToolSink()
     register_tools(ctx, sink)
-    assert len(sink.tools) == 45
+    assert len(sink.tools) == 46
     assert set(sink.handlers) == TOOL_NAMES
     for tool in sink.tools:
         assert canonical_input_schema(tool.inputSchema) == STDIO_GOLDEN["tools"][tool.name]
@@ -221,6 +221,13 @@ DELEGATION = [
         {"ou_dn": "o", "new_parent_dn": "p"},
         "ou_tools",
         "move_ou",
+        ("o", "p"),
+    ),
+    (
+        "move_object",
+        {"object_dn": "o", "new_parent_dn": "p"},
+        "ou_tools",
+        "move_object",
         ("o", "p"),
     ),
     (
