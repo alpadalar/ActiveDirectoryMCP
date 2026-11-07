@@ -1,5 +1,5 @@
 {
-  "tool_count": 45,
+  "tool_count": 46,
   "tools": {
     "add_group_member": {
       "params": {
@@ -545,6 +545,20 @@
       "required": [
         "attributes",
         "username"
+      ]
+    },
+    "move_object": {
+      "params": {
+        "new_parent_dn": {
+          "type": "string"
+        },
+        "object_dn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "new_parent_dn",
+        "object_dn"
       ]
     },
     "move_organizational_unit": {

@@ -282,6 +282,72 @@ def test_move_organizational_unit_alias_param_names(ou_tools, mock_ldap_manager)
     )
 
 
+# ----------------------------------------------------------------- move_object
+
+COMPUTER = "CN=PC01,CN=Computers,DC=test,DC=local"
+
+
+def _computer(dn=COMPUTER, **attrs):
+    return ldap_entry(dn, objectClass=["top", "computer"], sAMAccountName="PC01$", **attrs)
+
+
+def test_move_object_success(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = [_computer()]
+    data = parse_response(ou_tools.move_object(COMPUTER, OU))
+    assert data["success"] is True
+    assert data["new_dn"] == f"CN=PC01,{OU}"
+    mock_ldap_manager.move.assert_called_once_with(COMPUTER, OU)
+
+
+def test_move_object_keeps_escaped_rdn(ou_tools, mock_ldap_manager):
+    user = "CN=Smith\\, John,OU=Old,DC=test,DC=local"
+    mock_ldap_manager.search.return_value = [ldap_entry(user, sAMAccountName="jsmith")]
+    data = parse_response(ou_tools.move_object(user, OU))
+    assert data["success"] is True
+    assert data["new_dn"] == f"CN=Smith\\, John,{OU}"
+
+
+def test_move_object_missing_object_target_and_failure(ou_tools, mock_ldap_manager):
+    mock_ldap_manager.search.return_value = []
+    assert parse_response(ou_tools.move_object(COMPUTER, OU))["error"].startswith(
+        "User, group, computer or contact not found"
+    )
+
+    calls = iter([[_computer()], []])
+    mock_ldap_manager.search.side_effect = lambda **_: next(calls)
+    assert parse_response(ou_tools.move_object(COMPUTER, OU))["error"].startswith(
+        "Target OU or container not found"
+    )
+
+    mock_ldap_manager.search.side_effect = None
+    mock_ldap_manager.search.return_value = [_computer()]
+    mock_ldap_manager.move.side_effect = Exception("x")
+    assert parse_response(ou_tools.move_object(COMPUTER, OU))["success"] is False
+
+
+def test_move_object_into_itself_rejected_without_ldap(ou_tools, mock_ldap_manager):
+    data = parse_response(ou_tools.move_object(OU, f"OU=Child,{OU}"))
+    assert data["success"] is False
+    mock_ldap_manager.search.assert_not_called()
+    mock_ldap_manager.move.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        ldap_entry("CN=Domain Admins,CN=Users,DC=test,DC=local", sAMAccountName="Domain Admins"),
+        ldap_entry("CN=admin2,OU=Old,DC=test,DC=local", sAMAccountName="admin2", adminCount=1),
+    ],
+    ids=["privileged-name", "admincount"],
+)
+def test_move_object_refuses_privileged_targets(ou_tools, mock_ldap_manager, entry):
+    mock_ldap_manager.search.return_value = [entry]
+    data = parse_response(ou_tools.move_object(entry["dn"], OU))
+    assert data["success"] is False
+    assert data["error_code"] == "protected_target"
+    mock_ldap_manager.move.assert_not_called()
+
+
 # ----------------------------------------------------------- get_ou_contents
 
 
@@ -421,6 +487,8 @@ OUTSIDE = "OU=X,DC=evil,DC=com"
         lambda t: t.delete_ou(OUTSIDE, force=True),
         lambda t: t.move_ou(OUTSIDE, "DC=test,DC=local"),
         lambda t: t.move_ou(OU, OUTSIDE),
+        lambda t: t.move_object(OUTSIDE, OU),
+        lambda t: t.move_object(COMPUTER, OUTSIDE),
         lambda t: t.get_ou_contents(OUTSIDE),
     ],
     ids=[
@@ -434,6 +502,8 @@ OUTSIDE = "OU=X,DC=evil,DC=com"
         "delete-force",
         "move-src",
         "move-dest",
+        "move-object-src",
+        "move-object-dest",
         "contents",
     ],
 )

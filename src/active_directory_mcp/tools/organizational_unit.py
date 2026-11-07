@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, cast
 
 import ldap3
 from ldap3 import MODIFY_REPLACE
+from ldap3.utils.dn import safe_rdn
 from mcp.types import TextContent as Content
 
 from .. import validation
@@ -437,6 +438,96 @@ class OrganizationalUnitTools(BaseTool):
 
         except Exception as e:
             return self._handle_ldap_error(e, "delete_ou", ou_dn)
+
+    def move_object(self, object_dn: str, new_parent_dn: str) -> List[Content]:
+        """
+        Move a user, group, computer or contact to another OU or container.
+
+        Args:
+            object_dn: Distinguished name of the object to move
+            new_parent_dn: Distinguished name of the target OU or container
+
+        Returns:
+            List of MCP content objects with result
+        """
+        try:
+            # Validate DNs (well formed and confined to base_dn) before any LDAP call
+            try:
+                object_dn = self._confined_dn(object_dn, allow_base=False)
+                new_parent_dn = self._confined_dn(new_parent_dn)
+                if validation.is_dn_under(new_parent_dn, object_dn):
+                    raise ValidationError(
+                        "new_parent_dn must not be the object itself or beneath it"
+                    )
+            except ValidationError as exc:
+                return self._dn_error(
+                    "move_object", exc, object_dn=object_dn, new_parent_dn=new_parent_dn
+                )
+
+            existing = self.ldap.search(
+                search_base=object_dn,
+                search_filter=(
+                    "(|(objectClass=user)(objectClass=group)"
+                    "(objectClass=computer)(objectClass=contact))"
+                ),
+                attributes=["sAMAccountName", "adminCount"],
+                search_scope=ldap3.BASE,
+            )
+
+            if not existing:
+                return self._format_response(
+                    {
+                        "success": False,
+                        "error": f"User, group, computer or contact not found: {object_dn}",
+                        "object_dn": object_dn,
+                    },
+                    "move_object",
+                )
+
+            refusal = self._protected_target_refusal(
+                "move_object",
+                [self._get_attr_value(existing[0]["attributes"], "sAMAccountName", "")],
+                self._get_attr_value(existing[0]["attributes"], "adminCount"),
+            )
+            if refusal is not None:
+                return refusal
+
+            # Check if the target OU or container exists
+            parent_exists = self.ldap.search(
+                search_base=new_parent_dn,
+                search_filter=(
+                    "(|(objectClass=organizationalUnit)(objectClass=container)(objectClass=domain))"
+                ),
+                attributes=["name"],
+                search_scope=ldap3.BASE,
+            )
+
+            if not parent_exists:
+                return self._format_response(
+                    {
+                        "success": False,
+                        "error": f"Target OU or container not found: {new_parent_dn}",
+                        "new_parent_dn": new_parent_dn,
+                    },
+                    "move_object",
+                )
+
+            self.logger.info(f"Moving {object_dn} to {new_parent_dn}")
+
+            success = self.ldap.move(object_dn, new_parent_dn)
+
+            if success:
+                new_dn = "+".join(safe_rdn(object_dn, decompose=False)) + "," + new_parent_dn
+                log_ldap_operation("move_object", object_dn, True, f"Moved to: {new_dn}")
+                return self._success_response(
+                    "Object moved successfully",
+                    {"old_dn": object_dn, "new_dn": new_dn, "new_parent_dn": new_parent_dn},
+                )
+            else:
+                raise Exception("Failed to move object")
+
+        except Exception as e:
+            return self._handle_ldap_error(e, "move_object", object_dn)
 
     def move_ou(self, ou_dn: str, new_parent_dn: str) -> List[Content]:
         """

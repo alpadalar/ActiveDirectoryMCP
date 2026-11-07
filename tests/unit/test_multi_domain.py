@@ -200,7 +200,7 @@ def test_stdio_surface_gains_domain_and_list_domains(tmp_path: Path) -> None:
     with _server_env(tmp_path, STDIO_MOD, TWO_DOMAINS):
         server = ActiveDirectoryMCPServer()
     tools = {tool.name: tool for tool in server._tools}
-    assert len(tools) == 46 and "list_domains" in tools
+    assert len(tools) == 47 and "list_domains" in tools
     for name, tool in tools.items():
         if name == "list_domains":
             continue
@@ -222,7 +222,7 @@ def test_single_domain_surface_has_no_domain_argument(tmp_path: Path) -> None:
     with _server_env(tmp_path, STDIO_MOD, {"domains": {"a": _domain("alpha")}}):
         server = ActiveDirectoryMCPServer()
     names = {tool.name for tool in server._tools}
-    assert len(names) == 45 and "list_domains" not in names
+    assert len(names) == 46 and "list_domains" not in names
     assert all("domain" not in t.inputSchema.get("properties", {}) for t in server._tools)
 
 
@@ -265,7 +265,7 @@ def test_unreachable_domain_does_not_delay_startup(tmp_path: Path) -> None:
         server = ActiveDirectoryMCPServer()
     try:
         assert time.monotonic() - started < 2
-        assert len(server._tools) == 46
+        assert len(server._tools) == 47
     finally:
         release.set()
 

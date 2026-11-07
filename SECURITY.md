@@ -148,6 +148,7 @@ Generated from `RISK_CLASSIFICATION` in `src/active_directory_mcp/policy.py` by
 | `modify_group` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
 | `modify_organizational_unit` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
 | `modify_user` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
+| `move_object` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
 | `move_organizational_unit` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
 | `remove_group_member` | write | `security.allow_writes` | only if `security.audit_log_path` is set |
 | `reset_computer_password` | write | `security.allow_writes` | only if `security.audit_log_path` is set |

@@ -17,7 +17,7 @@ TOOL_NAMES = sorted(HTTP_GOLDEN["tools"])
 
 
 def test_descriptions_cover_exactly_the_golden_tools() -> None:
-    assert len(TOOL_DESCRIPTIONS) == 45
+    assert len(TOOL_DESCRIPTIONS) == 46
     assert sorted(TOOL_DESCRIPTIONS) == TOOL_NAMES
 
 
@@ -38,7 +38,7 @@ def test_every_desc_constant_is_used_once() -> None:
 
 
 def test_input_schemas_cover_exactly_the_golden_tools() -> None:
-    assert len(TOOL_INPUT_SCHEMAS) == 45
+    assert len(TOOL_INPUT_SCHEMAS) == 46
     assert sorted(TOOL_INPUT_SCHEMAS) == TOOL_NAMES
 
 

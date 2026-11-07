@@ -324,6 +324,16 @@ Example:
 
 Maintains OU relationships during move."""
 
+MOVE_OBJECT_DESC = """Move a user, group, computer or contact to another OU or container.
+
+Files an object in the right place, for example a new computer from the default Computers
+container into its OU. Both DNs must be inside the configured base_dn. Privileged accounts and
+groups are refused.
+
+Example:
+- move_object(object_dn="CN=PC01,CN=Computers,DC=company,DC=com",
+              new_parent_dn="OU=Workstations,OU=Company,DC=company,DC=com")"""
+
 GET_ORGANIZATIONAL_UNIT_CONTENTS_DESC = """Get contents of an OU.
 
 Lists all objects within OU including users, groups, computers, and sub-OUs.
@@ -494,6 +504,7 @@ TOOL_DESCRIPTIONS: Dict[str, str] = {
     "modify_organizational_unit": MODIFY_ORGANIZATIONAL_UNIT_DESC,
     "delete_organizational_unit": DELETE_ORGANIZATIONAL_UNIT_DESC,
     "move_organizational_unit": MOVE_ORGANIZATIONAL_UNIT_DESC,
+    "move_object": MOVE_OBJECT_DESC,
     "get_organizational_unit_contents": GET_ORGANIZATIONAL_UNIT_CONTENTS_DESC,
     "get_domain_info": GET_DOMAIN_INFO_DESC,
     "get_nested_group_members": GET_NESTED_GROUP_MEMBERS_DESC,
@@ -845,6 +856,20 @@ TOOL_INPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
             },
         },
         "required": ["ou_dn"],
+    },
+    "move_object": {
+        "type": "object",
+        "properties": {
+            "object_dn": {
+                "type": "string",
+                "description": "Distinguished name of the user, group, computer or contact to move",
+            },
+            "new_parent_dn": {
+                "type": "string",
+                "description": "Distinguished name of the target OU or container",
+            },
+        },
+        "required": ["object_dn", "new_parent_dn"],
     },
     "move_organizational_unit": {
         "type": "object",

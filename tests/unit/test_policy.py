@@ -47,6 +47,7 @@ ARGS: Dict[str, Dict[str, Any]] = {
     "create_organizational_unit": {"name": "n"},
     "modify_organizational_unit": {"ou_dn": "d", "attributes": {}},
     "move_organizational_unit": {"ou_dn": "d", "new_parent_dn": "p"},
+    "move_object": {"object_dn": "d", "new_parent_dn": "p"},
     "delete_user": {"username": "u"},
     "delete_group": {"group_name": "g"},
     "delete_computer": {"computer_name": "c"},
@@ -69,7 +70,7 @@ def _any_tool_called(ctx: Any) -> bool:
 def test_classification_covers_exactly_the_registered_tools() -> None:
     names = {spec.name for spec in build_tool_specs(make_ctx())}
     assert set(RISK_CLASSIFICATION) == names | MULTI_DOMAIN_TOOLS
-    assert len(names) == 45
+    assert len(names) == 46
     assert all(isinstance(r, Risk) for r in RISK_CLASSIFICATION.values())
 
 
@@ -83,6 +84,7 @@ def test_classification_covers_exactly_the_registered_tools() -> None:
         ("reset_user_password", Risk.WRITE),
         ("reset_computer_password", Risk.WRITE),
         ("move_organizational_unit", Risk.WRITE),
+        ("move_object", Risk.WRITE),
         ("add_group_member", Risk.WRITE),
         ("delete_user", Risk.DESTRUCTIVE),
         ("delete_organizational_unit", Risk.DESTRUCTIVE),
@@ -369,12 +371,14 @@ def test_stdio_server_fails_to_start_on_unwritable_audit_path(tmp_path: Any) -> 
                 mod.ActiveDirectoryMCPServer()
 
 
-def test_new_directory_tools_are_classified_read_and_exactly_three_were_added() -> None:
+def test_additive_tools_are_classified_and_exactly_four_were_added() -> None:
     from active_directory_mcp.policy import RISK_CLASSIFICATION, Risk
     from tests.unit.test_golden_additive import ADDITIVE_TOOLS
 
-    assert ADDITIVE_TOOLS == {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
-    for name in ADDITIVE_TOOLS:
+    read_tools = {"get_nested_group_members", "get_rootdse_info", "get_tls_posture"}
+    assert ADDITIVE_TOOLS == read_tools | {"move_object"}
+    for name in read_tools:
         assert RISK_CLASSIFICATION[name] is Risk.READ
+    assert RISK_CLASSIFICATION["move_object"] is Risk.WRITE
     # 24 single-domain read tools plus list_domains (registered only with several domains)
     assert sum(1 for r in RISK_CLASSIFICATION.values() if r is Risk.READ) == 25
