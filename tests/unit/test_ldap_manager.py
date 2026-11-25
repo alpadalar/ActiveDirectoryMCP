@@ -7,7 +7,12 @@ encoding, so these tests assert only the application's own cookie handling.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from ldap3.core.exceptions import LDAPBindError, LDAPException, LDAPSocketOpenError
+from ldap3.core.exceptions import (
+    LDAPBindError,
+    LDAPException,
+    LDAPSocketOpenError,
+    LDAPSocketSendError,
+)
 
 from active_directory_mcp.config.models import PerformanceConfig, SecurityConfig
 from active_directory_mcp.core import ldap_manager as lm
@@ -400,3 +405,73 @@ class TestSecureChannel:
         ldap3_seam[1].side_effect = LDAPSocketOpenError("down")
         with pytest.raises(LDAPException):
             manager.is_secure_channel()
+
+
+class TestLostConnection:
+    """A cached connection that died while idle (Broken pipe, SSL: BAD_LENGTH) is replaced."""
+
+    @staticmethod
+    def _connections(ldap3_seam, count=2):
+        conns = [MagicMock(name=f"conn{i}") for i in range(count)]
+        for conn in conns:
+            conn.bind.return_value = True
+            conn.bound = True
+        ldap3_seam[1].side_effect = conns
+        return conns
+
+    def test_search_retries_once_on_a_new_connection(self, manager, ldap3_seam):
+        dead, fresh = self._connections(ldap3_seam)
+        manager.connect()
+        dead.search.side_effect = LDAPSocketSendError("socket sending error[Errno 32] Broken pipe")
+        fresh.search.return_value = True
+        _page(fresh, [_entry("CN=a", cn="a")])
+
+        assert manager.search("DC=x", "(cn=a)") == [{"dn": "CN=a", "attributes": {"cn": ["a"]}}]
+        dead.unbind.assert_called_once()
+        assert manager._connection is fresh
+
+    def test_search_lost_twice_raises_and_forgets_the_connection(self, manager, ldap3_seam):
+        conns = self._connections(ldap3_seam, count=3)
+        for conn in conns:
+            conn.search.side_effect = LDAPSocketSendError("SSL: BAD_LENGTH")
+        with pytest.raises(LDAPSocketSendError):
+            manager.search("DC=x", "(cn=*)")
+        assert manager._connection is None
+        manager.connect()
+        assert manager._connection is conns[2]
+
+    @pytest.mark.parametrize(
+        "method,args,conn_method",
+        [
+            ("add", ("CN=a", {"cn": "a"}), "add"),
+            ("modify", ("CN=a", {"cn": []}), "modify"),
+            ("delete", ("CN=a",), "delete"),
+            ("move", ("CN=a", "OU=b"), "modify_dn"),
+        ],
+    )
+    def test_write_is_not_retried_but_the_next_call_reconnects(
+        self, manager, ldap3_seam, method, args, conn_method
+    ):
+        dead, fresh = self._connections(ldap3_seam)
+        getattr(dead, conn_method).side_effect = LDAPSocketSendError("Broken pipe")
+        with pytest.raises(LDAPSocketSendError):
+            getattr(manager, method)(*args)
+        getattr(dead, conn_method).assert_called_once()
+        assert manager.connect() is fresh
+
+    def test_ldap_result_error_keeps_the_connection(self, manager, ldap3_seam):
+        (conn,) = self._connections(ldap3_seam, count=1)
+        conn.delete.side_effect = LDAPException("insufficient access")
+        with pytest.raises(LDAPException):
+            manager.delete("CN=a")
+        assert manager._connection is conn
+        conn.unbind.assert_not_called()
+
+    def test_test_connection_replaces_a_dead_connection(self, manager, ldap3_seam):
+        dead, fresh = self._connections(ldap3_seam)
+        manager.connect()
+        dead.search.side_effect = LDAPSocketSendError("Broken pipe")
+        info = manager.test_connection()
+        assert info["connected"] is True
+        assert info["search_test"] is True
+        assert manager._connection is fresh
