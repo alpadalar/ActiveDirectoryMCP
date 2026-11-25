@@ -403,7 +403,15 @@ def test_is_computer_enabled(computer_tools, uac, enabled):
 
 @pytest.mark.parametrize(
     "uac,kind",
-    [(4096, "workstation"), (8192, "domain_controller"), (532480, "server"), (0, "unknown")],
+    [
+        (4096, "workstation"),
+        (4098, "workstation"),  # disabled
+        (8192, "domain_controller"),
+        (532480, "domain_controller"),  # DC with TRUSTED_FOR_DELEGATION, as AD creates it
+        (83890176, "domain_controller"),  # RODC: PARTIAL_SECRETS + WORKSTATION_TRUST + ...
+        (2080, "unknown"),  # INTERDOMAIN_TRUST_ACCOUNT is a trust, not a DC
+        (0, "unknown"),
+    ],
 )
 def test_computer_type(computer_tools, uac, kind):
     assert computer_tools._get_computer_type(uac) == kind

@@ -746,14 +746,11 @@ class ComputerTools(BaseTool):
     def _get_computer_type(self, uac_value: int) -> str:
         """Determine computer type from userAccountControl value."""
         value = self._to_int(uac_value, 0)
-        if value & 0x1000:  # WORKSTATION_TRUST_ACCOUNT (4096)
+        # DC flags first: an RODC also carries WORKSTATION_TRUST_ACCOUNT.
+        if value & 0x2000 or value & 0x04000000:  # SERVER_TRUST_ACCOUNT, PARTIAL_SECRETS_ACCOUNT
+            return "domain_controller"
+        elif value & 0x1000:  # WORKSTATION_TRUST_ACCOUNT, also set on member servers
             return "workstation"
-        elif value == 8192:  # Domain controller (exact value)
-            return "domain_controller"
-        elif value & 0x2000:  # SERVER_TRUST_ACCOUNT
-            return "server"
-        elif value & 0x800:  # INTERDOMAIN_TRUST_ACCOUNT
-            return "domain_controller"
         else:
             return "unknown"
 
@@ -790,7 +787,7 @@ class ComputerTools(BaseTool):
                 "pwdLastSet",
                 "memberOf",
             ],
-            "computer_types": ["workstation", "server", "domain_controller", "unknown"],
+            "computer_types": ["workstation", "domain_controller", "unknown"],
             "required_permissions": [
                 "Create Computer Objects",
                 "Delete Computer Objects",
