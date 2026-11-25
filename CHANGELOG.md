@@ -197,6 +197,11 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- `get_computer` reports domain controllers as `computer_type: "domain_controller"`. It
+  matched only the bare `userAccountControl` value 8192, so real DCs (532480, with
+  `TRUSTED_FOR_DELEGATION`) came back as `server` and RODCs as `workstation`, while
+  inter-domain trust accounts were reported as domain controllers. Member servers carry the
+  same flag as workstations, so `server` is no longer listed in `get_schema_info`.
 - Release workflow: the pyproject version check also covers non-dry-run dispatches, the
   tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
   and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.
