@@ -197,6 +197,13 @@ See [SECURITY.md](SECURITY.md) for the security model behind these defaults.
 
 ### Fixed
 
+- A connection that died while idle (load-balancer timeout, laptop sleep, network change) no
+  longer breaks every later call with `Broken pipe` or `SSL: BAD_LENGTH` until restart: after a
+  transport error the cached connection is dropped, searches and `test_connection` retry once on
+  a new connection, and writes fail without a retry (their reply may be lost after the change
+  was applied) so the next call reconnects. A connection idle for five minutes is replaced
+  before use, so writes after a long pause and connections dropped silently (no reset, which
+  would otherwise wait for `receive_timeout`) are not affected.
 - Release workflow: the pyproject version check also covers non-dry-run dispatches, the
   tagged commit must be an ancestor of `origin/main`, publishing waits for the reused test
   and lint workflows, and `:latest` only moves when the tag is the highest stable `vX.Y.Z`.

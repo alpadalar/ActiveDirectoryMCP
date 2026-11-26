@@ -5,12 +5,13 @@ import logging
 import ssl
 import time
 from threading import Lock
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypeVar, Union
 
 import ldap3
 from ldap3 import ALL, ALL_ATTRIBUTES, BASE, LEVEL, SUBTREE, Connection, Server
 from ldap3.core.exceptions import (
     LDAPBindError,
+    LDAPCommunicationError,
     LDAPException,
     LDAPNoSuchObjectResult,
     LDAPSocketOpenError,
@@ -24,6 +25,8 @@ from ..config.models import (
     SecurityConfig,
 )
 from ..redaction import redact
+
+_T = TypeVar("_T")
 
 _SCOPE_BY_INT: Dict[int, Literal["BASE", "LEVEL", "SUBTREE"]] = {
     0: BASE,
@@ -54,6 +57,10 @@ class _CIDict(dict):
 
 
 logger = logging.getLogger("active-directory-mcp.ldap_manager")
+
+# A connection idle this long is replaced before use: AD drops idle connections after
+# MaxConnIdleTime (900 s by default), and load balancers and NAT devices often sooner.
+_MAX_IDLE_SECONDS = 300
 
 
 class LDAPManager:
@@ -89,6 +96,7 @@ class LDAPManager:
         )
 
         self._connection: Optional[Connection] = None
+        self._last_used = 0.0
         self._server_pool: Optional[List[Server]] = None
         self._lock = Lock()
 
@@ -152,7 +160,16 @@ class LDAPManager:
         """
         with self._lock:
             if self._connection and self._connection.bound:
-                return self._connection
+                idle = time.monotonic() - self._last_used
+                if idle < _MAX_IDLE_SECONDS:
+                    self._last_used = time.monotonic()
+                    return self._connection
+                logger.info(f"Reopening the LDAP connection after {idle:.0f}s idle")
+                stale, self._connection = self._connection, None
+                try:
+                    stale.unbind()
+                except Exception as e:
+                    logger.debug(f"Ignoring unbind error on an idle connection: {e}")
 
             last_error: Optional[Exception] = None
             attempts = (
@@ -184,6 +201,7 @@ class LDAPManager:
                             # Test the connection
                             if connection.bind():
                                 self._connection = connection
+                                self._last_used = time.monotonic()
                                 logger.info(
                                     f"Successfully connected to {server.host}:{server.port}"
                                 )
@@ -245,6 +263,42 @@ class LDAPManager:
                     logger.warning(f"Error during disconnect: {e}")
                 finally:
                     self._connection = None
+
+    def _discard_lost_connection(self, connection: Connection, error: Exception) -> None:
+        """Forget ``connection`` after a transport error so the next call opens a new one.
+
+        ldap3 keeps a connection ``bound`` after a failed send (``Broken pipe``,
+        ``SSL: BAD_LENGTH``), so ``connect()`` would otherwise keep returning the dead socket
+        until the server is restarted.
+        """
+        if not isinstance(error, LDAPCommunicationError):
+            return
+        with self._lock:
+            if self._connection is connection:
+                self._connection = None
+        try:
+            connection.unbind()
+        except Exception as e:
+            logger.debug(f"Ignoring unbind error on a lost connection: {e}")
+
+    def _read_with_reconnect(self, operation: Callable[[Connection], _T]) -> _T:
+        """Run a read-only ``operation``; if the cached connection was lost (idle timeout
+        on a load balancer, laptop sleep, network change), retry it once on a new connection.
+
+        Writes never go through here: a write whose reply was lost may already be applied.
+        """
+        connection = self.connect()
+        try:
+            return operation(connection)
+        except LDAPCommunicationError as e:
+            self._discard_lost_connection(connection, e)
+            logger.warning(f"LDAP connection lost ({redact(str(e))}); retrying on a new connection")
+        connection = self.connect()
+        try:
+            return operation(connection)
+        except LDAPCommunicationError as e:
+            self._discard_lost_connection(connection, e)
+            raise
 
     def _normalize_attributes(self, raw_attributes: Dict[str, Any]) -> Dict[str, List[Any]]:
         """Normalize LDAP attribute values into list-based structure."""
@@ -310,8 +364,23 @@ class LDAPManager:
             LDAPException: If search fails
         """
         scope = self._normalize_scope(search_scope)
-        connection = self.connect()
+        return self._read_with_reconnect(
+            lambda connection: self._paged_search(
+                connection, search_base, search_filter, attributes, scope, size_limit, time_limit
+            )
+        )
 
+    def _paged_search(
+        self,
+        connection: Connection,
+        search_base: str,
+        search_filter: str,
+        attributes: Union[List[str], str],
+        scope: Literal["BASE", "LEVEL", "SUBTREE"],
+        size_limit: int,
+        time_limit: int,
+    ) -> List[Dict[str, Any]]:
+        """One paged search on ``connection``; see ``search``."""
         try:
             logger.debug(f"Searching: base={search_base}, filter={search_filter}")
 
@@ -418,6 +487,7 @@ class LDAPManager:
 
         except Exception as e:
             logger.error(f"Add error for {dn}: {e}")
+            self._discard_lost_connection(connection, e)
             raise
 
     def modify(self, dn: str, changes: Dict[str, Any]) -> bool:
@@ -450,6 +520,7 @@ class LDAPManager:
 
         except Exception as e:
             logger.error(f"Modify error for {dn}: {e}")
+            self._discard_lost_connection(connection, e)
             raise
 
     def delete(self, dn: str) -> bool:
@@ -481,6 +552,7 @@ class LDAPManager:
 
         except Exception as e:
             logger.error(f"Delete error for {dn}: {e}")
+            self._discard_lost_connection(connection, e)
             raise
 
     def move(self, dn: str, new_parent: str) -> bool:
@@ -516,6 +588,7 @@ class LDAPManager:
 
         except Exception as e:
             logger.error(f"Move error for {dn}: {e}")
+            self._discard_lost_connection(connection, e)
             raise
 
     def test_connection(self) -> Dict[str, Any]:
@@ -525,10 +598,25 @@ class LDAPManager:
         Returns:
             Dictionary with connection test results
         """
-        try:
-            connection = self.connect()
 
-            # Get server info
+        def probe(connection: Connection) -> Tuple[Connection, Optional[Exception]]:
+            try:
+                connection.search(
+                    search_base=self.ad_config.base_dn,
+                    search_filter="(objectClass=*)",
+                    search_scope=ldap3.BASE,
+                    attributes=["namingContexts"],
+                )
+            except LDAPCommunicationError:
+                raise
+            except Exception as e:
+                return connection, e
+            return connection, None
+
+        try:
+            # A connection that died while idle is replaced, not reported as a failure.
+            connection, search_error = self._read_with_reconnect(probe)
+
             server_info = {
                 "connected": True,
                 "server": connection.server.host,
@@ -538,18 +626,9 @@ class LDAPManager:
                 "user": connection.user,
             }
 
-            # Try a simple search to test functionality
-            try:
-                connection.search(
-                    search_base=self.ad_config.base_dn,
-                    search_filter="(objectClass=*)",
-                    search_scope=ldap3.BASE,
-                    attributes=["namingContexts"],
-                )
-                server_info["search_test"] = True
-            except Exception as e:
-                server_info["search_test"] = False
-                server_info["search_error"] = redact(str(e))
+            server_info["search_test"] = search_error is None
+            if search_error is not None:
+                server_info["search_error"] = redact(str(search_error))
 
             logger.info("Connection test successful")
             return server_info
