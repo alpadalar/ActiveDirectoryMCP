@@ -467,6 +467,27 @@ class TestLostConnection:
         assert manager._connection is conn
         conn.unbind.assert_not_called()
 
+    def test_connection_is_reused_while_recently_used(self, manager, ldap3_seam):
+        first, _ = self._connections(ldap3_seam)
+        with patch.object(lm.time, "monotonic", side_effect=[1000.0, 1299.0, 1299.0]):
+            manager.connect()
+            assert manager.connect() is first
+        first.unbind.assert_not_called()
+
+    def test_idle_connection_is_replaced_before_use(self, manager, ldap3_seam):
+        stale, fresh = self._connections(ldap3_seam)
+        with patch.object(lm.time, "monotonic", side_effect=[1000.0, 1300.0, 1300.0]):
+            manager.connect()
+            assert manager.connect() is fresh
+        stale.unbind.assert_called_once()
+
+    def test_idle_replacement_ignores_unbind_errors(self, manager, ldap3_seam):
+        stale, fresh = self._connections(ldap3_seam)
+        stale.unbind.side_effect = LDAPSocketSendError("Broken pipe")
+        with patch.object(lm.time, "monotonic", side_effect=[1000.0, 2000.0, 2000.0]):
+            manager.connect()
+            assert manager.connect() is fresh
+
     def test_test_connection_replaces_a_dead_connection(self, manager, ldap3_seam):
         dead, fresh = self._connections(ldap3_seam)
         manager.connect()

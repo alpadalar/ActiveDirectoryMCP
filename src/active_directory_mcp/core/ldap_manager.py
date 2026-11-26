@@ -58,6 +58,10 @@ class _CIDict(dict):
 
 logger = logging.getLogger("active-directory-mcp.ldap_manager")
 
+# A connection idle this long is replaced before use: AD drops idle connections after
+# MaxConnIdleTime (900 s by default), and load balancers and NAT devices often sooner.
+_MAX_IDLE_SECONDS = 300
+
 
 class LDAPManager:
     """
@@ -92,6 +96,7 @@ class LDAPManager:
         )
 
         self._connection: Optional[Connection] = None
+        self._last_used = 0.0
         self._server_pool: Optional[List[Server]] = None
         self._lock = Lock()
 
@@ -155,7 +160,16 @@ class LDAPManager:
         """
         with self._lock:
             if self._connection and self._connection.bound:
-                return self._connection
+                idle = time.monotonic() - self._last_used
+                if idle < _MAX_IDLE_SECONDS:
+                    self._last_used = time.monotonic()
+                    return self._connection
+                logger.info(f"Reopening the LDAP connection after {idle:.0f}s idle")
+                stale, self._connection = self._connection, None
+                try:
+                    stale.unbind()
+                except Exception as e:
+                    logger.debug(f"Ignoring unbind error on an idle connection: {e}")
 
             last_error: Optional[Exception] = None
             attempts = (
@@ -187,6 +201,7 @@ class LDAPManager:
                             # Test the connection
                             if connection.bind():
                                 self._connection = connection
+                                self._last_used = time.monotonic()
                                 logger.info(
                                     f"Successfully connected to {server.host}:{server.port}"
                                 )
